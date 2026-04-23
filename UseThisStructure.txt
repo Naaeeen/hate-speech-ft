@@ -1,0 +1,27 @@
+hate-speech-ft/
+│
+├── data/
+│   ├── raw/
+│   ├── cache/
+│   └── processed/
+│
+├── notebooks/
+│   ├── 00_setup_check.ipynb
+│   └── 01_dataset_and_model_check.ipynb
+│
+├── src/
+│   ├── data/
+│   │   └── load_hatexplain.py
+│   ├── models/
+│   │   └── load_distilbert.py
+│   └── utils/
+│       └── env_check.py
+│
+├── configs/
+├── outputs/
+│   ├── checkpoints/
+│   ├── logs/
+│   └── figures/
+│
+├── requirements.txt
+└── README.md

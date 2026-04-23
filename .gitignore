@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+env/
+hate_ft/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+
+# HuggingFace cache
+hf_cache/
+data/cache/
+
+# Outputs
+outputs/
+checkpoints/
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
