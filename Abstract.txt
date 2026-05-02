@@ -1,0 +1,56 @@
+Performance vs Efficiency: A Comparison of Fine-Tuning Strategies for Hate Speech Detection on Social Media
+
+
+
+Primary RQ
+How do different fine-tuning strategies compare in terms of classification performance and computational cost for hate speech detection on social media text?
+Sub-RQs
+RQ1 — Performance comparison across paradigms
+How large is the performance gap between non-pretrained approaches (classical methods, neural networks trained from scratch) and pretrained approaches (DistilBERT with different adaptation strategies)? Within the pretrained group, do different fine-tuning strategies (frozen backbone, partial fine-tuning, LoRA, LP-FT, full fine-tuning, efficient head fine-tuning) lead to meaningfully different classification performance?
+RQ2 — Efficiency-performance trade-off
+When accounting for trainable parameter count, training time, and memory usage, do parameter-efficient methods (linear probing, partial fine-tuning, LoRA) offer Pareto-optimal trade-offs against full fine-tuning? In other words, is the additional computational cost of full fine-tuning justified by its performance gains, or can lightweight methods achieve comparable performance at a fraction of the cost?
+RQ3 — Two-stage vs single-stage adaptation
+Do two-stage methods (LP-FT, efficient head fine-tuning) outperform their single-stage counterparts (full fine-tuning, LoRA) by a meaningful margin, and does the additional training complexity translate into practically useful gains?
+Bonus RQ (if you do the general vs domain-specific bonus)
+Does a domain-adapted pretrained model (e.g., trained on social media or hateful content) respond differently to the same fine-tuning strategies compared to a general-domain pretrained model like DistilBERT? Does domain-matched pretraining reduce the performance gap between lightweight methods and full fine-tuning?
+Optional data-scaling sub-question (if you keep data fractions as bonus)
+Do the relative rankings and efficiency trade-offs between fine-tuning strategies remain stable as training data availability varies (5%, 20%, 50%, 100%), or does the optimal strategy shift depending on data availability?
+
+
+¾ final setups:
+
+https://huggingface.co/datasets/Hate-speech-CNERG/hatexplain:
+Hate/often
+Hate speech, well known in hate speech research, probably the best dataset if we’re really centered on harmful language on social media.
+
+Baseline
+
+Logistic Regression	 + TF-IDF, a classical, non-neural baseline
+Bi-LSTM trained from scratch, a classical neural baseline without pretraining, representing what people used before pretrained Transformers
+Fully train from scratch a randomly initialised BERT model and classification head
+Transfer
+DistilBERT with partial fine-tuning. The top few transformer layers + classifier head are trained, the rest is frozen
+DistilBERT with frozen backbone. Only the classifier head is trained
+DistilBERT with full fine-tuning. All weights are updated
+Linear-probing finetuning (LP-FT)
+Stage 1: Linear probing
+Stage 2: Full finetuning
+Parameter-efficient tuning: e.g., LoRA
+Efficient head finetuning:
+Stage 1: finetune model with pretrained backbone, randomly initialised head, using parameter-efficient tuning algorithm
+Stage 2: Keep only the trained head from stage 1, fully finetune with the pretrained backbone
+Bonus: Pick the most efficient non-domain-specified v.s a more domain-specified model using the same transfer learning approach. (General v.s. Specific)
+Data fractions: 5%, 20%, 50%, 100% of training data
+Alternative IVs: BERT variants ( RoBERTa, …), classification head architectures
+We can include a brief qualitative analysis section following the main experiments using LIME
+
+Chris: Add test cases???
+
+Abstract
+The rise of hateful and offensive content on social media has prompted significant research into automatic detection systems. This project systematically compares different fine-tuning methods for hate speech detection on social media text: frozen backbone, partial fine-tuning, full fine-tuning, linear-probing fine-tuning (LP-FT), LoRA, and efficient head fine-tuning. Additionally, each method fine-tunes the pretrained model DistilBERT on a hate speech classification dataset, HateXplain.
+
+TF-IDF embedding with logistic regression, a Bi-LSTM trained from scratch, and a randomly initialised DistilBERT model are included as baselines to contextualise the contribution of fine-tuning.
+
+All methods are evaluated on the HateXplain dataset under identical training and evaluation conditions. We evaluate the classification performance models using F1-score, precision, and recall metrics, and report training time and memory usage to examine the computational cost of each method.
+
+Rather than pursuing state-of-the-art accuracy, we focus on the trade-offs between performance and efficiency, identifying when lightweight methods remain competitive.

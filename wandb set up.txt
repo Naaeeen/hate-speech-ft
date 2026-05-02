@@ -1,0 +1,58 @@
+I’ll check the current W&B and Hugging Face integration docs so the setup advice matches what you and your teammate will actually use. Then I’ll map it onto this repo’s training script.Yes. The clean setup is: one W&B Team + one W&B Project + everyone logs runs into that same project.
+Recommended Setup
+1.
+One of you creates a W&B team, e.g. hate-speech-ft-team.
+2.
+Invite your friend as a team member/admin.
+3.
+Create one project under that team, e.g. hate-speech-ft.
+4.
+Everyone logs in with their own W&B account:
+pip install wandb
+wandb login
+5.
+Everyone runs experiments with the same:
+WANDB_ENTITY=hate-speech-ft-team
+WANDB_PROJECT=hate-speech-ft
+On Windows PowerShell:
+$env:WANDB_ENTITY="hate-speech-ft-team"
+$env:WANDB_PROJECT="hate-speech-ft"
+wandb login
+Then run training normally.
+For This Repo Right now, src/run_distilbert_hatexplain.py has:
+report_to="none",
+To enable W&B with Hugging Face Trainer, change it to:
+report_to="wandb",
+run_name="distilbert-full-ft-seed42",
+W&B’s Hugging Face integration automatically logs training/eval metrics, hyperparameters, terminal logs, and system stats like GPU/CPU usage.
+What Each Run Should Record For your project, every run should include config like:
+{
+    "method": "full_finetuning",
+    "dataset": "Hate-speech-CNERG/hatexplain",
+    "model_name": "distilbert-base-uncased",
+    "seed": 42,
+    "data_fraction": 1.0,
+    "learning_rate": 2e-5,
+    "batch_size": 8,
+    "epochs": 1,
+}
+Suggested naming:
+full-ft_distilbert_seed42_100pct
+lora_distilbert_seed42_100pct
+frozen-backbone_distilbert_seed42_100pct
+tfidf-logreg_seed42_100pct
+Important Repo Change Add this to .gitignore:
+wandb/
+W&B creates a local wandb/ folder. It should not be committed.
+Best Workflow Your teammate runs:
+$env:WANDB_ENTITY="your-team-name"
+$env:WANDB_PROJECT="hate-speech-ft"
+python src/run_distilbert_hatexplain.py `
+  --max_train_samples 64 `
+  --max_eval_samples 64 `
+  --num_train_epochs 1
+Then both of you go to:
+https://wandb.ai/<your-team-name>/hate-speech-ft
+You’ll see everyone’s runs in the same dashboard
+
+
