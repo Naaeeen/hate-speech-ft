@@ -23,6 +23,10 @@ outputs/
 checkpoints/
 logs/
 
+# Weights & Biases
+wandb/
+wandb-key.txt
+
 # OS
 .DS_Store
 Thumbs.db

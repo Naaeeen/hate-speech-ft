@@ -1,0 +1,49 @@
+# Tests
+
+Run the default suite from the repo root:
+
+```bash
+python -m unittest discover -v
+```
+
+## What The Tests Cover
+
+Current tests cover:
+
+- shared text policy
+- shared label policy
+- preprocessing and deterministic data fractions
+- DistilBERT runner helper behavior
+- W&B config helpers
+- experiment catalog loading
+- command generation and CLI overrides
+
+## When To Add Tests
+
+Add tests when you:
+
+- change shared data policy
+- add a method script
+- add new catalog behavior
+- change W&B metadata shape
+- change command generation
+- change Colab launcher behavior
+
+## Useful Checks
+
+Compile key modules:
+
+```bash
+python -m py_compile \
+  src/run_distilbert_hatexplain.py \
+  src/run_experiment.py \
+  src/experiments/registry.py \
+  src/colab/experiment_launcher.py \
+  src/utils/wandb_config.py
+```
+
+Preview a known experiment:
+
+```bash
+python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
+```

@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,18 @@ if str(REPO_ROOT) not in sys.path:
 from src.data.label_policy import LABEL_ID_TO_NAME, LABEL_NAME_TO_ID
 from src.data.preprocessing import (
     preprocess_hatexplain_split,
+    select_data_fraction,
     tokenize_preprocessed_record,
+)
+from src.experiments.results import write_resolved_config, write_result_files
+from src.utils.wandb_config import (
+    VALID_WANDB_LOG_MODEL_VALUES,
+    VALID_WANDB_MODES,
+    WandbSettings,
+    build_wandb_run_name,
+    finish_wandb_run,
+    init_wandb_run,
+    parse_wandb_tags,
 )
 
 
@@ -25,6 +37,12 @@ def parse_args():
     parser.add_argument("--model_name", type=str, default=MODEL_NAME)
     parser.add_argument("--dataset_name", type=str, default="Hate-speech-CNERG/hatexplain")
     parser.add_argument("--output_dir", type=str, default="./outputs/distilbert_hatexplain")
+    parser.add_argument("--method", type=str, default="full-ft")
+    parser.add_argument("--search_stage", type=str, default="smoke")
+    parser.add_argument("--trial_id", type=str, default=None)
+    parser.add_argument("--hpo_seed", type=int, default=None)
+    parser.add_argument("--test_split_name", type=str, default="test")
+    parser.add_argument("--run_test", action="store_true")
 
     parser.add_argument("--max_length", type=int, default=128)
     parser.add_argument("--num_train_epochs", type=float, default=1.0)
@@ -32,10 +50,30 @@ def parse_args():
     parser.add_argument("--per_device_eval_batch_size", type=int, default=8)
     parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--warmup_ratio", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--data_fraction", type=float, default=None)
 
     parser.add_argument("--max_train_samples", type=int, default=None)
     parser.add_argument("--max_eval_samples", type=int, default=None)
+    parser.add_argument("--max_test_samples", type=int, default=None)
+
+    parser.add_argument("--use_wandb", action="store_true")
+    parser.add_argument("--wandb_project", type=str, default=None)
+    parser.add_argument("--wandb_entity", type=str, default=None)
+    parser.add_argument("--wandb_run_name", type=str, default=None)
+    parser.add_argument("--wandb_group", type=str, default=None)
+    parser.add_argument("--wandb_tags", type=str, default="")
+    parser.add_argument(
+        "--wandb_mode",
+        choices=VALID_WANDB_MODES,
+        default="online",
+    )
+    parser.add_argument(
+        "--wandb_log_model",
+        choices=VALID_WANDB_LOG_MODEL_VALUES,
+        default="false",
+    )
 
     return parser.parse_args()
 
@@ -57,13 +95,163 @@ def build_fixed_label_maps():
     return dict(LABEL_ID_TO_NAME), dict(LABEL_NAME_TO_ID), len(LABEL_ID_TO_NAME)
 
 
-def build_tokenized_dataset(examples, tokenizer, max_length: int, max_samples: int | None = None):
+def count_model_parameters(model) -> tuple[int, int]:
+    total_params = 0
+    trainable_params = 0
+    for param in model.parameters():
+        count = param.numel()
+        total_params += count
+        if param.requires_grad:
+            trainable_params += count
+    return trainable_params, total_params
+
+
+def get_gpu_type() -> str:
+    try:
+        import torch
+    except ImportError:
+        return "unknown"
+    if not torch.cuda.is_available():
+        return "cpu"
+    return torch.cuda.get_device_name(0)
+
+
+def get_peak_memory_mb() -> float | None:
+    try:
+        import torch
+    except ImportError:
+        return None
+    if not torch.cuda.is_available():
+        return None
+    return torch.cuda.max_memory_allocated() / (1024 * 1024)
+
+
+def resolve_wandb_settings(args) -> WandbSettings:
+    run_name = args.wandb_run_name or build_wandb_run_name(
+        method=args.method,
+        model_name=args.model_name,
+        seed=args.seed,
+        max_train_samples=args.max_train_samples,
+        num_train_epochs=args.num_train_epochs,
+        learning_rate=args.learning_rate,
+    )
+    return WandbSettings(
+        enabled=args.use_wandb,
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        mode=args.wandb_mode,
+        run_name=run_name,
+        group=args.wandb_group,
+        tags=parse_wandb_tags(args.wandb_tags),
+        log_model=args.wandb_log_model,
+    )
+
+
+def build_experiment_config(
+    args,
+    *,
+    train_split: str,
+    eval_split: str,
+    train_size: int,
+    eval_size: int,
+    full_train_size: int,
+    full_eval_size: int,
+    test_size: int | None = None,
+    full_test_size: int | None = None,
+    trainable_params: int,
+    total_params: int,
+    gpu_type: str | None = None,
+):
+    data_fraction = train_size / full_train_size if full_train_size else None
+    return {
+        "method": args.method,
+        "search_stage": args.search_stage,
+        "trial_id": args.trial_id,
+        "hpo_seed": args.hpo_seed,
+        "dataset": args.dataset_name,
+        "train_split": train_split,
+        "eval_split": eval_split,
+        "test_split": args.test_split_name,
+        "preprocessing_policy": "join_post_tokens_strict_majority",
+        "label_policy": "strict_majority_drop_no_majority",
+        "selection_metric": "f1_macro",
+        "test_policy": "final_only",
+        "model_name": args.model_name,
+        "tokenizer_name": args.model_name,
+        "seed": args.seed,
+        "data_fraction": data_fraction,
+        "run_test": args.run_test,
+        "hyperparameters": {
+            "max_train_samples": args.max_train_samples,
+            "max_eval_samples": args.max_eval_samples,
+            "max_test_samples": args.max_test_samples,
+            "max_length": args.max_length,
+            "learning_rate": args.learning_rate,
+            "weight_decay": args.weight_decay,
+            "warmup_ratio": args.warmup_ratio,
+            "batch_size": args.per_device_train_batch_size,
+            "eval_batch_size": args.per_device_eval_batch_size,
+            "epochs": args.num_train_epochs,
+        },
+        "max_train_samples": args.max_train_samples,
+        "max_eval_samples": args.max_eval_samples,
+        "max_test_samples": args.max_test_samples,
+        "max_length": args.max_length,
+        "learning_rate": args.learning_rate,
+        "weight_decay": args.weight_decay,
+        "warmup_ratio": args.warmup_ratio,
+        "batch_size": args.per_device_train_batch_size,
+        "eval_batch_size": args.per_device_eval_batch_size,
+        "epochs": args.num_train_epochs,
+        "train_size": train_size,
+        "eval_size": eval_size,
+        "full_train_size": full_train_size,
+        "full_eval_size": full_eval_size,
+        "test_size": test_size,
+        "full_test_size": full_test_size,
+        "trainable_params": trainable_params,
+        "total_params": total_params,
+        "gpu_type": gpu_type,
+        "output_dir": args.output_dir,
+    }
+
+
+def build_tokenized_dataset_with_count(
+    examples,
+    tokenizer,
+    max_length: int,
+    data_fraction: float | None = None,
+    fraction_seed: int = 42,
+    max_samples: int | None = None,
+):
     records = preprocess_hatexplain_split(examples)
+    full_count = len(records)
+    if data_fraction is not None:
+        records = select_data_fraction(records, data_fraction, seed=fraction_seed)
     records = maybe_select_subset(records, max_samples)
-    return [
+    tokenized = [
         tokenize_preprocessed_record(record, tokenizer, max_length=max_length)
         for record in records
     ]
+    return tokenized, full_count
+
+
+def build_tokenized_dataset(examples, tokenizer, max_length: int, max_samples: int | None = None):
+    tokenized, _ = build_tokenized_dataset_with_count(
+        examples,
+        tokenizer=tokenizer,
+        max_length=max_length,
+        max_samples=max_samples,
+    )
+    return tokenized
+
+
+def validate_test_evaluation_policy(*, search_stage: str, run_test: bool) -> None:
+    if run_test and search_stage != "final":
+        raise ValueError(
+            "--run_test is allowed only when --search_stage final. "
+            "Do not use the test split during smoke, quick, or tuning runs."
+        )
 
 
 def compute_metrics_fn():
@@ -114,6 +302,10 @@ def build_trainer(
 
 def main():
     args = parse_args()
+    validate_test_evaluation_policy(
+        search_stage=args.search_stage,
+        run_test=args.run_test,
+    )
 
     from datasets import load_dataset
     from transformers import (
@@ -138,6 +330,7 @@ def main():
 
     train_split = find_split_name(ds, ["train"])
     eval_split = find_split_name(ds, ["validation", "valid", "test"])
+    test_split = find_split_name(ds, [args.test_split_name])
 
     if train_split is None:
         raise ValueError(f"No train split found. Available splits: {list(ds.keys())}")
@@ -145,26 +338,53 @@ def main():
         raise ValueError(
             f"No validation/valid/test split found. Available splits: {list(ds.keys())}"
         )
+    if args.run_test and test_split is None:
+        raise ValueError(
+            f"No test split named '{args.test_split_name}' found. "
+            f"Available splits: {list(ds.keys())}"
+        )
 
-    train_dataset = build_tokenized_dataset(
+    train_dataset, full_train_size = build_tokenized_dataset_with_count(
         ds[train_split],
         tokenizer=tokenizer,
         max_length=args.max_length,
+        data_fraction=args.data_fraction,
+        fraction_seed=args.seed,
         max_samples=args.max_train_samples,
     )
-    eval_dataset = build_tokenized_dataset(
+    eval_dataset, full_eval_size = build_tokenized_dataset_with_count(
         ds[eval_split],
         tokenizer=tokenizer,
         max_length=args.max_length,
         max_samples=args.max_eval_samples,
     )
+    test_dataset = None
+    full_test_size = None
+    if args.run_test:
+        test_dataset, full_test_size = build_tokenized_dataset_with_count(
+            ds[test_split],
+            tokenizer=tokenizer,
+            max_length=args.max_length,
+            max_samples=args.max_test_samples,
+        )
 
     id2label, label2id, num_labels = build_fixed_label_maps()
 
-    print(f"Train split: {train_split}, size={len(train_dataset)}")
-    print(f"Eval split: {eval_split}, size={len(eval_dataset)}")
+    print(
+        f"Train split: {train_split}, size={len(train_dataset)} "
+        f"(preprocessed full={full_train_size})"
+    )
+    print(
+        f"Eval split: {eval_split}, size={len(eval_dataset)} "
+        f"(preprocessed full={full_eval_size})"
+    )
     print(f"Using num_labels: {num_labels}")
     print(f"id2label: {id2label}")
+    if args.run_test:
+        print(
+            f"Test split: {test_split}, size={len(test_dataset)} "
+            f"(preprocessed full={full_test_size})"
+        )
 
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name,
@@ -172,8 +392,29 @@ def main():
         id2label=id2label,
         label2id=label2id,
     )
+    trainable_params, total_params = count_model_parameters(model)
+    print(f"Trainable params: {trainable_params:,} / {total_params:,}")
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    wandb_settings = resolve_wandb_settings(args)
+    gpu_type = get_gpu_type()
+    experiment_config = build_experiment_config(
+        args,
+        train_split=train_split,
+        eval_split=eval_split,
+        train_size=len(train_dataset),
+        eval_size=len(eval_dataset),
+        full_train_size=full_train_size,
+        full_eval_size=full_eval_size,
+        test_size=len(test_dataset) if test_dataset is not None else None,
+        full_test_size=full_test_size,
+        trainable_params=trainable_params,
+        total_params=total_params,
+        gpu_type=gpu_type,
+    )
+    resolved_config_path = write_resolved_config(args.output_dir, experiment_config)
+    print(f"Resolved config: {resolved_config_path}")
+    wandb_run = init_wandb_run(wandb_settings, config=experiment_config)
 
     training_args = TrainingArguments(
         output_dir=args.output_dir,
@@ -182,11 +423,15 @@ def main():
         per_device_eval_batch_size=args.per_device_eval_batch_size,
         num_train_epochs=args.num_train_epochs,
         weight_decay=args.weight_decay,
+        warmup_ratio=args.warmup_ratio,
+        seed=args.seed,
+        data_seed=args.seed,
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="steps",
         logging_steps=20,
-        report_to="none",
+        report_to=wandb_settings.report_to,
+        run_name=wandb_settings.run_name if wandb_settings.enabled else None,
         load_best_model_at_end=False,
         fp16=False,  # safer default; Colab can handle fp16 later if you want
     )
@@ -202,21 +447,64 @@ def main():
         compute_metrics=compute_metrics_fn(),
     )
 
-    print("\nStarting training...")
-    trainer.train()
+    try:
+        print("\nStarting training...")
+        try:
+            import torch
 
-    print("\nRunning evaluation...")
-    metrics = trainer.evaluate()
+            if torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
+        except ImportError:
+            pass
+        train_start_time = time.perf_counter()
+        trainer.train()
+        training_time_sec = time.perf_counter() - train_start_time
 
-    print("\nFinal evaluation metrics:")
-    for k, v in metrics.items():
-        print(f"{k}: {v}")
+        print("\nRunning evaluation...")
+        metrics = trainer.evaluate(metric_key_prefix="eval")
+        test_metrics = None
+        if args.run_test:
+            print("\nRunning test evaluation...")
+            test_metrics = trainer.evaluate(
+                eval_dataset=test_dataset,
+                metric_key_prefix="test",
+            )
+        runtime_metrics = {
+            "training_time_sec": training_time_sec,
+            "peak_memory_mb": get_peak_memory_mb(),
+            "gpu_type": gpu_type,
+        }
+        if wandb_run is not None:
+            wandb_run.log(runtime_metrics)
+        result_paths = write_result_files(
+            args.output_dir,
+            config=experiment_config,
+            eval_metrics=metrics,
+            test_metrics=test_metrics,
+            runtime_metrics=runtime_metrics,
+        )
 
-    print("\nSaving model and tokenizer...")
-    trainer.save_model(args.output_dir)
-    tokenizer.save_pretrained(args.output_dir)
+        print("\nFinal evaluation metrics:")
+        for k, v in metrics.items():
+            print(f"{k}: {v}")
+        if test_metrics is not None:
+            print("\nFinal test metrics:")
+            for k, v in test_metrics.items():
+                print(f"{k}: {v}")
+        print("\nRuntime metrics:")
+        for k, v in runtime_metrics.items():
+            print(f"{k}: {v}")
+        print("\nResult files:")
+        for k, v in result_paths.items():
+            print(f"{k}: {v}")
 
-    print(f"\nDone. Saved to: {args.output_dir}")
+        print("\nSaving model and tokenizer...")
+        trainer.save_model(args.output_dir)
+        tokenizer.save_pretrained(args.output_dir)
+
+        print(f"\nDone. Saved to: {args.output_dir}")
+    finally:
+        finish_wandb_run(wandb_run)
 
 
 if __name__ == "__main__":

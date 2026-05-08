@@ -1,20 +1,114 @@
-# DRAFT READ ME (Hate Speech Fine-Tuning)
+# Hate Speech Fine-Tuning Experiments
 
-Research repo for comparing hate-speech classification methods on HateXplain.
+This repo compares hate-speech classification methods on the HateXplain
+dataset with one main question:
 
-Main question: how much performance do we get for the compute cost of each method?
+> How much classification performance do we get for the compute cost of each
+> method?
 
-Planned methods:
+The repo is intentionally organized so teammates can run many methods
+separately while keeping the comparison surface consistent. A TF-IDF baseline,
+Bi-LSTM, full DistilBERT fine-tuning, frozen-backbone training, partial
+fine-tuning, LoRA, LP-FT, and other two-stage methods should not be forced into
+one huge script. Each method owns its own training code. Shared code owns the
+data policy, experiment catalog, W&B metadata, and command launcher.
 
-- TF-IDF + Logistic Regression
-- Bi-LSTM from scratch
-- DistilBERT frozen backbone
-- DistilBERT partial fine-tuning
-- DistilBERT full fine-tuning
-- LoRA
-- LP-FT / other two-stage methods
+## Start Here
 
-Current implemented path: shared HateXplain preprocessing plus a DistilBERT trainer script.
+If you only want to run the current ready experiment:
+
+```bash
+python src/run_experiment.py --list
+python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
+python src/run_experiment.py --experiment distilbert_full_smoke
+```
+
+If you want W&B logging:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --use_wandb \
+  --wandb_entity your-team-or-username \
+  --wandb_project hate-speech-ft
+```
+
+If you are in Colab, open:
+
+```text
+notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb
+```
+
+Run the setup cells, then use the experiment launcher widget.
+
+## Documentation Map
+
+- [Experiment running guide](docs/EXPERIMENTS.md): commands, overrides, and the
+  method onboarding contract.
+- [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
+  of how a teammate should use the repo from start to finish.
+- [Docs index](docs/README.md): durable project docs and what each one is for.
+- [Experiment catalog guide](configs/README.md): how to edit
+  `configs/experiments.json`.
+- [Experiment orchestration code](src/experiments/README.md): how the generic
+  launcher and registry work.
+- [Colab launcher guide](src/colab/README.md): how the notebook interface is
+  wired.
+- [Method implementation guide](src/methods/README.md): where future TF-IDF,
+  Bi-LSTM, LoRA, frozen-backbone, and two-stage scripts should live.
+- [Shared data policy](src/data/README.md): text construction, labels,
+  filtering, and data-fraction rules.
+- [Notebook guide](notebooks/README.md): how to use and maintain Colab notebooks.
+- [Test guide](tests/README.md): how to run and add tests.
+
+## Current Status
+
+Ready now:
+
+- `distilbert_full_smoke`
+- `distilbert_full_quick`
+- `distilbert_full_final_seed42`
+
+Planned templates exist for:
+
+- `tfidf_logreg_template`
+- `bilstm_template`
+- `frozen_distilbert_template`
+- `partial_distilbert_template`
+- `lora_distilbert_template`
+- `lp_ft_template`
+- `efficient_head_ft_template`
+
+`planned` means the experiment is documented in the catalog, but the method
+script is not implemented yet. The generic runner will not silently run a
+missing method script.
+
+## Repo Layout
+
+```text
+configs/
+  experiments.json              # shared experiment catalog
+
+docs/
+  EXPERIMENTS.md                # experiment workflow and method contract
+  TEAMMATE_WALKTHROUGH.md       # fictional teammate usage example
+
+notebooks/
+  hate_speech_ft_COLAB_EXAMPLE.ipynb
+
+src/
+  run_experiment.py             # generic list / dry-run / run entry point
+  run_distilbert_hatexplain.py  # current ready DistilBERT full-FT runner
+  colab/                        # notebook-facing launcher widgets
+  data/                         # shared HateXplain preprocessing policy
+  experiments/                  # catalog loading and command building
+  methods/                      # future method-specific training scripts
+  models/                       # model loading/check utilities
+  utils/                        # W&B and environment helpers
+
+tests/
+  test_*.py                     # data, command, W&B, and runner tests
+```
 
 ## Setup
 
@@ -30,123 +124,257 @@ Local:
 pip install -r requirements.txt
 ```
 
-Not sure whether `requirements.txt` is portable across all machines. It looks like a local environment snapshot.
+The local `requirements.txt` is currently a pinned environment snapshot. Colab
+work should use `requirements-colab.txt`.
 
-## Check The Data
+## Experiment Catalog Workflow
 
-```bash
-python src/data/check_dataset.py
-```
-
-For a full printed sample:
+List ready experiments:
 
 ```bash
-python src/data/load_hatexplain.py
+python src/run_experiment.py --list
 ```
 
-## Shared Preprocessing
+List ready and planned experiments:
 
-All methods should use the same dataset-level preprocessing before model-specific code.
+```bash
+python src/run_experiment.py --list --include_planned
+```
 
-See:
+Preview the exact command without training:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --dry_run
+```
+
+Run:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke
+```
+
+Run with W&B:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --use_wandb \
+  --wandb_entity your-team-or-username \
+  --wandb_project hate-speech-ft
+```
+
+Temporarily override parameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --set learning_rate=3e-5 \
+  --set max_train_samples=128 \
+  --set output_dir=outputs/manual_lr3e-5_train128 \
+  --dry_run
+```
+
+Use `--set` for one-off exploration. If a configuration becomes a team standard,
+add a named experiment to [configs/experiments.json](configs/experiments.json).
+
+## Direct DistilBERT Runner
+
+The generic runner dispatches to method-specific scripts. The current ready
+method script is:
 
 ```text
-src/data/README.md
-src/data/text_field_policy.py
-src/data/label_policy.py
-src/data/preprocessing.py
+src/run_distilbert_hatexplain.py
 ```
 
-Policy:
-
-- text = join `post_tokens` with one space
-- no extra dataset-level text cleaning
-- labels = strict majority vote over the three annotators
-- drop no-majority samples for main 3-class experiments
-- use official Hugging Face train/validation/test splits
-- do not put rationales or metadata into model input text
-
-Basic use:
-
-```python
-from datasets import load_dataset
-from src.data.preprocessing import preprocess_hatexplain_split
-
-ds = load_dataset("Hate-speech-CNERG/hatexplain")
-
-train_records = preprocess_hatexplain_split(ds["train"])
-val_records = preprocess_hatexplain_split(ds["validation"])
-test_records = preprocess_hatexplain_split(ds["test"])
-```
-
-## Run DistilBERT
-
-Smoke test:
+You can still run it directly:
 
 ```bash
 python src/run_distilbert_hatexplain.py \
+  --method full-ft \
+  --search_stage smoke \
+  --trial_id manual_distilbert_smoke \
   --max_train_samples 64 \
   --max_eval_samples 64 \
   --num_train_epochs 1 \
-  --output_dir outputs/distilbert_hatexplain_smoke
+  --output_dir outputs/manual_distilbert_smoke
 ```
 
-Longer run:
+Prefer `src/run_experiment.py` for team experiments because it keeps names,
+tags, and output directories consistent.
 
-```bash
-python src/run_distilbert_hatexplain.py \
-  --num_train_epochs 3 \
-  --per_device_train_batch_size 8 \
-  --per_device_eval_batch_size 8 \
-  --learning_rate 2e-5 \
-  --max_length 128 \
-  --output_dir outputs/distilbert_hatexplain_full
-```
+## Shared Data Policy
 
-`max_length=128` is the current default for Transformer methods. Based on raw HateXplain `post_tokens`, it covers nearly all examples. If the team changes tokenizer/model/dataset, re-check this.
+All methods must use the same dataset-level policy before method-specific code.
+See [src/data/README.md](src/data/README.md).
 
-## Tests
+Fixed rules:
 
-Data/preprocessing tests:
-
-```bash
-python -m unittest tests.test_text_field_policy tests.test_label_policy tests.test_preprocessing tests.test_run_distilbert_hatexplain -v
-```
-
-Compile check:
-
-```bash
-python -m py_compile src/data/text_field_policy.py src/data/label_policy.py src/data/preprocessing.py src/run_distilbert_hatexplain.py
-```
+- Dataset: `Hate-speech-CNERG/hatexplain`
+- Splits: official `train`, `validation`, `test`
+- Text: `" ".join(example["post_tokens"])`
+- Labels: strict majority vote from the three annotators
+- Main labels: `0=hatespeech`, `1=normal`, `2=offensive`
+- Drop no-majority samples for main experiments
+- Do not put rationales, targets, post ids, or annotator metadata into model
+  input text
+- Model selection metric: validation macro-F1
+- Test set: final evaluation only
 
 ## W&B
 
-Not fully wired into the trainer yet.
+W&B is optional but recommended for all serious runs.
 
-When added, use one shared W&B project and log at least:
+For Colab, add a secret named:
+
+```text
+WANDB_API_KEY
+```
+
+Then select:
+
+```text
+Use W&B: true
+Mode: online
+Entity: your team or username
+Project: hate-speech-ft
+```
+
+Every method should log comparable top-level metadata:
 
 ```text
 method
-model_name
+search_stage
+trial_id
 seed
+dataset
 data_fraction
-max_length
-learning_rate
-batch_size
-epochs
-f1_macro
-precision_macro
-recall_macro
-accuracy
+model_name
+tokenizer_name
+hyperparameters
+trainable_params
+total_params
 training_time_sec
 peak_memory_mb
-trainable_params
+gpu_type
 ```
 
-Do not commit `wandb/`, checkpoints, logs, Hugging Face cache, or tokens.
+Every completed run should also write local files in its `output_dir`:
 
-## Repo Notes
+```text
+resolved_config.json
+metrics.json
+runtime.json
+result_summary.json
+```
 
-- `outputs/`, `checkpoints/`, `logs/`, `hf_cache/`, and `data/cache/` should stay out of Git.
-- Main docs for contribution workflow should live in `CONTRIBUTING.md` if present. Not sure if it is currently tracked.
-- Detailed data guide is in `src/data/README.md`.
+Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
+`hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.
+
+Do not commit W&B keys, local W&B folders, checkpoints, caches, or model outputs.
+
+## Adding A New Method
+
+Use this pattern:
+
+```text
+src/methods/<method_name>/train.py
+```
+
+Examples:
+
+```text
+src/methods/tfidf_logreg/train.py
+src/methods/bilstm/train.py
+src/methods/distilbert_lora/train.py
+```
+
+Then register the method in:
+
+```text
+configs/experiments.json
+```
+
+Keep the entry as:
+
+```json
+"status": "planned"
+```
+
+until the script exists and a smoke run works. Then change it to:
+
+```json
+"status": "ready"
+```
+
+Read [src/methods/README.md](src/methods/README.md) before adding a new method.
+
+## Tests
+
+Run the default test suite:
+
+```bash
+python -m unittest discover -v
+```
+
+Compile key modules:
+
+```bash
+python -m py_compile \
+  src/run_distilbert_hatexplain.py \
+  src/run_experiment.py \
+  src/experiments/registry.py \
+  src/colab/experiment_launcher.py \
+  src/utils/wandb_config.py
+```
+
+Preview a catalog command:
+
+```bash
+python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
+```
+
+## Git Hygiene
+
+Do not commit:
+
+- `wandb/`
+- `wandb-key.txt`
+- API keys or tokens
+- `outputs/`
+- `checkpoints/`
+- `logs/`
+- `hf_cache/`
+- `data/cache/`
+- large model files
+
+If a key file is accidentally staged:
+
+```bash
+git restore --staged wandb-key.txt
+```
+
+Then remove or rotate the exposed key if it was ever committed.
+
+## Practical Rule
+
+Use this decision tree:
+
+```text
+I want to run an existing experiment
+  -> python src/run_experiment.py --experiment ...
+
+I want to tweak one run
+  -> use --set key=value or Colab Overrides
+
+I found a reusable config
+  -> add a named entry in configs/experiments.json
+
+I am adding a new method
+  -> create src/methods/<method>/train.py and register it
+
+I am changing data preprocessing
+  -> stop and update/review src/data policy and tests first
+```
