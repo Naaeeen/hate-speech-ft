@@ -8,6 +8,7 @@ from src.experiments.hpo import (
     get_trial_cap,
     get_search_space,
     load_hpo_config,
+    merge_trial_overrides,
     sample_search_space,
     shared_fixed_command_overrides,
 )
@@ -92,6 +93,37 @@ class HpoTests(unittest.TestCase):
         second = build_config_hash({"a": 1, "b": 2})
 
         self.assertEqual(first, second)
+
+    def test_merge_trial_overrides_lets_user_override_global_switches_and_rehashes(self):
+        trial = {
+            "learning_rate": 2e-5,
+            "mixed_precision": "none",
+            "gradient_checkpointing": False,
+            "search_stage": "tuning",
+            "trial_id": "trial001",
+            "hpo_seed": 42,
+            "output_dir": "outputs/hpo/trial001",
+            "config_hash": "oldhash",
+        }
+
+        merged = merge_trial_overrides(
+            base_args={"model_name": "distilbert-base-uncased"},
+            user_overrides={"mixed_precision": "bf16", "gradient_checkpointing": True},
+            trial_overrides=trial,
+        )
+
+        self.assertEqual(merged["mixed_precision"], "bf16")
+        self.assertIs(merged["gradient_checkpointing"], True)
+        self.assertNotEqual(merged["config_hash"], "oldhash")
+        self.assertEqual(merged["trial_id"], "trial001")
+
+    def test_merge_trial_overrides_rejects_identity_overrides(self):
+        with self.assertRaises(ValueError):
+            merge_trial_overrides(
+                base_args={},
+                user_overrides={"output_dir": "outputs/manual"},
+                trial_overrides={"trial_id": "trial001"},
+            )
 
     def test_get_search_space_reports_available_names(self):
         config = {"search_spaces": {"full_ft": {"learning_rate": [2e-5]}}}

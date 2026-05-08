@@ -24,6 +24,7 @@ from src.experiments.hpo import (
     get_trial_cap,
     get_search_space,
     load_hpo_config,
+    merge_trial_overrides,
     shared_fixed_command_overrides,
 )
 
@@ -135,12 +136,17 @@ def main() -> int:
                 n_trials=args.suggest_trials,
                 hpo_seed=args.hpo_seed,
                 output_root=args.trial_output_root,
+                search_stage="smoke" if spec.stage == "smoke" else "tuning",
                 trial_cap=get_trial_cap(search_config, search_space_name),
                 allow_over_cap=args.allow_over_cap,
                 fixed_overrides=shared_fixed_command_overrides(search_config),
             )
             for trial_overrides in trials:
-                merged_overrides = {**overrides, **trial_overrides}
+                merged_overrides = merge_trial_overrides(
+                    base_args=spec.args,
+                    user_overrides=overrides,
+                    trial_overrides=trial_overrides,
+                )
                 command = build_experiment_command(
                     spec,
                     repo_root=REPO_ROOT,

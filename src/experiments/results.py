@@ -34,6 +34,12 @@ def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
     return output_path
 
 
+def remove_if_exists(path: str | Path) -> None:
+    target = Path(path)
+    if target.exists():
+        target.unlink()
+
+
 def write_resolved_config(output_dir: str | Path, config: dict[str, Any]) -> Path:
     return write_json(Path(output_dir) / "resolved_config.json", config)
 
@@ -49,6 +55,7 @@ def write_result_files(
     status: str = "completed",
 ) -> dict[str, Path]:
     output_path = Path(output_dir)
+    remove_if_exists(output_path / "failure_summary.json")
     metrics_payload = {
         "eval": eval_metrics,
         "test": test_metrics,
@@ -75,8 +82,12 @@ def write_failure_file(
     error: BaseException,
     runtime_metrics: dict[str, Any] | None = None,
 ) -> Path:
+    output_path = Path(output_dir)
+    remove_if_exists(output_path / "result_summary.json")
+    remove_if_exists(output_path / "metrics.json")
+    remove_if_exists(output_path / "runtime.json")
     return write_json(
-        Path(output_dir) / "failure_summary.json",
+        output_path / "failure_summary.json",
         {
             "status": "failed",
             "config": config,

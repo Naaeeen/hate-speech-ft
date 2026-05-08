@@ -88,6 +88,7 @@ trial_id
 seed
 dataset
 data_fraction
+effective_train_fraction
 model_name
 tokenizer_name
 hyperparameters

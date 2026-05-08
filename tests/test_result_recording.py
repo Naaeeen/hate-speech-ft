@@ -42,6 +42,22 @@ class ResultRecordingTests(unittest.TestCase):
             self.assertEqual(summary["config"]["method"], "full-ft")
             self.assertEqual(summary["model_selection"], {})
 
+    def test_success_clears_stale_failure_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            stale_failure = output_dir / "failure_summary.json"
+            stale_failure.write_text("{}", encoding="utf-8")
+
+            write_result_files(
+                output_dir,
+                config={"trial_id": "trial001"},
+                eval_metrics={"eval_f1_macro": 0.5},
+                runtime_metrics={},
+            )
+
+            self.assertFalse(stale_failure.exists())
+            self.assertTrue((output_dir / "result_summary.json").exists())
+
     def test_writes_failure_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
@@ -59,6 +75,27 @@ class ResultRecordingTests(unittest.TestCase):
             self.assertEqual(failure["config"]["trial_id"], "trial001")
             self.assertEqual(failure["error"]["type"], "RuntimeError")
             self.assertIn("cuda out of memory", failure["error"]["message"])
+
+    def test_failure_clears_stale_completed_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            stale_summary = output_dir / "result_summary.json"
+            stale_summary.write_text("{}", encoding="utf-8")
+            stale_metrics = output_dir / "metrics.json"
+            stale_metrics.write_text("{}", encoding="utf-8")
+            stale_runtime = output_dir / "runtime.json"
+            stale_runtime.write_text("{}", encoding="utf-8")
+
+            write_failure_file(
+                output_dir,
+                config={"trial_id": "trial001"},
+                error=RuntimeError("save failed"),
+            )
+
+            self.assertFalse(stale_summary.exists())
+            self.assertFalse(stale_metrics.exists())
+            self.assertFalse(stale_runtime.exists())
+            self.assertTrue((output_dir / "failure_summary.json").exists())
 
     def test_json_writer_serializes_paths_and_dataclasses(self):
         @dataclass

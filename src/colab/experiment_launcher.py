@@ -11,6 +11,7 @@ from src.experiments.hpo import (
     get_trial_cap,
     get_search_space,
     load_hpo_config,
+    merge_trial_overrides,
     shared_fixed_command_overrides,
 )
 from src.experiments.registry import (
@@ -185,10 +186,15 @@ class ExperimentLauncher:
         )
         commands = []
         for overrides in trial_overrides:
+            merged_overrides = merge_trial_overrides(
+                base_args=spec.args,
+                user_overrides=config["overrides"],
+                trial_overrides=overrides,
+            )
             commands.append(
                 build_experiment_command(
                     spec,
-                    overrides={**config["overrides"], **overrides},
+                    overrides=merged_overrides,
                     use_wandb=config["use_wandb"],
                     wandb_entity=config["wandb_entity"],
                     wandb_project=config["wandb_project"],

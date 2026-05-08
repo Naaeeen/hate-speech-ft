@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -71,6 +72,32 @@ class ResultAggregationTests(unittest.TestCase):
                 {path.name for path in files},
                 {"result_summary.json", "failure_summary.json"},
             )
+
+    def test_discovery_keeps_only_newest_summary_per_output_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            result_path = root / "run1" / "result_summary.json"
+            failure_path = root / "run1" / "failure_summary.json"
+            write_json(result_path, completed_summary(
+                trial_id="run1",
+                seed=42,
+                eval_f1=0.5,
+            ))
+            write_json(
+                failure_path,
+                {
+                    "status": "failed",
+                    "config": {"method": "full-ft", "trial_id": "run1"},
+                    "runtime": {},
+                    "error": {"type": "RuntimeError", "message": "old failure"},
+                },
+            )
+            os.utime(failure_path, (100, 100))
+            os.utime(result_path, (200, 200))
+
+            files = discover_summary_files([root])
+
+            self.assertEqual(files, [result_path])
 
     def test_flatten_summary_record_extracts_tracking_fields_and_metrics(self):
         payload = completed_summary(

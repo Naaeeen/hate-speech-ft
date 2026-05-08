@@ -31,7 +31,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.search_config = load_hpo_config()
         launcher.get_config = lambda: {
             "experiment": "distilbert_full_tuning",
-            "overrides": {},
+            "overrides": {"mixed_precision": "bf16"},
             "use_wandb": False,
             "wandb_entity": "",
             "wandb_project": "hate-speech-ft",
@@ -53,6 +53,8 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("outputs/hpo/distilbert_full_tuning__full_ft__trial002", commands[1])
         self.assertIn("--optim", commands[0])
         self.assertIn("adamw_torch", commands[0])
+        self.assertIn("--mixed_precision", commands[0])
+        self.assertIn("bf16", commands[0])
 
     def test_trial_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)

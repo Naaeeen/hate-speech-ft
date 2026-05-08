@@ -1,5 +1,6 @@
 import argparse
 import os
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -193,6 +194,21 @@ def synchronize_cuda() -> None:
         torch.cuda.synchronize()
 
 
+def get_git_commit_hash(repo_root: Path = REPO_ROOT) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    commit = completed.stdout.strip()
+    return commit or None
+
+
 def resolve_precision_policy(args) -> dict[str, Any]:
     mixed_precision = args.mixed_precision
     if args.fp16:
@@ -306,7 +322,7 @@ def build_experiment_config(
     class_weights: list[float] | None = None,
     precision_policy: dict[str, Any] | None = None,
 ):
-    data_fraction = train_size / full_train_size if full_train_size else None
+    effective_train_fraction = train_size / full_train_size if full_train_size else None
     precision_policy = precision_policy or resolve_precision_policy(args)
     return {
         "method": args.method,
@@ -324,9 +340,11 @@ def build_experiment_config(
         "test_policy": "final_only",
         "model_name": args.model_name,
         "tokenizer_name": args.model_name,
+        "git_commit": get_git_commit_hash(),
         "seed": args.seed,
         "data_fraction_seed": args.data_fraction_seed,
-        "data_fraction": data_fraction,
+        "data_fraction": args.data_fraction,
+        "effective_train_fraction": effective_train_fraction,
         "run_test": args.run_test,
         "global_switches": {
             "mixed_precision": precision_policy["mixed_precision"],
@@ -350,6 +368,7 @@ def build_experiment_config(
             "max_train_samples": args.max_train_samples,
             "max_eval_samples": args.max_eval_samples,
             "max_test_samples": args.max_test_samples,
+            "data_fraction": args.data_fraction,
             "max_length": args.max_length,
             "learning_rate": args.learning_rate,
             "weight_decay": args.weight_decay,
@@ -413,6 +432,7 @@ def build_experiment_config(
         "eval_size": eval_size,
         "full_train_size": full_train_size,
         "full_eval_size": full_eval_size,
+        "effective_train_fraction": effective_train_fraction,
         "test_size": test_size,
         "full_test_size": full_test_size,
         "trainable_params": trainable_params,
@@ -441,6 +461,7 @@ def build_setup_failure_config(
         "hpo_seed": args.hpo_seed,
         "dataset": args.dataset_name,
         "model_name": args.model_name,
+        "git_commit": get_git_commit_hash(),
         "output_dir": args.output_dir,
         "seed": args.seed,
         "data_fraction_seed": args.data_fraction_seed,
@@ -933,6 +954,17 @@ def main():
             metric_for_best_model=args.metric_for_best_model,
             greater_is_better=not args.lower_is_better,
         )
+
+        if args.no_save_final_model:
+            print("\nSkipping final model save because --no_save_final_model was set.")
+        else:
+            model_source = (
+                "best checkpoint" if args.load_best_model_at_end else "last training state"
+            )
+            print(f"\nSaving final model and tokenizer from {model_source}...")
+            trainer.save_model(args.output_dir)
+            tokenizer.save_pretrained(args.output_dir)
+
         runtime_metrics = {
             "training_time_sec": training_time_sec,
             "peak_memory_mb": get_peak_memory_mb(),
@@ -971,16 +1003,6 @@ def main():
         print("\nResult files:")
         for k, v in result_paths.items():
             print(f"{k}: {v}")
-
-        if args.no_save_final_model:
-            print("\nSkipping final model save because --no_save_final_model was set.")
-        else:
-            model_source = (
-                "best checkpoint" if args.load_best_model_at_end else "last training state"
-            )
-            print(f"\nSaving final model and tokenizer from {model_source}...")
-            trainer.save_model(args.output_dir)
-            tokenizer.save_pretrained(args.output_dir)
 
         print(f"\nDone. Saved to: {args.output_dir}")
     except Exception as exc:

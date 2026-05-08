@@ -97,6 +97,8 @@ protocol currently keeps it `none`.
 
 `data_fraction_seed` is separate from `seed` so final seeds do not accidentally
 use different data subsets during data-fraction experiments.
+`data_fraction` records the requested fraction. `effective_train_fraction`
+records the actual fraction after any `max_train_samples` cap.
 
 ## HPO Trial Planning
 
@@ -235,6 +237,7 @@ hpo_seed
 seed
 dataset
 data_fraction
+effective_train_fraction
 model_name
 tokenizer_name
 hyperparameters

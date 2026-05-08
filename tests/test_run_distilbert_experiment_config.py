@@ -1,6 +1,8 @@
 import argparse
+import inspect
 import unittest
 
+import src.run_distilbert_hatexplain as run_distilbert
 from src.run_distilbert_hatexplain import build_experiment_config, build_setup_failure_config
 
 
@@ -74,6 +76,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertEqual(config["config_hash"], "abc123")
         self.assertEqual(config["hpo_seed"], 2026)
         self.assertEqual(config["data_fraction"], 0.2)
+        self.assertEqual(config["effective_train_fraction"], 0.2)
         self.assertEqual(config["selection_metric"], "f1_macro")
         self.assertEqual(config["test_policy"], "final_only")
         self.assertEqual(config["warmup_ratio"], 0.06)
@@ -91,6 +94,71 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         )
         self.assertIs(config["hyperparameters"]["load_best_model_at_end"], True)
         self.assertEqual(config["hyperparameters"]["early_stopping_patience"], 2)
+
+    def test_experiment_config_separates_requested_and_effective_data_fraction(self):
+        args = argparse.Namespace(
+            method="full-ft",
+            search_stage="smoke",
+            trial_id="trial-smoke",
+            config_hash=None,
+            hpo_seed=None,
+            test_split_name="test",
+            run_test=False,
+            dataset_name="Hate-speech-CNERG/hatexplain",
+            model_name="distilbert-base-uncased",
+            seed=42,
+            data_fraction_seed=42,
+            data_fraction=None,
+            max_train_samples=64,
+            max_eval_samples=64,
+            max_test_samples=None,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            logging_strategy="steps",
+            logging_steps=20,
+            eval_steps=None,
+            save_steps=500,
+            save_total_limit=2,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_f1_macro",
+            lower_is_better=False,
+            no_save_final_model=False,
+            fp16=False,
+            mixed_precision="none",
+            gradient_checkpointing=False,
+            class_weighting="none",
+            early_stopping_patience=2,
+            early_stopping_threshold=0.001,
+            max_grad_norm=1.0,
+            optim="adamw_torch",
+            lr_scheduler_type="linear",
+            wandb_log_model="false",
+            max_length=128,
+            learning_rate=2e-5,
+            weight_decay=0.01,
+            warmup_ratio=0.06,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
+            num_train_epochs=1,
+            output_dir="outputs/smoke",
+        )
+
+        config = build_experiment_config(
+            args,
+            train_split="train",
+            eval_split="validation",
+            train_size=64,
+            eval_size=64,
+            full_train_size=500,
+            full_eval_size=50,
+            trainable_params=1000,
+            total_params=2000,
+            precision_policy={"mixed_precision": "none", "fp16": False, "bf16": False},
+        )
+
+        self.assertIsNone(config["data_fraction"])
+        self.assertEqual(config["effective_train_fraction"], 64 / 500)
+        self.assertEqual(config["hyperparameters"]["data_fraction"], None)
 
     def test_setup_failure_config_records_global_switches_before_dataset_load(self):
         args = argparse.Namespace(
@@ -157,6 +225,12 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
 
         args.save_strategy = "epoch"
         validate_checkpoint_policy(args)
+
+    def test_completed_summary_is_written_after_final_model_save(self):
+        source = inspect.getsource(run_distilbert.main)
+
+        self.assertLess(source.index("trainer.save_model"), source.index('"status": "completed"'))
+        self.assertLess(source.index("trainer.save_model"), source.index("write_result_files("))
 
     def test_early_stopping_requires_best_model_selection(self):
         from src.run_distilbert_hatexplain import validate_checkpoint_policy

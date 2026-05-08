@@ -307,6 +307,7 @@ hpo_seed
 seed
 dataset
 data_fraction
+effective_train_fraction
 model_name
 tokenizer_name
 hyperparameters

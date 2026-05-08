@@ -10,6 +10,8 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SEARCH_SPACE_PATH = REPO_ROOT / "configs" / "search_spaces.json"
+TRIAL_METADATA_KEYS = {"search_stage", "trial_id", "hpo_seed", "output_dir", "config_hash"}
+PROTECTED_USER_OVERRIDE_KEYS = {"search_stage", "trial_id", "hpo_seed", "output_dir"}
 
 
 def load_hpo_config(path: str | Path = DEFAULT_SEARCH_SPACE_PATH) -> dict[str, Any]:
@@ -35,6 +37,34 @@ def _choose_value(rng: random.Random, spec: Any) -> Any:
 def build_config_hash(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha1(encoded).hexdigest()[:12]
+
+
+def build_config_hash_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in TRIAL_METADATA_KEYS and value is not None
+    }
+
+
+def merge_trial_overrides(
+    *,
+    base_args: dict[str, Any],
+    user_overrides: dict[str, Any],
+    trial_overrides: dict[str, Any],
+) -> dict[str, Any]:
+    protected_user_keys = sorted(PROTECTED_USER_OVERRIDE_KEYS & set(user_overrides))
+    if protected_user_keys:
+        blocked = ", ".join(protected_user_keys)
+        raise ValueError(
+            f"HPO trial identity fields are managed by the launcher: {blocked}. "
+            "Use --trial_output_root, --hpo_seed, or the experiment catalog instead."
+        )
+
+    merged = {**trial_overrides, **user_overrides}
+    hash_payload = build_config_hash_payload({**base_args, **merged})
+    merged["config_hash"] = build_config_hash(hash_payload)
+    return merged
 
 
 def get_trial_cap(config: dict[str, Any], search_space_name: str) -> int | None:
@@ -158,7 +188,7 @@ def build_trial_overrides(
                 "search_stage": search_stage,
                 "trial_id": trial_id,
                 "hpo_seed": hpo_seed,
-                "config_hash": build_config_hash(overrides),
+                "config_hash": build_config_hash(build_config_hash_payload(overrides)),
                 "output_dir": f"{output_root.rstrip('/')}/{trial_id}",
             }
         )

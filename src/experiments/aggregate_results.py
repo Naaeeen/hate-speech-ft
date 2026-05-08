@@ -24,7 +24,7 @@ DEFAULT_METRICS = (
 
 
 def discover_summary_files(paths: Iterable[str | Path]) -> list[Path]:
-    summary_files: list[Path] = []
+    latest_by_output_dir: dict[Path, Path] = {}
     seen: set[Path] = set()
     for raw_path in paths:
         path = Path(raw_path)
@@ -38,8 +38,16 @@ def discover_summary_files(paths: Iterable[str | Path]) -> list[Path]:
             resolved = candidate.resolve()
             if resolved not in seen:
                 seen.add(resolved)
-                summary_files.append(candidate)
-    return sorted(summary_files, key=lambda item: item.as_posix())
+                output_dir = resolved.parent
+                current = latest_by_output_dir.get(output_dir)
+                if current is None or _summary_sort_key(candidate) > _summary_sort_key(current):
+                    latest_by_output_dir[output_dir] = candidate
+    return sorted(latest_by_output_dir.values(), key=lambda item: item.as_posix())
+
+
+def _summary_sort_key(path: Path) -> tuple[float, int]:
+    status_priority = 1 if path.name == "failure_summary.json" else 0
+    return (path.stat().st_mtime, status_priority)
 
 
 def load_summary(path: str | Path) -> dict[str, Any]:
