@@ -8,8 +8,10 @@ from src.experiments.hpo import (
     DEFAULT_SEARCH_SPACE_PATH,
     build_trial_overrides,
     default_search_space_name,
+    get_trial_cap,
     get_search_space,
     load_hpo_config,
+    shared_fixed_command_overrides,
 )
 from src.experiments.registry import (
     DEFAULT_REGISTRY_PATH,
@@ -149,6 +151,8 @@ class ExperimentLauncher:
         )
 
     def preview_command(self) -> str:
+        if int(self.get_config()["suggest_trials"] or 0) > 0:
+            return "\n".join(self.preview_trial_commands())
         command = self.build_command()
         rendered = format_command(command)
         print(rendered)
@@ -161,6 +165,12 @@ class ExperimentLauncher:
             return []
 
         spec = self.registry.get(config["experiment"])
+        if spec.stage == "smoke":
+            raise ValueError(
+                "HPO trial generation should use a tuning experiment, not a smoke "
+                "experiment with sample caps. Select distilbert_full_tuning for real "
+                "trial suggestions."
+            )
         search_space_name = config["search_space"] or default_search_space_name(spec.method)
         search_space = get_search_space(self.search_config, search_space_name)
         trial_overrides = build_trial_overrides(
@@ -170,6 +180,8 @@ class ExperimentLauncher:
             n_trials=n_trials,
             hpo_seed=int(config["hpo_seed"]),
             output_root=config["trial_output_root"],
+            trial_cap=get_trial_cap(self.search_config, search_space_name),
+            fixed_overrides=shared_fixed_command_overrides(self.search_config),
         )
         commands = []
         for overrides in trial_overrides:
@@ -195,6 +207,8 @@ class ExperimentLauncher:
         return rendered_commands
 
     def run(self):
+        if int(self.get_config()["suggest_trials"] or 0) > 0:
+            return self.run_trial_commands()
         command = self.build_command()
         print(format_command(command))
         return subprocess.run(command, check=True, cwd=REPO_ROOT)

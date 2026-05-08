@@ -50,7 +50,12 @@ setting should become a shared team experiment.
 ## HPO Trial Suggestions
 
 Set `Trials` to a positive number and optionally set `Search` to a search-space
-name such as `full_ft` or `lora`. Then call:
+name such as `full_ft` or `lora`. Use a tuning experiment such as
+`distilbert_full_tuning`; smoke experiments are intentionally blocked for HPO
+because they use tiny sample caps.
+
+The notebook's normal preview and run cells dispatch to trial mode when
+`Trials > 0`. You can also call:
 
 ```python
 launcher.preview_trial_commands()

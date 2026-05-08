@@ -71,6 +71,7 @@ Ready now:
 
 - `distilbert_full_smoke`
 - `distilbert_full_quick`
+- `distilbert_full_tuning`
 - `distilbert_full_final_seed42`
 
 Planned templates exist for:
@@ -206,7 +207,7 @@ For HPO planning, use `configs/search_spaces.json`:
 
 ```bash
 python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
+  --experiment distilbert_full_tuning \
   --suggest_trials 3 \
   --search_space full_ft \
   --hpo_seed 42
@@ -214,6 +215,9 @@ python src/run_experiment.py \
 
 This prints deterministic trial commands with unique `trial_id` and `output_dir`.
 Preview them before running expensive training.
+The CLI refuses to create HPO trials from smoke experiments unless
+`--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
+checks.
 
 ## Direct DistilBERT Runner
 

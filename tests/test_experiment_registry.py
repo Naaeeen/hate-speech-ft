@@ -21,6 +21,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         all_ids = {spec.experiment_id for spec in self.registry.experiments}
 
         self.assertIn("distilbert_full_smoke", ready_ids)
+        self.assertIn("distilbert_full_tuning", ready_ids)
         self.assertIn("tfidf_logreg_template", all_ids)
         self.assertIn("lora_distilbert_template", all_ids)
 
@@ -92,6 +93,14 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertNotIn("final_seeds", spec.args)
         self.assertIn("class_weighting", spec.command_defaults)
         self.assertNotIn("wandb_project", spec.command_defaults)
+
+        tfidf_spec = self.registry.get("tfidf_logreg_template")
+        self.assertNotIn("mixed_precision", tfidf_spec.args)
+        self.assertNotIn("gradient_checkpointing", tfidf_spec.args)
+
+        lora_spec = self.registry.get("lora_distilbert_template")
+        self.assertEqual(lora_spec.args["mixed_precision"], "none")
+        self.assertEqual(lora_spec.args["optim"], "adamw_torch")
 
     def test_final_experiment_enables_test_evaluation(self):
         spec = self.registry.get("distilbert_full_final_seed42")

@@ -1,7 +1,7 @@
 import argparse
 import unittest
 
-from src.run_distilbert_hatexplain import build_experiment_config
+from src.run_distilbert_hatexplain import build_experiment_config, build_setup_failure_config
 
 
 class RunDistilbertExperimentConfigTests(unittest.TestCase):
@@ -91,6 +91,42 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         )
         self.assertIs(config["hyperparameters"]["load_best_model_at_end"], True)
         self.assertEqual(config["hyperparameters"]["early_stopping_patience"], 2)
+
+    def test_setup_failure_config_records_global_switches_before_dataset_load(self):
+        args = argparse.Namespace(
+            method="full-ft",
+            search_stage="tuning",
+            trial_id="trial-setup",
+            config_hash="abc123",
+            hpo_seed=42,
+            dataset_name="missing-dataset",
+            model_name="distilbert-base-uncased",
+            output_dir="outputs/setup-failure",
+            seed=42,
+            data_fraction_seed=99,
+            fp16=False,
+            mixed_precision="bf16",
+            gradient_checkpointing=True,
+            class_weighting="balanced",
+            early_stopping_patience=2,
+            optim="adamw_torch",
+            lr_scheduler_type="linear",
+            max_grad_norm=1.0,
+            warmup_ratio=0.06,
+            weight_decay=0.01,
+        )
+
+        config = build_setup_failure_config(
+            args,
+            precision_policy={"mixed_precision": "bf16", "fp16": False, "bf16": True},
+            gpu_type="A100",
+        )
+
+        self.assertIs(config["setup_complete"], False)
+        self.assertEqual(config["runtime_context"]["gpu_type"], "A100")
+        self.assertEqual(config["global_switches"]["mixed_precision"], "bf16")
+        self.assertIs(config["global_switches"]["weighted_ce"], True)
+        self.assertEqual(config["training_policy"]["class_weighting"], "balanced")
 
     def test_test_evaluation_policy_blocks_non_final_runs(self):
         from src.run_distilbert_hatexplain import validate_test_evaluation_policy

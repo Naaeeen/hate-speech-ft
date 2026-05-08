@@ -25,6 +25,7 @@ Sam sees:
 ```text
 distilbert_full_smoke            ready
 distilbert_full_quick            ready
+distilbert_full_tuning           ready
 distilbert_full_final_seed42     ready
 lora_distilbert_template         planned
 tfidf_logreg_template            planned
@@ -130,7 +131,7 @@ commands manually:
 
 ```bash
 python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
+  --experiment distilbert_full_tuning \
   --suggest_trials 3 \
   --search_space full_ft \
   --hpo_seed 42
@@ -138,6 +139,8 @@ python src/run_experiment.py \
 
 Sam gets three commands with unique `trial_id` and `output_dir`. Sam previews
 them, then runs the selected commands in Colab.
+Sam does not use `distilbert_full_smoke` here because smoke runs intentionally
+use tiny sample caps for setup checks.
 
 ## 5. Sam Promotes A Useful Config
 

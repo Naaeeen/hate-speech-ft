@@ -10,6 +10,7 @@ from src.experiments.registry import load_experiment_registry
 class ColabExperimentLauncherTests(unittest.TestCase):
     def test_run_uses_repo_root_as_working_directory(self):
         launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 0}
         launcher.build_command = lambda: ["python", "src/run_experiment.py", "--list"]
 
         with (
@@ -29,7 +30,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.registry = load_experiment_registry()
         launcher.search_config = load_hpo_config()
         launcher.get_config = lambda: {
-            "experiment": "distilbert_full_smoke",
+            "experiment": "distilbert_full_tuning",
             "overrides": {},
             "use_wandb": False,
             "wandb_entity": "",
@@ -48,8 +49,40 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         self.assertEqual(len(commands), 2)
         self.assertIn("--trial_id", commands[0])
-        self.assertIn("distilbert_full_smoke__full_ft__trial001", commands[0])
-        self.assertIn("outputs/hpo/distilbert_full_smoke__full_ft__trial002", commands[1])
+        self.assertIn("distilbert_full_tuning__full_ft__trial001", commands[0])
+        self.assertIn("outputs/hpo/distilbert_full_tuning__full_ft__trial002", commands[1])
+        self.assertIn("--optim", commands[0])
+        self.assertIn("adamw_torch", commands[0])
+
+    def test_trial_commands_reject_smoke_base(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_smoke",
+            "overrides": {},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "suggest_trials": 1,
+            "search_space": "full_ft",
+            "hpo_seed": 42,
+            "trial_output_root": "outputs/hpo",
+        }
+
+        with self.assertRaises(ValueError):
+            launcher.build_trial_commands()
+
+    def test_run_dispatches_to_trial_commands_when_trials_are_requested(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 2}
+        launcher.run_trial_commands = lambda: ["trial-result"]
+
+        self.assertEqual(launcher.run(), ["trial-result"])
 
 
 if __name__ == "__main__":

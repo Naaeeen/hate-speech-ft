@@ -21,8 +21,10 @@ from src.experiments.hpo import (
     DEFAULT_SEARCH_SPACE_PATH,
     build_trial_overrides,
     default_search_space_name,
+    get_trial_cap,
     get_search_space,
     load_hpo_config,
+    shared_fixed_command_overrides,
 )
 
 
@@ -51,6 +53,16 @@ def parse_args():
     parser.add_argument("--search_config", type=str, default=str(DEFAULT_SEARCH_SPACE_PATH))
     parser.add_argument("--hpo_seed", type=int, default=42)
     parser.add_argument("--trial_output_root", type=str, default="outputs/hpo")
+    parser.add_argument(
+        "--allow_smoke_hpo",
+        action="store_true",
+        help="Allow HPO trial generation from a smoke experiment base.",
+    )
+    parser.add_argument(
+        "--allow_over_cap",
+        action="store_true",
+        help="Allow --suggest_trials to exceed configs/search_spaces.json trial_caps.",
+    )
     parser.add_argument(
         "--set",
         dest="overrides",
@@ -95,14 +107,26 @@ def main() -> int:
     if not args.experiment:
         raise SystemExit("Pass --experiment NAME or use --list.")
 
-    spec = registry.get(args.experiment)
-    overrides = parse_override_pairs(args.overrides)
+    try:
+        spec = registry.get(args.experiment)
+        overrides = parse_override_pairs(args.overrides)
+    except (ValueError, KeyError) as exc:
+        print(f"Cannot run experiment: {exc}", file=sys.stderr)
+        print("Use --list --include_planned to inspect available experiments.", file=sys.stderr)
+        return 2
     if args.suggest_trials < 0:
         raise SystemExit("--suggest_trials must be >= 0.")
     try:
         if args.suggest_trials:
             search_config = load_hpo_config(args.search_config)
             search_space_name = args.search_space or default_search_space_name(spec.method)
+            if spec.stage == "smoke" and not args.allow_smoke_hpo:
+                raise SystemExit(
+                    "Refusing to generate HPO trials from a smoke experiment because "
+                    "its sample caps are for setup checks, not model selection. Use a "
+                    "tuning experiment such as distilbert_full_tuning, or pass "
+                    "--allow_smoke_hpo for a smoke-only command test."
+                )
             search_space = get_search_space(search_config, search_space_name)
             trials = build_trial_overrides(
                 base_experiment_id=spec.experiment_id,
@@ -111,6 +135,9 @@ def main() -> int:
                 n_trials=args.suggest_trials,
                 hpo_seed=args.hpo_seed,
                 output_root=args.trial_output_root,
+                trial_cap=get_trial_cap(search_config, search_space_name),
+                allow_over_cap=args.allow_over_cap,
+                fixed_overrides=shared_fixed_command_overrides(search_config),
             )
             for trial_overrides in trials:
                 merged_overrides = {**overrides, **trial_overrides}
@@ -143,7 +170,7 @@ def main() -> int:
             wandb_log_model=args.wandb_log_model,
             python_executable=args.python,
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError, KeyError) as exc:
         print(f"Cannot run experiment: {exc}", file=sys.stderr)
         print("Use --list --include_planned to inspect available experiments.", file=sys.stderr)
         return 2

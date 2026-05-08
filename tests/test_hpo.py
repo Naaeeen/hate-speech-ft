@@ -5,9 +5,11 @@ from src.experiments.hpo import (
     build_trial_overrides,
     default_search_space_name,
     enumerate_search_space,
+    get_trial_cap,
     get_search_space,
     load_hpo_config,
     sample_search_space,
+    shared_fixed_command_overrides,
 )
 
 
@@ -31,21 +33,47 @@ class HpoTests(unittest.TestCase):
 
     def test_build_trial_overrides_adds_tracking_fields(self):
         trials = build_trial_overrides(
-            base_experiment_id="distilbert_full_smoke",
+            base_experiment_id="distilbert_full_tuning",
             method="full-ft",
             search_space={"learning_rate": [1e-5, 2e-5]},
             n_trials=2,
             hpo_seed=123,
             output_root="outputs/hpo",
+            fixed_overrides={"optim": "adamw_torch"},
         )
 
         self.assertEqual(len(trials), 2)
         self.assertEqual(trials[0]["search_stage"], "tuning")
         self.assertEqual(trials[0]["hpo_seed"], 123)
+        self.assertEqual(trials[0]["optim"], "adamw_torch")
         self.assertIn("config_hash", trials[0])
         self.assertNotEqual(trials[0]["learning_rate"], trials[1]["learning_rate"])
         self.assertIn("trial001", trials[0]["trial_id"])
         self.assertTrue(trials[0]["output_dir"].endswith(trials[0]["trial_id"]))
+
+    def test_build_trial_overrides_enforces_caps(self):
+        with self.assertRaises(ValueError):
+            build_trial_overrides(
+                base_experiment_id="distilbert_full_tuning",
+                method="full-ft",
+                search_space={"learning_rate": [1e-5, 2e-5]},
+                n_trials=3,
+                hpo_seed=123,
+                output_root="outputs/hpo",
+                trial_cap=2,
+            )
+
+        trials = build_trial_overrides(
+            base_experiment_id="distilbert_full_tuning",
+            method="full-ft",
+            search_space={"learning_rate": [1e-5, 2e-5]},
+            n_trials=3,
+            hpo_seed=123,
+            output_root="outputs/hpo",
+            trial_cap=2,
+            allow_over_cap=True,
+        )
+        self.assertEqual(len(trials), 3)
 
     def test_enumerate_search_space_expands_combinations(self):
         combinations = enumerate_search_space(
@@ -79,6 +107,12 @@ class HpoTests(unittest.TestCase):
         self.assertIn("trial_caps", config)
         self.assertIn("full_ft", config["search_spaces"])
         self.assertEqual(config["shared_fixed"]["class_weighting"], "none")
+        self.assertEqual(config["shared_fixed"]["optim"], "adamw_torch")
+        self.assertEqual(get_trial_cap(config, "full_ft"), 6)
+        self.assertEqual(
+            shared_fixed_command_overrides(config)["mixed_precision"],
+            "none",
+        )
 
 
 if __name__ == "__main__":

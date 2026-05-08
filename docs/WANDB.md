@@ -87,13 +87,17 @@ Use the repo to generate trial commands instead of hand-writing them:
 
 ```bash
 python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
+  --experiment distilbert_full_tuning \
   --suggest_trials 3 \
   --search_space full_ft \
   --use_wandb \
   --wandb_entity your-team \
   --wandb_project hate-speech-ft
 ```
+
+Use a tuning experiment for real HPO. Smoke experiments keep tiny sample caps for
+setup checks, so the CLI blocks smoke-based HPO suggestions unless explicitly
+overridden.
 
 Use W&B groups for method-level grouping, for example:
 

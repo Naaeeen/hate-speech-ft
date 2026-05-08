@@ -7,23 +7,39 @@
     "wandb_project": "hate-speech-ft"
   },
   "command_defaults": {
-    "dataset_name": "Hate-speech-CNERG/hatexplain",
-    "max_length": 128,
-    "weight_decay": 0.01,
-    "warmup_ratio": 0.06,
-    "max_grad_norm": 1.0,
-    "optim": "adamw_torch",
-    "lr_scheduler_type": "linear",
-    "eval_strategy": "epoch",
-    "save_strategy": "epoch",
-    "save_total_limit": 2,
-    "load_best_model_at_end": true,
-    "metric_for_best_model": "eval_f1_macro",
-    "mixed_precision": "none",
-    "gradient_checkpointing": false,
-    "class_weighting": "none",
-    "early_stopping_patience": 2,
-    "early_stopping_threshold": 0.001
+    "dataset_name": "Hate-speech-CNERG/hatexplain"
+  },
+  "family_command_defaults": {
+    "transformer": {
+      "max_length": 128,
+      "weight_decay": 0.01,
+      "warmup_ratio": 0.06,
+      "max_grad_norm": 1.0,
+      "optim": "adamw_torch",
+      "lr_scheduler_type": "linear",
+      "eval_strategy": "epoch",
+      "save_strategy": "epoch",
+      "save_total_limit": 2,
+      "load_best_model_at_end": true,
+      "metric_for_best_model": "eval_f1_macro",
+      "mixed_precision": "none",
+      "gradient_checkpointing": false,
+      "class_weighting": "none",
+      "early_stopping_patience": 2,
+      "early_stopping_threshold": 0.001
+    },
+    "transformer-peft": {
+      "inherits": "transformer"
+    },
+    "transformer-two-stage": {
+      "inherits": "transformer"
+    },
+    "neural-scratch": {
+      "class_weighting": "none",
+      "early_stopping_patience": 2,
+      "early_stopping_threshold": 0.001
+    },
+    "classical": {}
   },
   "experiments": {
     "distilbert_full_smoke": {
@@ -64,6 +80,25 @@
         "max_train_samples": 512,
         "max_eval_samples": 256,
         "output_dir": "outputs/distilbert_full_quick"
+      }
+    },
+    "distilbert_full_tuning": {
+      "status": "ready",
+      "method": "full-ft",
+      "family": "transformer",
+      "stage": "tuning",
+      "script": "src/run_distilbert_hatexplain.py",
+      "description": "Full-data DistilBERT base used for HPO trial command generation.",
+      "tags": ["distilbert", "full-ft", "tuning"],
+      "args": {
+        "model_name": "distilbert-base-uncased",
+        "learning_rate": 2e-5,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 3,
+        "seed": 42,
+        "data_fraction": 1.0,
+        "output_dir": "outputs/distilbert_full_tuning"
       }
     },
     "distilbert_full_final_seed42": {

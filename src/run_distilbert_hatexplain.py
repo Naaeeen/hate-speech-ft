@@ -422,6 +422,52 @@ def build_experiment_config(
     }
 
 
+def build_setup_failure_config(
+    args,
+    *,
+    precision_policy: dict[str, Any] | None = None,
+    gpu_type: str | None = None,
+) -> dict[str, Any]:
+    precision_policy = precision_policy or {
+        "mixed_precision": getattr(args, "mixed_precision", "unknown"),
+        "fp16": bool(getattr(args, "fp16", False)),
+        "bf16": getattr(args, "mixed_precision", None) == "bf16",
+    }
+    return {
+        "method": args.method,
+        "search_stage": args.search_stage,
+        "trial_id": args.trial_id,
+        "config_hash": args.config_hash,
+        "hpo_seed": args.hpo_seed,
+        "dataset": args.dataset_name,
+        "model_name": args.model_name,
+        "output_dir": args.output_dir,
+        "seed": args.seed,
+        "data_fraction_seed": args.data_fraction_seed,
+        "setup_complete": False,
+        "global_switches": {
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "class_weighting": args.class_weighting,
+            "weighted_ce": args.class_weighting != "none",
+            "early_stopping": args.early_stopping_patience > 0,
+        },
+        "training_policy": {
+            "optim": args.optim,
+            "lr_scheduler_type": args.lr_scheduler_type,
+            "max_grad_norm": args.max_grad_norm,
+            "warmup_ratio": args.warmup_ratio,
+            "weight_decay": args.weight_decay,
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "class_weighting": args.class_weighting,
+        },
+        "runtime_context": {
+            "gpu_type": gpu_type,
+        },
+    }
+
+
 def build_tokenized_dataset_with_count(
     examples,
     tokenizer,
@@ -626,190 +672,238 @@ def build_model_selection_summary(
 
 def main():
     args = parse_args()
-    validate_test_evaluation_policy(
-        search_stage=args.search_stage,
-        run_test=args.run_test,
-    )
-    validate_checkpoint_policy(args)
-
-    from datasets import load_dataset
-    from transformers import (
-        AutoModelForSequenceClassification,
-        AutoTokenizer,
-        DataCollatorWithPadding,
-        EarlyStoppingCallback,
-        Trainer,
-        TrainingArguments,
-        set_seed,
-    )
-
-    set_seed(args.seed)
-
     os.makedirs(args.output_dir, exist_ok=True)
-
-    print(f"Loading dataset: {args.dataset_name}")
-    ds = load_dataset(args.dataset_name)
-
-    print("Available splits:", list(ds.keys()))
-
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-
-    train_split = find_split_name(ds, ["train"])
-    eval_split = find_split_name(ds, ["validation", "valid", "test"])
-    test_split = find_split_name(ds, [args.test_split_name])
-
-    if train_split is None:
-        raise ValueError(f"No train split found. Available splits: {list(ds.keys())}")
-    if eval_split is None:
-        raise ValueError(
-            f"No validation/valid/test split found. Available splits: {list(ds.keys())}"
-        )
-    if args.run_test and test_split is None:
-        raise ValueError(
-            f"No test split named '{args.test_split_name}' found. "
-            f"Available splits: {list(ds.keys())}"
-        )
-
-    train_dataset, full_train_size = build_tokenized_dataset_with_count(
-        ds[train_split],
-        tokenizer=tokenizer,
-        max_length=args.max_length,
-        data_fraction=args.data_fraction,
-        fraction_seed=args.data_fraction_seed,
-        max_samples=args.max_train_samples,
+    wandb_run = None
+    gpu_type = get_gpu_type()
+    precision_policy = {
+        "mixed_precision": args.mixed_precision,
+        "fp16": args.fp16,
+        "bf16": args.mixed_precision == "bf16",
+    }
+    experiment_config = build_setup_failure_config(
+        args,
+        precision_policy=precision_policy,
+        gpu_type=gpu_type,
     )
-    eval_dataset, full_eval_size = build_tokenized_dataset_with_count(
-        ds[eval_split],
-        tokenizer=tokenizer,
-        max_length=args.max_length,
-        max_samples=args.max_eval_samples,
-    )
-    test_dataset = None
-    full_test_size = None
-    if args.run_test:
-        test_dataset, full_test_size = build_tokenized_dataset_with_count(
-            ds[test_split],
+    try:
+        precision_policy = resolve_precision_policy(args)
+        experiment_config = build_setup_failure_config(
+            args,
+            precision_policy=precision_policy,
+            gpu_type=gpu_type,
+        )
+        validate_test_evaluation_policy(
+            search_stage=args.search_stage,
+            run_test=args.run_test,
+        )
+        validate_checkpoint_policy(args)
+
+        from datasets import load_dataset
+        from transformers import (
+            AutoModelForSequenceClassification,
+            AutoTokenizer,
+            DataCollatorWithPadding,
+            EarlyStoppingCallback,
+            Trainer,
+            TrainingArguments,
+            set_seed,
+        )
+
+        set_seed(args.seed)
+
+        print(f"Loading dataset: {args.dataset_name}")
+        ds = load_dataset(args.dataset_name)
+
+        print("Available splits:", list(ds.keys()))
+
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+
+        train_split = find_split_name(ds, ["train"])
+        eval_split = find_split_name(ds, ["validation", "valid", "test"])
+        test_split = find_split_name(ds, [args.test_split_name])
+
+        if train_split is None:
+            raise ValueError(f"No train split found. Available splits: {list(ds.keys())}")
+        if eval_split is None:
+            raise ValueError(
+                f"No validation/valid/test split found. Available splits: {list(ds.keys())}"
+            )
+        if args.run_test and test_split is None:
+            raise ValueError(
+                f"No test split named '{args.test_split_name}' found. "
+                f"Available splits: {list(ds.keys())}"
+            )
+
+        train_dataset, full_train_size = build_tokenized_dataset_with_count(
+            ds[train_split],
             tokenizer=tokenizer,
             max_length=args.max_length,
-            max_samples=args.max_test_samples,
+            data_fraction=args.data_fraction,
+            fraction_seed=args.data_fraction_seed,
+            max_samples=args.max_train_samples,
         )
-
-    id2label, label2id, num_labels = build_fixed_label_maps()
-
-    print(
-        f"Train split: {train_split}, size={len(train_dataset)} "
-        f"(preprocessed full={full_train_size})"
-    )
-    print(
-        f"Eval split: {eval_split}, size={len(eval_dataset)} "
-        f"(preprocessed full={full_eval_size})"
-    )
-    print(f"Using num_labels: {num_labels}")
-    print(f"id2label: {id2label}")
-    if args.run_test:
-        print(
-            f"Test split: {test_split}, size={len(test_dataset)} "
-            f"(preprocessed full={full_test_size})"
+        eval_dataset, full_eval_size = build_tokenized_dataset_with_count(
+            ds[eval_split],
+            tokenizer=tokenizer,
+            max_length=args.max_length,
+            max_samples=args.max_eval_samples,
         )
-
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_name,
-        num_labels=num_labels,
-        id2label=id2label,
-        label2id=label2id,
-    )
-    if args.gradient_checkpointing:
-        model.gradient_checkpointing_enable()
-    trainable_params, total_params = count_model_parameters(model)
-    print(f"Trainable params: {trainable_params:,} / {total_params:,}")
-
-    precision_policy = resolve_precision_policy(args)
-    class_weights = resolve_class_weights(
-        class_weighting=args.class_weighting,
-        train_dataset=train_dataset,
-        num_labels=num_labels,
-    )
-    if class_weights is not None:
-        print(f"Class weights ({args.class_weighting}): {class_weights}")
-
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    wandb_settings = resolve_wandb_settings(args)
-    gpu_type = get_gpu_type()
-    experiment_config = build_experiment_config(
-        args,
-        train_split=train_split,
-        eval_split=eval_split,
-        train_size=len(train_dataset),
-        eval_size=len(eval_dataset),
-        full_train_size=full_train_size,
-        full_eval_size=full_eval_size,
-        test_size=len(test_dataset) if test_dataset is not None else None,
-        full_test_size=full_test_size,
-        trainable_params=trainable_params,
-        total_params=total_params,
-        gpu_type=gpu_type,
-        class_weights=class_weights,
-        precision_policy=precision_policy,
-    )
-    resolved_config_path = write_resolved_config(args.output_dir, experiment_config)
-    print(f"Resolved config: {resolved_config_path}")
-    wandb_run = init_wandb_run(wandb_settings, config=experiment_config)
-
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        learning_rate=args.learning_rate,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
-        num_train_epochs=args.num_train_epochs,
-        optim=args.optim,
-        lr_scheduler_type=args.lr_scheduler_type,
-        weight_decay=args.weight_decay,
-        warmup_ratio=args.warmup_ratio,
-        max_grad_norm=args.max_grad_norm,
-        seed=args.seed,
-        data_seed=args.seed,
-        eval_strategy=args.eval_strategy,
-        save_strategy=args.save_strategy,
-        logging_strategy=args.logging_strategy,
-        logging_steps=args.logging_steps,
-        eval_steps=args.eval_steps,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
-        report_to=wandb_settings.report_to,
-        run_name=wandb_settings.run_name if wandb_settings.enabled else None,
-        load_best_model_at_end=args.load_best_model_at_end,
-        metric_for_best_model=args.metric_for_best_model,
-        greater_is_better=not args.lower_is_better,
-        fp16=precision_policy["fp16"],
-        bf16=precision_policy["bf16"],
-        gradient_checkpointing=args.gradient_checkpointing,
-    )
-
-    callbacks = []
-    if args.early_stopping_patience > 0:
-        callbacks.append(
-            EarlyStoppingCallback(
-                early_stopping_patience=args.early_stopping_patience,
-                early_stopping_threshold=args.early_stopping_threshold,
+        test_dataset = None
+        full_test_size = None
+        if args.run_test:
+            test_dataset, full_test_size = build_tokenized_dataset_with_count(
+                ds[test_split],
+                tokenizer=tokenizer,
+                max_length=args.max_length,
+                max_samples=args.max_test_samples,
             )
-        )
-    trainer_cls = (
-        build_weighted_trainer_class(Trainer, class_weights)
-        if class_weights is not None
-        else Trainer
-    )
-    trainer = build_trainer(
-        trainer_cls=trainer_cls,
-        model=model,
-        training_args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics_fn(),
-        callbacks=callbacks,
-    )
 
+        id2label, label2id, num_labels = build_fixed_label_maps()
+
+        print(
+            f"Train split: {train_split}, size={len(train_dataset)} "
+            f"(preprocessed full={full_train_size})"
+        )
+        print(
+            f"Eval split: {eval_split}, size={len(eval_dataset)} "
+            f"(preprocessed full={full_eval_size})"
+        )
+        print(f"Using num_labels: {num_labels}")
+        print(f"id2label: {id2label}")
+        if args.run_test:
+            print(
+                f"Test split: {test_split}, size={len(test_dataset)} "
+                f"(preprocessed full={full_test_size})"
+            )
+
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.model_name,
+            num_labels=num_labels,
+            id2label=id2label,
+            label2id=label2id,
+        )
+        if args.gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+        trainable_params, total_params = count_model_parameters(model)
+        print(f"Trainable params: {trainable_params:,} / {total_params:,}")
+
+        precision_policy = resolve_precision_policy(args)
+        class_weights = resolve_class_weights(
+            class_weighting=args.class_weighting,
+            train_dataset=train_dataset,
+            num_labels=num_labels,
+        )
+        if class_weights is not None:
+            print(f"Class weights ({args.class_weighting}): {class_weights}")
+
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+        wandb_settings = resolve_wandb_settings(args)
+        gpu_type = get_gpu_type()
+        experiment_config = build_experiment_config(
+            args,
+            train_split=train_split,
+            eval_split=eval_split,
+            train_size=len(train_dataset),
+            eval_size=len(eval_dataset),
+            full_train_size=full_train_size,
+            full_eval_size=full_eval_size,
+            test_size=len(test_dataset) if test_dataset is not None else None,
+            full_test_size=full_test_size,
+            trainable_params=trainable_params,
+            total_params=total_params,
+            gpu_type=gpu_type,
+            class_weights=class_weights,
+            precision_policy=precision_policy,
+        )
+        resolved_config_path = write_resolved_config(args.output_dir, experiment_config)
+        print(f"Resolved config: {resolved_config_path}")
+        wandb_run = init_wandb_run(wandb_settings, config=experiment_config)
+
+        training_args = TrainingArguments(
+            output_dir=args.output_dir,
+            learning_rate=args.learning_rate,
+            per_device_train_batch_size=args.per_device_train_batch_size,
+            per_device_eval_batch_size=args.per_device_eval_batch_size,
+            num_train_epochs=args.num_train_epochs,
+            optim=args.optim,
+            lr_scheduler_type=args.lr_scheduler_type,
+            weight_decay=args.weight_decay,
+            warmup_ratio=args.warmup_ratio,
+            max_grad_norm=args.max_grad_norm,
+            seed=args.seed,
+            data_seed=args.seed,
+            eval_strategy=args.eval_strategy,
+            save_strategy=args.save_strategy,
+            logging_strategy=args.logging_strategy,
+            logging_steps=args.logging_steps,
+            eval_steps=args.eval_steps,
+            save_steps=args.save_steps,
+            save_total_limit=args.save_total_limit,
+            report_to=wandb_settings.report_to,
+            run_name=wandb_settings.run_name if wandb_settings.enabled else None,
+            load_best_model_at_end=args.load_best_model_at_end,
+            metric_for_best_model=args.metric_for_best_model,
+            greater_is_better=not args.lower_is_better,
+            fp16=precision_policy["fp16"],
+            bf16=precision_policy["bf16"],
+            gradient_checkpointing=args.gradient_checkpointing,
+        )
+
+        callbacks = []
+        if args.early_stopping_patience > 0:
+            callbacks.append(
+                EarlyStoppingCallback(
+                    early_stopping_patience=args.early_stopping_patience,
+                    early_stopping_threshold=args.early_stopping_threshold,
+                )
+            )
+        trainer_cls = (
+            build_weighted_trainer_class(Trainer, class_weights)
+            if class_weights is not None
+            else Trainer
+        )
+        trainer = build_trainer(
+            trainer_cls=trainer_cls,
+            model=model,
+            training_args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics_fn(),
+            callbacks=callbacks,
+        )
+
+    except Exception as exc:
+        runtime_metrics = {
+            "training_time_sec": None,
+            "peak_memory_mb": get_peak_memory_mb(),
+            "peak_memory_allocated_mb": get_peak_memory_mb(),
+            "peak_memory_reserved_mb": get_peak_memory_reserved_mb(),
+            "gpu_type": gpu_type,
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "status": "failed",
+            "failure_phase": "setup",
+        }
+        failure_path = write_failure_file(
+            args.output_dir,
+            config=experiment_config,
+            error=exc,
+            runtime_metrics=runtime_metrics,
+        )
+        if wandb_run is not None:
+            wandb_run.log(
+                {
+                    "status": "failed",
+                    "failure_phase": "setup",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                }
+            )
+        finish_wandb_run(wandb_run)
+        print(f"\nFailure summary: {failure_path}")
+        raise
     try:
         print("\nStarting training...")
         try:
@@ -903,6 +997,7 @@ def main():
             "mixed_precision": precision_policy["mixed_precision"],
             "gradient_checkpointing": args.gradient_checkpointing,
             "status": "failed",
+            "failure_phase": "train_eval",
         }
         failure_path = write_failure_file(
             args.output_dir,
@@ -914,6 +1009,7 @@ def main():
             wandb_run.log(
                 {
                     "status": "failed",
+                    "failure_phase": "train_eval",
                     "error_type": type(exc).__name__,
                     "error_message": str(exc),
                 }

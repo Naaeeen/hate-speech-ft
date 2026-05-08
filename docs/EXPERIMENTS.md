@@ -106,7 +106,7 @@ Suggest deterministic trial commands without running them:
 
 ```bash
 python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
+  --experiment distilbert_full_tuning \
   --suggest_trials 3 \
   --search_space full_ft \
   --hpo_seed 42
@@ -114,6 +114,10 @@ python src/run_experiment.py \
 
 Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
 `output_dir`. This prevents HPO runs from overwriting each other.
+Trial caps from `configs/search_spaces.json` are enforced by default. Use
+`--allow_over_cap` only for exploratory runs that intentionally exceed the
+research protocol. The CLI also refuses HPO suggestions from smoke experiments
+unless `--allow_smoke_hpo` is passed.
 
 ## Colab
 
@@ -251,6 +255,7 @@ Ready now:
 
 - `distilbert_full_smoke`
 - `distilbert_full_quick`
+- `distilbert_full_tuning`
 - `distilbert_full_final_seed42`
 
 Templates for later scripts:

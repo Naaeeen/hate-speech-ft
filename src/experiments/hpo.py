@@ -37,6 +37,32 @@ def build_config_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha1(encoded).hexdigest()[:12]
 
 
+def get_trial_cap(config: dict[str, Any], search_space_name: str) -> int | None:
+    caps = config.get("trial_caps") or {}
+    cap = caps.get(search_space_name)
+    return int(cap) if cap is not None else None
+
+
+def shared_fixed_command_overrides(config: dict[str, Any]) -> dict[str, Any]:
+    shared = config.get("shared_fixed") or {}
+    command_keys = {
+        "optim",
+        "lr_scheduler_type",
+        "weight_decay",
+        "warmup_ratio",
+        "max_grad_norm",
+        "eval_strategy",
+        "save_strategy",
+        "load_best_model_at_end",
+        "early_stopping_patience",
+        "early_stopping_threshold",
+        "mixed_precision",
+        "gradient_checkpointing",
+        "class_weighting",
+    }
+    return {key: shared[key] for key in command_keys if key in shared}
+
+
 def sample_search_space(
     search_space: dict[str, Any],
     *,
@@ -100,22 +126,33 @@ def build_trial_overrides(
     hpo_seed: int,
     output_root: str,
     search_stage: str = "tuning",
+    trial_cap: int | None = None,
+    allow_over_cap: bool = False,
+    fixed_overrides: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    if trial_cap is not None and n_trials > trial_cap and not allow_over_cap:
+        raise ValueError(
+            f"Requested {n_trials} trials for {method}, but the configured cap is "
+            f"{trial_cap}. Pass an explicit over-cap option only for exploratory runs."
+        )
+
     trials = []
     method_part = default_search_space_name(method)
     combinations = enumerate_search_space(search_space)
     rng = random.Random(hpo_seed)
     rng.shuffle(combinations)
+    fixed_overrides = dict(fixed_overrides or {})
     for trial_index in range(n_trials):
         trial_id = f"{base_experiment_id}__{method_part}__trial{trial_index + 1:03d}"
         if trial_index < len(combinations):
-            overrides = dict(combinations[trial_index])
+            sampled_overrides = dict(combinations[trial_index])
         else:
-            overrides = sample_search_space(
+            sampled_overrides = sample_search_space(
                 search_space,
                 seed=hpo_seed,
                 trial_index=trial_index,
             )
+        overrides = {**fixed_overrides, **sampled_overrides}
         overrides.update(
             {
                 "search_stage": search_stage,

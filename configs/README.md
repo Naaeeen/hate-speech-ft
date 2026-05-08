@@ -16,8 +16,12 @@ PyYAML.
 The top-level `defaults` block stores shared assumptions such as the dataset,
 selection metric, test policy, final seed policy, and default W&B project.
 
-`command_defaults` stores shared runner arguments that are safe to pass to
-method scripts. This is where global switches live:
+`command_defaults` stores runner arguments that are safe to pass to every method
+script. `family_command_defaults` stores method-family defaults such as
+Transformer training switches. This keeps TF-IDF/Bi-LSTM templates from
+receiving Transformer-only flags when they become ready.
+
+Global switches live in the relevant family block:
 
 ```json
 "mixed_precision": "none",
@@ -26,6 +30,9 @@ method scripts. This is where global switches live:
 "early_stopping_patience": 2,
 "early_stopping_threshold": 0.001
 ```
+
+Family blocks may inherit another family with `"inherits": "transformer"` to
+avoid copying the same protocol defaults across PEFT and two-stage variants.
 
 Metadata-only defaults such as `final_seeds`, `selection_metric`,
 `test_policy`, and `wandb_project` stay in `defaults` and are not passed blindly
@@ -85,17 +92,20 @@ the best validation checkpoint.
 Edit `search_spaces.json` when the team changes the HPO protocol:
 
 - `shared_fixed`: global protocol decisions from the research report
-- `trial_caps`: maximum trials per method
+- `trial_caps`: maximum trials per method, enforced by `run_experiment.py`
 - `search_spaces`: method-specific knobs to sample
 
 Generate deterministic trial commands with:
 
 ```bash
 python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
+  --experiment distilbert_full_tuning \
   --suggest_trials 3 \
   --search_space full_ft
 ```
+
+Use a tuning experiment for real HPO. Smoke experiments keep sample caps for
+setup checks and are blocked for HPO unless `--allow_smoke_hpo` is passed.
 
 ## Status
 
@@ -128,6 +138,7 @@ Examples:
 ```text
 distilbert_full_smoke
 distilbert_full_quick
+distilbert_full_tuning
 distilbert_full_final_seed42
 lora_distilbert_template
 tfidf_logreg_template

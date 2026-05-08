@@ -1,7 +1,7 @@
 {
   "shared_fixed": {
     "selection_metric": "eval_f1_macro",
-    "optimizer": "adamw_torch",
+    "optim": "adamw_torch",
     "lr_scheduler_type": "linear",
     "weight_decay": 0.01,
     "warmup_ratio": 0.06,
