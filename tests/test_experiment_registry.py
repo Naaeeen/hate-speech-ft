@@ -86,8 +86,12 @@ class ExperimentRegistryTests(unittest.TestCase):
         spec = self.registry.get("frozen_distilbert_template")
 
         self.assertEqual(spec.args["dataset_name"], "Hate-speech-CNERG/hatexplain")
+        self.assertEqual(spec.args["class_weighting"], "none")
+        self.assertEqual(spec.args["mixed_precision"], "none")
         self.assertIn("final_seeds", spec.defaults)
         self.assertNotIn("final_seeds", spec.args)
+        self.assertIn("class_weighting", spec.command_defaults)
+        self.assertNotIn("wandb_project", spec.command_defaults)
 
     def test_final_experiment_enables_test_evaluation(self):
         spec = self.registry.get("distilbert_full_final_seed42")

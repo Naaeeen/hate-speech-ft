@@ -76,6 +76,45 @@ python src/run_experiment.py \
 These overrides do not edit the catalog. If a setting becomes a team standard,
 add a named experiment to `configs/experiments.json`.
 
+## Global Switches
+
+Global switches are stored in `configs/experiments.json` under
+`command_defaults`. Use them for decisions that must stay consistent across
+methods:
+
+```text
+mixed_precision=none|fp16|bf16
+gradient_checkpointing=true|false
+class_weighting=none|balanced
+early_stopping_patience=2
+early_stopping_threshold=0.001
+max_grad_norm=1.0
+```
+
+Use `class_weighting=balanced` only when the team wants weighted CE for neural
+methods and an equivalent class-weight policy for classical baselines. The main
+protocol currently keeps it `none`.
+
+`data_fraction_seed` is separate from `seed` so final seeds do not accidentally
+use different data subsets during data-fraction experiments.
+
+## HPO Trial Planning
+
+Search spaces and trial caps live in `configs/search_spaces.json`.
+
+Suggest deterministic trial commands without running them:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --hpo_seed 42
+```
+
+Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
+`output_dir`. This prevents HPO runs from overwriting each other.
+
 ## Colab
 
 Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb`.
@@ -105,6 +144,8 @@ result_summary.json
 ```
 
 This is required even when W&B is disabled or unavailable.
+Failed runs that reach the runner write `failure_summary.json` with the error
+type, message, partial runtime, and config.
 
 The current DistilBERT runner writes these files through
 `src/experiments/results.py`. New method scripts should reuse that helper or
@@ -167,6 +208,8 @@ total_params
 training_time_sec
 peak_memory_mb
 gpu_type
+status
+model_selection
 ```
 
 5. Add an entry to `configs/experiments.json`.
@@ -190,6 +233,11 @@ metric_for_best_model
 greater_is_better
 save_final_model
 wandb_log_model
+early_stopping_patience
+early_stopping_threshold
+mixed_precision
+gradient_checkpointing
+class_weighting
 ```
 
 The current DistilBERT ready experiments save checkpoints each epoch, keep at

@@ -47,6 +47,8 @@ Run the setup cells, then use the experiment launcher widget.
   method onboarding contract.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
+- [Deep research protocol](deep-research-report-setup.md): research rationale
+  for the mixed hyperparameter strategy.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
   of how a teammate should use the repo from start to finish.
 - [Docs index](docs/README.md): durable project docs and what each one is for.
@@ -94,6 +96,7 @@ seed entries after the final experiment set is agreed by the team.
 ```text
 configs/
   experiments.json              # shared experiment catalog
+  search_spaces.json            # HPO trial caps and method search spaces
 
 docs/
   EXPERIMENTS.md                # experiment workflow and method contract
@@ -185,6 +188,32 @@ python src/run_experiment.py \
 
 Use `--set` for one-off exploration. If a configuration becomes a team standard,
 add a named experiment to [configs/experiments.json](configs/experiments.json).
+
+Global training switches live in `configs/experiments.json` under
+`command_defaults`. They apply to every catalog experiment unless an experiment
+or `--set` override changes them:
+
+```text
+mixed_precision=none|fp16|bf16
+gradient_checkpointing=true|false
+class_weighting=none|balanced
+early_stopping_patience=2
+early_stopping_threshold=0.001
+max_grad_norm=1.0
+```
+
+For HPO planning, use `configs/search_spaces.json`:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --hpo_seed 42
+```
+
+This prints deterministic trial commands with unique `trial_id` and `output_dir`.
+Preview them before running expensive training.
 
 ## Direct DistilBERT Runner
 
@@ -279,6 +308,7 @@ resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
+failure_summary.json        # only when a run fails after setup
 ```
 
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
@@ -293,6 +323,9 @@ save_strategy=epoch
 save_total_limit=2
 load_best_model_at_end=true
 metric_for_best_model=eval_f1_macro
+early_stopping_patience=2
+class_weighting=none
+mixed_precision=none
 ```
 
 During training, Hugging Face checkpoints are written under

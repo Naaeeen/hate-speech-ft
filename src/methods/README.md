@@ -47,6 +47,12 @@ Where possible, method scripts should accept:
 --load_best_model_at_end
 --metric_for_best_model
 --no_save_final_model
+--mixed_precision
+--gradient_checkpointing
+--class_weighting
+--early_stopping_patience
+--early_stopping_threshold
+--data_fraction_seed
 ```
 
 Method-specific scripts can add their own arguments:
@@ -95,6 +101,10 @@ gpu_type
 
 Method-specific knobs go inside `hyperparameters`.
 
+Shared protocol switches should be recorded under `global_switches` and
+`training_policy`. Do not hide decisions like mixed precision, gradient
+checkpointing, class weighting, or early stopping inside method code.
+
 Every completed run should also write the standard local result files:
 
 ```text
@@ -120,6 +130,10 @@ output_dir/                 final model plus config and metrics
 If a method supports best-checkpoint selection, expose it through arguments such
 as `load_best_model_at_end` and `metric_for_best_model`. If the method only
 saves the last model, record that in `checkpoint_policy.final_model_source`.
+
+If a method supports weighted loss, expose it through `class_weighting` rather
+than a method-specific hidden flag. For Transformer methods, `balanced` means
+weighted cross-entropy computed from the final filtered training subset.
 
 Classical methods should follow the same idea even if they do not use Hugging
 Face checkpoints. For example, a TF-IDF baseline can save its vectorizer and

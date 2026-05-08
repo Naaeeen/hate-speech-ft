@@ -17,6 +17,13 @@ from src.experiments.registry import (
     load_experiment_registry,
     parse_override_pairs,
 )
+from src.experiments.hpo import (
+    DEFAULT_SEARCH_SPACE_PATH,
+    build_trial_overrides,
+    default_search_space_name,
+    get_search_space,
+    load_hpo_config,
+)
 
 
 def parse_args():
@@ -29,6 +36,21 @@ def parse_args():
     parser.add_argument("--include_planned", action="store_true")
     parser.add_argument("--dry_run", action="store_true")
     parser.add_argument("--python", type=str, default=None)
+    parser.add_argument(
+        "--suggest_trials",
+        type=int,
+        default=0,
+        help="Print deterministic HPO trial commands without running them.",
+    )
+    parser.add_argument(
+        "--search_space",
+        type=str,
+        default=None,
+        help="Search-space name from configs/search_spaces.json.",
+    )
+    parser.add_argument("--search_config", type=str, default=str(DEFAULT_SEARCH_SPACE_PATH))
+    parser.add_argument("--hpo_seed", type=int, default=42)
+    parser.add_argument("--trial_output_root", type=str, default="outputs/hpo")
     parser.add_argument(
         "--set",
         dest="overrides",
@@ -75,7 +97,39 @@ def main() -> int:
 
     spec = registry.get(args.experiment)
     overrides = parse_override_pairs(args.overrides)
+    if args.suggest_trials < 0:
+        raise SystemExit("--suggest_trials must be >= 0.")
     try:
+        if args.suggest_trials:
+            search_config = load_hpo_config(args.search_config)
+            search_space_name = args.search_space or default_search_space_name(spec.method)
+            search_space = get_search_space(search_config, search_space_name)
+            trials = build_trial_overrides(
+                base_experiment_id=spec.experiment_id,
+                method=spec.method,
+                search_space=search_space,
+                n_trials=args.suggest_trials,
+                hpo_seed=args.hpo_seed,
+                output_root=args.trial_output_root,
+            )
+            for trial_overrides in trials:
+                merged_overrides = {**overrides, **trial_overrides}
+                command = build_experiment_command(
+                    spec,
+                    repo_root=REPO_ROOT,
+                    overrides=merged_overrides,
+                    use_wandb=args.use_wandb,
+                    wandb_entity=args.wandb_entity,
+                    wandb_project=args.wandb_project,
+                    wandb_group=args.wandb_group,
+                    wandb_tags=args.wandb_tags,
+                    wandb_mode=args.wandb_mode,
+                    wandb_log_model=args.wandb_log_model,
+                    python_executable=args.python,
+                )
+                print(format_command(command))
+            return 0
+
         command = build_experiment_command(
             spec,
             repo_root=REPO_ROOT,

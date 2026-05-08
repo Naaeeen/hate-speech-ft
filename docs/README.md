@@ -12,6 +12,8 @@ contracts.
   local result files.
 - [TEAMMATE_WALKTHROUGH.md](TEAMMATE_WALKTHROUGH.md): a fictional teammate
   workflow showing the expected day-to-day usage.
+- [../deep-research-report-setup.md](../deep-research-report-setup.md): research
+  rationale for the mixed hyperparameter protocol.
 
 ## What Belongs Here
 

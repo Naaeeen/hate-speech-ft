@@ -83,6 +83,18 @@ For hyperparameter search, every trial should have a distinct `trial_id`,
 auto-generated W&B run name, so repeated runs of the same method are easier to
 separate in the dashboard.
 
+Use the repo to generate trial commands instead of hand-writing them:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --use_wandb \
+  --wandb_entity your-team \
+  --wandb_project hate-speech-ft
+```
+
 Use W&B groups for method-level grouping, for example:
 
 ```text
@@ -124,3 +136,22 @@ W&B model upload is controlled separately:
 
 Keep `false` for smoke and most tuning runs unless the team explicitly wants to
 store model artifacts in W&B.
+
+## What To Compare In W&B
+
+For HPO, filter or group by:
+
+```text
+method
+search_stage
+trial_id
+hpo_seed
+seed
+global_switches.mixed_precision
+global_switches.gradient_checkpointing
+global_switches.class_weighting
+checkpoint_policy.final_model_source
+```
+
+Use validation metrics for selection. Test metrics should appear only in final
+runs.

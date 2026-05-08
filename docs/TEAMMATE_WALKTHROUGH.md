@@ -123,6 +123,22 @@ python src/run_experiment.py \
 This is a temporary exploratory run. If it is not important, Sam does not edit
 `configs/experiments.json`.
 
+## 4B. Sam Plans A Small HPO Batch
+
+Sam wants to follow the shared search-space protocol instead of inventing trial
+commands manually:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --hpo_seed 42
+```
+
+Sam gets three commands with unique `trial_id` and `output_dir`. Sam previews
+them, then runs the selected commands in Colab.
+
 ## 5. Sam Promotes A Useful Config
 
 Suppose the override becomes a team experiment. Sam edits:

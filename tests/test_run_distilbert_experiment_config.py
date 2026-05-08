@@ -10,12 +10,14 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             method="full-ft",
             search_stage="tuning",
             trial_id="trial-003",
+            config_hash="abc123",
             hpo_seed=2026,
             test_split_name="test",
             run_test=False,
             dataset_name="Hate-speech-CNERG/hatexplain",
             model_name="distilbert-base-uncased",
             seed=42,
+            data_fraction_seed=42,
             data_fraction=0.2,
             max_train_samples=None,
             max_eval_samples=None,
@@ -32,6 +34,14 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             lower_is_better=False,
             no_save_final_model=False,
             fp16=False,
+            mixed_precision="none",
+            gradient_checkpointing=False,
+            class_weighting="balanced",
+            early_stopping_patience=2,
+            early_stopping_threshold=0.001,
+            max_grad_norm=1.0,
+            optim="adamw_torch",
+            lr_scheduler_type="linear",
             wandb_log_model="false",
             max_length=128,
             learning_rate=2e-5,
@@ -55,10 +65,13 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             full_test_size=None,
             trainable_params=1000,
             total_params=2000,
+            class_weights=[1.0, 2.0, 0.5],
+            precision_policy={"mixed_precision": "none", "fp16": False, "bf16": False},
         )
 
         self.assertEqual(config["search_stage"], "tuning")
         self.assertEqual(config["trial_id"], "trial-003")
+        self.assertEqual(config["config_hash"], "abc123")
         self.assertEqual(config["hpo_seed"], 2026)
         self.assertEqual(config["data_fraction"], 0.2)
         self.assertEqual(config["selection_metric"], "f1_macro")
@@ -67,11 +80,17 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertEqual(config["output_dir"], "outputs/example")
         self.assertIs(config["run_test"], False)
         self.assertEqual(config["checkpoint_policy"]["save_strategy"], "epoch")
+        self.assertEqual(config["training_policy"]["class_weighting"], "balanced")
+        self.assertEqual(config["training_policy"]["class_weights"], [1.0, 2.0, 0.5])
+        self.assertEqual(config["training_policy"]["max_grad_norm"], 1.0)
+        self.assertEqual(config["global_switches"]["mixed_precision"], "none")
+        self.assertIs(config["global_switches"]["weighted_ce"], True)
         self.assertEqual(
             config["checkpoint_policy"]["final_model_source"],
             "best_checkpoint",
         )
         self.assertIs(config["hyperparameters"]["load_best_model_at_end"], True)
+        self.assertEqual(config["hyperparameters"]["early_stopping_patience"], 2)
 
     def test_test_evaluation_policy_blocks_non_final_runs(self):
         from src.run_distilbert_hatexplain import validate_test_evaluation_policy
@@ -91,6 +110,10 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             logging_steps=20,
             eval_steps=None,
             save_steps=500,
+            early_stopping_patience=0,
+            early_stopping_threshold=0.0,
+            fp16=False,
+            mixed_precision="none",
         )
 
         with self.assertRaises(ValueError):
@@ -98,6 +121,25 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
 
         args.save_strategy = "epoch"
         validate_checkpoint_policy(args)
+
+    def test_early_stopping_requires_best_model_selection(self):
+        from src.run_distilbert_hatexplain import validate_checkpoint_policy
+
+        args = argparse.Namespace(
+            load_best_model_at_end=False,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            logging_steps=20,
+            eval_steps=None,
+            save_steps=500,
+            early_stopping_patience=2,
+            early_stopping_threshold=0.001,
+            fp16=False,
+            mixed_precision="none",
+        )
+
+        with self.assertRaises(ValueError):
+            validate_checkpoint_policy(args)
 
 
 if __name__ == "__main__":

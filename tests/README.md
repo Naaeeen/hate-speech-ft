@@ -20,6 +20,9 @@ Current tests cover:
 - local result file recording
 - final-only test evaluation policy
 - Colab launcher working-directory behavior
+- global training switches
+- HPO search-space sampling
+- structured failure summaries
 
 ## When To Add Tests
 
@@ -42,6 +45,7 @@ python -m py_compile \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/experiments/results.py \
+  src/experiments/hpo.py \
   src/colab/experiment_launcher.py \
   src/utils/wandb_config.py
 ```

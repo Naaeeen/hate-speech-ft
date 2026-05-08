@@ -4,6 +4,8 @@ from src.run_distilbert_hatexplain import (
     build_fixed_label_maps,
     build_trainer,
     build_tokenized_dataset,
+    compute_balanced_class_weights,
+    resolve_class_weights,
 )
 
 
@@ -100,6 +102,66 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
         self.assertIsInstance(trainer, FakeTrainer)
         self.assertIs(captured_kwargs["processing_class"], tokenizer)
         self.assertNotIn("tokenizer", captured_kwargs)
+
+    def test_build_trainer_passes_callbacks_when_provided(self):
+        captured_kwargs = {}
+
+        class FakeTrainer:
+            def __init__(self, **kwargs):
+                captured_kwargs.update(kwargs)
+
+        callbacks = [object()]
+
+        build_trainer(
+            trainer_cls=FakeTrainer,
+            model=object(),
+            training_args=object(),
+            train_dataset=[],
+            eval_dataset=[],
+            tokenizer=object(),
+            data_collator=object(),
+            compute_metrics=lambda _: {},
+            callbacks=callbacks,
+        )
+
+        self.assertIs(captured_kwargs["callbacks"], callbacks)
+
+    def test_balanced_class_weights_use_final_training_subset(self):
+        dataset = [
+            {"labels": 0},
+            {"labels": 0},
+            {"labels": 1},
+            {"labels": 2},
+        ]
+
+        weights = compute_balanced_class_weights(dataset, num_labels=3)
+
+        self.assertEqual(weights, [4 / 6, 4 / 3, 4 / 3])
+
+    def test_balanced_class_weights_reject_missing_class(self):
+        dataset = [{"labels": 0}, {"labels": 1}]
+
+        with self.assertRaises(ValueError):
+            compute_balanced_class_weights(dataset, num_labels=3)
+
+    def test_resolve_class_weights_supports_global_switch(self):
+        dataset = [{"labels": 0}, {"labels": 1}, {"labels": 2}]
+
+        self.assertIsNone(
+            resolve_class_weights(
+                class_weighting="none",
+                train_dataset=dataset,
+                num_labels=3,
+            )
+        )
+        self.assertEqual(
+            resolve_class_weights(
+                class_weighting="balanced",
+                train_dataset=dataset,
+                num_labels=3,
+            ),
+            [1.0, 1.0, 1.0],
+        )
 
 
 if __name__ == "__main__":

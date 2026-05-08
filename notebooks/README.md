@@ -18,6 +18,7 @@ The notebook should:
 4. Check environment versions.
 5. Load `ExperimentLauncher`.
 6. Preview and run catalog experiments.
+7. Optionally preview HPO trial commands from `configs/search_spaces.json`.
 
 ## Do Not Put Training Logic Here
 

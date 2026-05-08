@@ -4,6 +4,7 @@ This directory contains the shared experiment catalog:
 
 ```text
 configs/experiments.json
+configs/search_spaces.json
 ```
 
 The catalog is the team-facing list of experiments. It is intentionally JSON so
@@ -15,10 +16,20 @@ PyYAML.
 The top-level `defaults` block stores shared assumptions such as the dataset,
 selection metric, test policy, final seed policy, and default W&B project.
 
-Command-safe defaults such as `dataset_name` are merged into each experiment at
-load time. Metadata-only defaults such as `final_seeds`, `selection_metric`,
-`test_policy`, and `wandb_project` are kept as catalog metadata and are not
-passed blindly to every method script.
+`command_defaults` stores shared runner arguments that are safe to pass to
+method scripts. This is where global switches live:
+
+```json
+"mixed_precision": "none",
+"gradient_checkpointing": false,
+"class_weighting": "none",
+"early_stopping_patience": 2,
+"early_stopping_threshold": 0.001
+```
+
+Metadata-only defaults such as `final_seeds`, `selection_metric`,
+`test_policy`, and `wandb_project` stay in `defaults` and are not passed blindly
+to every method script.
 
 ## When To Edit This Directory
 
@@ -68,6 +79,23 @@ experiment args instead of leaving it implicit:
 
 This makes it clear whether the final saved model is the last training state or
 the best validation checkpoint.
+
+## Search Spaces
+
+Edit `search_spaces.json` when the team changes the HPO protocol:
+
+- `shared_fixed`: global protocol decisions from the research report
+- `trial_caps`: maximum trials per method
+- `search_spaces`: method-specific knobs to sample
+
+Generate deterministic trial commands with:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_smoke \
+  --suggest_trials 3 \
+  --search_space full_ft
+```
 
 ## Status
 

@@ -17,6 +17,7 @@ for:
 - enabling/disabling W&B
 - setting W&B entity/project/mode
 - writing temporary override lines
+- suggesting HPO trial commands from `configs/search_spaces.json`
 - previewing the exact command
 - running the command
 
@@ -45,6 +46,18 @@ These overrides are temporary. Reusable configs belong in
 
 Use the override box for one run. Edit `configs/experiments.json` only when the
 setting should become a shared team experiment.
+
+## HPO Trial Suggestions
+
+Set `Trials` to a positive number and optionally set `Search` to a search-space
+name such as `full_ft` or `lora`. Then call:
+
+```python
+launcher.preview_trial_commands()
+```
+
+This prints deterministic commands with unique `trial_id` and `output_dir`.
+Call `launcher.run_trial_commands()` only after reviewing the preview.
 
 ## Old DistilBERT-Only Launcher
 

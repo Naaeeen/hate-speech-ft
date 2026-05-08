@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,11 @@ from src.data.preprocessing import (
     select_data_fraction,
     tokenize_preprocessed_record,
 )
-from src.experiments.results import write_resolved_config, write_result_files
+from src.experiments.results import (
+    write_failure_file,
+    write_resolved_config,
+    write_result_files,
+)
 from src.utils.wandb_config import (
     VALID_WANDB_LOG_MODEL_VALUES,
     VALID_WANDB_MODES,
@@ -40,6 +45,7 @@ def parse_args():
     parser.add_argument("--method", type=str, default="full-ft")
     parser.add_argument("--search_stage", type=str, default="smoke")
     parser.add_argument("--trial_id", type=str, default=None)
+    parser.add_argument("--config_hash", type=str, default=None)
     parser.add_argument("--hpo_seed", type=int, default=None)
     parser.add_argument("--test_split_name", type=str, default="test")
     parser.add_argument("--run_test", action="store_true")
@@ -50,8 +56,12 @@ def parse_args():
     parser.add_argument("--per_device_eval_batch_size", type=int, default=8)
     parser.add_argument("--learning_rate", type=float, default=2e-5)
     parser.add_argument("--weight_decay", type=float, default=0.01)
-    parser.add_argument("--warmup_ratio", type=float, default=0.0)
+    parser.add_argument("--warmup_ratio", type=float, default=0.06)
+    parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--optim", type=str, default="adamw_torch")
+    parser.add_argument("--lr_scheduler_type", type=str, default="linear")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--data_fraction_seed", type=int, default=42)
     parser.add_argument("--data_fraction", type=float, default=None)
 
     parser.add_argument("--max_train_samples", type=int, default=None)
@@ -82,6 +92,19 @@ def parse_args():
     parser.add_argument("--lower_is_better", action="store_true")
     parser.add_argument("--no_save_final_model", action="store_true")
     parser.add_argument("--fp16", action="store_true")
+    parser.add_argument(
+        "--mixed_precision",
+        choices=("none", "fp16", "bf16"),
+        default="none",
+    )
+    parser.add_argument("--gradient_checkpointing", action="store_true")
+    parser.add_argument(
+        "--class_weighting",
+        choices=("none", "balanced"),
+        default="none",
+    )
+    parser.add_argument("--early_stopping_patience", type=int, default=0)
+    parser.add_argument("--early_stopping_threshold", type=float, default=0.001)
 
     parser.add_argument("--use_wandb", action="store_true")
     parser.add_argument("--wandb_project", type=str, default=None)
@@ -151,6 +174,99 @@ def get_peak_memory_mb() -> float | None:
     return torch.cuda.max_memory_allocated() / (1024 * 1024)
 
 
+def get_peak_memory_reserved_mb() -> float | None:
+    try:
+        import torch
+    except ImportError:
+        return None
+    if not torch.cuda.is_available():
+        return None
+    return torch.cuda.max_memory_reserved() / (1024 * 1024)
+
+
+def synchronize_cuda() -> None:
+    try:
+        import torch
+    except ImportError:
+        return
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+
+def resolve_precision_policy(args) -> dict[str, Any]:
+    mixed_precision = args.mixed_precision
+    if args.fp16:
+        if mixed_precision not in {"none", "fp16"}:
+            raise ValueError("--fp16 cannot be combined with --mixed_precision bf16.")
+        mixed_precision = "fp16"
+    return {
+        "mixed_precision": mixed_precision,
+        "fp16": mixed_precision == "fp16",
+        "bf16": mixed_precision == "bf16",
+    }
+
+
+def compute_balanced_class_weights(
+    dataset: list[dict[str, Any]],
+    *,
+    num_labels: int,
+) -> list[float]:
+    counts = Counter(int(record["labels"]) for record in dataset)
+    total = sum(counts.values())
+    if total == 0:
+        raise ValueError("Cannot compute class weights for an empty training dataset.")
+
+    weights = []
+    for label_id in range(num_labels):
+        count = counts.get(label_id, 0)
+        if count == 0:
+            raise ValueError(
+                f"Cannot compute balanced class weights: label {label_id} has no samples."
+            )
+        weights.append(total / (num_labels * count))
+    return weights
+
+
+def resolve_class_weights(
+    *,
+    class_weighting: str,
+    train_dataset: list[dict[str, Any]],
+    num_labels: int,
+) -> list[float] | None:
+    if class_weighting == "none":
+        return None
+    if class_weighting == "balanced":
+        return compute_balanced_class_weights(train_dataset, num_labels=num_labels)
+    raise ValueError(f"Unsupported class weighting mode: {class_weighting}")
+
+
+def build_weighted_trainer_class(trainer_cls, class_weights: list[float]):
+    import torch
+
+    weights = torch.tensor(class_weights, dtype=torch.float)
+
+    class WeightedLossTrainer(trainer_cls):
+        def compute_loss(
+            self,
+            model,
+            inputs,
+            return_outputs=False,
+            num_items_in_batch=None,
+        ):
+            model_inputs = dict(inputs)
+            labels = model_inputs.pop("labels")
+            outputs = model(**model_inputs)
+            logits = outputs["logits"] if isinstance(outputs, dict) else outputs.logits
+            loss_fct = torch.nn.CrossEntropyLoss(weight=weights.to(logits.device))
+            loss = loss_fct(
+                logits.view(-1, model.config.num_labels),
+                labels.view(-1),
+            )
+            return (loss, outputs) if return_outputs else loss
+
+    return WeightedLossTrainer
+
+
 def resolve_wandb_settings(args) -> WandbSettings:
     run_name = args.wandb_run_name or build_wandb_run_name(
         method=args.method,
@@ -187,12 +303,16 @@ def build_experiment_config(
     trainable_params: int,
     total_params: int,
     gpu_type: str | None = None,
+    class_weights: list[float] | None = None,
+    precision_policy: dict[str, Any] | None = None,
 ):
     data_fraction = train_size / full_train_size if full_train_size else None
+    precision_policy = precision_policy or resolve_precision_policy(args)
     return {
         "method": args.method,
         "search_stage": args.search_stage,
         "trial_id": args.trial_id,
+        "config_hash": args.config_hash,
         "hpo_seed": args.hpo_seed,
         "dataset": args.dataset_name,
         "train_split": train_split,
@@ -205,8 +325,27 @@ def build_experiment_config(
         "model_name": args.model_name,
         "tokenizer_name": args.model_name,
         "seed": args.seed,
+        "data_fraction_seed": args.data_fraction_seed,
         "data_fraction": data_fraction,
         "run_test": args.run_test,
+        "global_switches": {
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "class_weighting": args.class_weighting,
+            "weighted_ce": args.class_weighting != "none",
+            "early_stopping": args.early_stopping_patience > 0,
+        },
+        "training_policy": {
+            "optim": args.optim,
+            "lr_scheduler_type": args.lr_scheduler_type,
+            "max_grad_norm": args.max_grad_norm,
+            "warmup_ratio": args.warmup_ratio,
+            "weight_decay": args.weight_decay,
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "class_weighting": args.class_weighting,
+            "class_weights": class_weights,
+        },
         "hyperparameters": {
             "max_train_samples": args.max_train_samples,
             "max_eval_samples": args.max_eval_samples,
@@ -215,6 +354,9 @@ def build_experiment_config(
             "learning_rate": args.learning_rate,
             "weight_decay": args.weight_decay,
             "warmup_ratio": args.warmup_ratio,
+            "max_grad_norm": args.max_grad_norm,
+            "optim": args.optim,
+            "lr_scheduler_type": args.lr_scheduler_type,
             "batch_size": args.per_device_train_batch_size,
             "eval_batch_size": args.per_device_eval_batch_size,
             "epochs": args.num_train_epochs,
@@ -229,7 +371,13 @@ def build_experiment_config(
             "metric_for_best_model": args.metric_for_best_model,
             "greater_is_better": not args.lower_is_better,
             "save_final_model": not args.no_save_final_model,
-            "fp16": args.fp16,
+            "mixed_precision": precision_policy["mixed_precision"],
+            "fp16": precision_policy["fp16"],
+            "bf16": precision_policy["bf16"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "class_weighting": args.class_weighting,
+            "early_stopping_patience": args.early_stopping_patience,
+            "early_stopping_threshold": args.early_stopping_threshold,
         },
         "checkpoint_policy": {
             "eval_strategy": args.eval_strategy,
@@ -247,6 +395,8 @@ def build_experiment_config(
                 "best_checkpoint" if args.load_best_model_at_end else "last_training_state"
             ),
             "wandb_log_model": args.wandb_log_model,
+            "early_stopping_patience": args.early_stopping_patience,
+            "early_stopping_threshold": args.early_stopping_threshold,
         },
         "max_train_samples": args.max_train_samples,
         "max_eval_samples": args.max_eval_samples,
@@ -255,6 +405,7 @@ def build_experiment_config(
         "learning_rate": args.learning_rate,
         "weight_decay": args.weight_decay,
         "warmup_ratio": args.warmup_ratio,
+        "max_grad_norm": args.max_grad_norm,
         "batch_size": args.per_device_train_batch_size,
         "eval_batch_size": args.per_device_eval_batch_size,
         "epochs": args.num_train_epochs,
@@ -310,17 +461,29 @@ def validate_test_evaluation_policy(*, search_stage: str, run_test: bool) -> Non
 
 
 def validate_checkpoint_policy(args) -> None:
+    if args.early_stopping_patience < 0:
+        raise ValueError("--early_stopping_patience must be >= 0.")
+    if args.early_stopping_threshold < 0:
+        raise ValueError("--early_stopping_threshold must be >= 0.")
+    if args.fp16 and args.mixed_precision == "bf16":
+        raise ValueError("--fp16 cannot be combined with --mixed_precision bf16.")
+
+    if args.early_stopping_patience > 0 and not args.load_best_model_at_end:
+        raise ValueError(
+            "Early stopping requires --load_best_model_at_end so the final model "
+            "matches the monitored validation metric."
+        )
     if not args.load_best_model_at_end:
         return
 
     if args.eval_strategy == "no":
         raise ValueError(
-            "--load_best_model_at_end requires evaluation. "
+            "Best-model selection or early stopping requires evaluation. "
             "Set --eval_strategy steps or epoch."
         )
     if args.save_strategy == "no":
         raise ValueError(
-            "--load_best_model_at_end requires checkpoint saving. "
+            "Best-model selection or early stopping requires checkpoint saving. "
             "Set --save_strategy steps or epoch."
         )
     if args.save_strategy != args.eval_strategy:
@@ -351,6 +514,7 @@ def compute_metrics_fn():
     def compute_metrics(eval_pred):
         logits, labels = eval_pred
         preds = np.argmax(logits, axis=-1)
+        label_ids = sorted(LABEL_ID_TO_NAME)
 
         results = {
             "accuracy": acc_metric.compute(predictions=preds, references=labels)["accuracy"],
@@ -358,6 +522,31 @@ def compute_metrics_fn():
             "precision_macro": precision_metric.compute(predictions=preds, references=labels, average="macro")["precision"],
             "recall_macro": recall_metric.compute(predictions=preds, references=labels, average="macro")["recall"],
         }
+        per_class_f1 = f1_metric.compute(
+            predictions=preds,
+            references=labels,
+            average=None,
+            labels=label_ids,
+        )["f1"]
+        per_class_precision = precision_metric.compute(
+            predictions=preds,
+            references=labels,
+            average=None,
+            labels=label_ids,
+            zero_division=0,
+        )["precision"]
+        per_class_recall = recall_metric.compute(
+            predictions=preds,
+            references=labels,
+            average=None,
+            labels=label_ids,
+            zero_division=0,
+        )["recall"]
+        for index, label_id in enumerate(label_ids):
+            label_name = LABEL_ID_TO_NAME[label_id]
+            results[f"f1_{label_name}"] = float(per_class_f1[index])
+            results[f"precision_{label_name}"] = float(per_class_precision[index])
+            results[f"recall_{label_name}"] = float(per_class_recall[index])
         return results
 
     return compute_metrics
@@ -373,16 +562,66 @@ def build_trainer(
     tokenizer,
     data_collator,
     compute_metrics,
+    callbacks=None,
 ):
-    return trainer_cls(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        processing_class=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-    )
+    trainer_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": train_dataset,
+        "eval_dataset": eval_dataset,
+        "processing_class": tokenizer,
+        "data_collator": data_collator,
+        "compute_metrics": compute_metrics,
+    }
+    if callbacks:
+        trainer_kwargs["callbacks"] = callbacks
+    return trainer_cls(**trainer_kwargs)
+
+
+def build_model_selection_summary(
+    trainer,
+    *,
+    metric_for_best_model: str,
+    greater_is_better: bool,
+) -> dict[str, Any]:
+    log_history = getattr(getattr(trainer, "state", None), "log_history", []) or []
+    metric_keys = [metric_for_best_model]
+    if metric_for_best_model.startswith("eval_"):
+        metric_keys.append(metric_for_best_model.removeprefix("eval_"))
+    else:
+        metric_keys.append(f"eval_{metric_for_best_model}")
+
+    candidates = []
+    for record in log_history:
+        for metric_key in metric_keys:
+            if metric_key in record:
+                candidates.append((record, metric_key, record[metric_key]))
+                break
+
+    best_record = None
+    best_metric_key = metric_for_best_model
+    best_metric = None
+    if candidates:
+        best_record, best_metric_key, best_metric = (
+            max(candidates, key=lambda item: item[2])
+            if greater_is_better
+            else min(candidates, key=lambda item: item[2])
+        )
+
+    state = getattr(trainer, "state", None)
+    return {
+        "metric_for_best_model": metric_for_best_model,
+        "greater_is_better": greater_is_better,
+        "best_metric_key": best_metric_key,
+        "best_metric": (
+            getattr(state, "best_metric", None)
+            if getattr(state, "best_metric", None) is not None
+            else best_metric
+        ),
+        "best_epoch": best_record.get("epoch") if best_record else None,
+        "best_step": best_record.get("step") if best_record else None,
+        "best_model_checkpoint": getattr(state, "best_model_checkpoint", None),
+    }
 
 
 def main():
@@ -398,6 +637,7 @@ def main():
         AutoModelForSequenceClassification,
         AutoTokenizer,
         DataCollatorWithPadding,
+        EarlyStoppingCallback,
         Trainer,
         TrainingArguments,
         set_seed,
@@ -435,7 +675,7 @@ def main():
         tokenizer=tokenizer,
         max_length=args.max_length,
         data_fraction=args.data_fraction,
-        fraction_seed=args.seed,
+        fraction_seed=args.data_fraction_seed,
         max_samples=args.max_train_samples,
     )
     eval_dataset, full_eval_size = build_tokenized_dataset_with_count(
@@ -478,8 +718,19 @@ def main():
         id2label=id2label,
         label2id=label2id,
     )
+    if args.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
     trainable_params, total_params = count_model_parameters(model)
     print(f"Trainable params: {trainable_params:,} / {total_params:,}")
+
+    precision_policy = resolve_precision_policy(args)
+    class_weights = resolve_class_weights(
+        class_weighting=args.class_weighting,
+        train_dataset=train_dataset,
+        num_labels=num_labels,
+    )
+    if class_weights is not None:
+        print(f"Class weights ({args.class_weighting}): {class_weights}")
 
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     wandb_settings = resolve_wandb_settings(args)
@@ -497,6 +748,8 @@ def main():
         trainable_params=trainable_params,
         total_params=total_params,
         gpu_type=gpu_type,
+        class_weights=class_weights,
+        precision_policy=precision_policy,
     )
     resolved_config_path = write_resolved_config(args.output_dir, experiment_config)
     print(f"Resolved config: {resolved_config_path}")
@@ -508,8 +761,11 @@ def main():
         per_device_train_batch_size=args.per_device_train_batch_size,
         per_device_eval_batch_size=args.per_device_eval_batch_size,
         num_train_epochs=args.num_train_epochs,
+        optim=args.optim,
+        lr_scheduler_type=args.lr_scheduler_type,
         weight_decay=args.weight_decay,
         warmup_ratio=args.warmup_ratio,
+        max_grad_norm=args.max_grad_norm,
         seed=args.seed,
         data_seed=args.seed,
         eval_strategy=args.eval_strategy,
@@ -524,11 +780,26 @@ def main():
         load_best_model_at_end=args.load_best_model_at_end,
         metric_for_best_model=args.metric_for_best_model,
         greater_is_better=not args.lower_is_better,
-        fp16=args.fp16,
+        fp16=precision_policy["fp16"],
+        bf16=precision_policy["bf16"],
+        gradient_checkpointing=args.gradient_checkpointing,
     )
 
+    callbacks = []
+    if args.early_stopping_patience > 0:
+        callbacks.append(
+            EarlyStoppingCallback(
+                early_stopping_patience=args.early_stopping_patience,
+                early_stopping_threshold=args.early_stopping_threshold,
+            )
+        )
+    trainer_cls = (
+        build_weighted_trainer_class(Trainer, class_weights)
+        if class_weights is not None
+        else Trainer
+    )
     trainer = build_trainer(
-        trainer_cls=Trainer,
+        trainer_cls=trainer_cls,
         model=model,
         training_args=training_args,
         train_dataset=train_dataset,
@@ -536,6 +807,7 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics_fn(),
+        callbacks=callbacks,
     )
 
     try:
@@ -547,8 +819,10 @@ def main():
                 torch.cuda.reset_peak_memory_stats()
         except ImportError:
             pass
+        synchronize_cuda()
         train_start_time = time.perf_counter()
         trainer.train()
+        synchronize_cuda()
         training_time_sec = time.perf_counter() - train_start_time
 
         print("\nRunning evaluation...")
@@ -560,19 +834,31 @@ def main():
                 eval_dataset=test_dataset,
                 metric_key_prefix="test",
             )
+        model_selection = build_model_selection_summary(
+            trainer,
+            metric_for_best_model=args.metric_for_best_model,
+            greater_is_better=not args.lower_is_better,
+        )
         runtime_metrics = {
             "training_time_sec": training_time_sec,
             "peak_memory_mb": get_peak_memory_mb(),
+            "peak_memory_allocated_mb": get_peak_memory_mb(),
+            "peak_memory_reserved_mb": get_peak_memory_reserved_mb(),
             "gpu_type": gpu_type,
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "status": "completed",
         }
         if wandb_run is not None:
             wandb_run.log(runtime_metrics)
+            wandb_run.log({"model_selection": model_selection})
         result_paths = write_result_files(
             args.output_dir,
             config=experiment_config,
             eval_metrics=metrics,
             test_metrics=test_metrics,
             runtime_metrics=runtime_metrics,
+            model_selection=model_selection,
         )
 
         print("\nFinal evaluation metrics:")
@@ -584,6 +870,9 @@ def main():
                 print(f"{k}: {v}")
         print("\nRuntime metrics:")
         for k, v in runtime_metrics.items():
+            print(f"{k}: {v}")
+        print("\nModel selection:")
+        for k, v in model_selection.items():
             print(f"{k}: {v}")
         print("\nResult files:")
         for k, v in result_paths.items():
@@ -600,6 +889,37 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
 
         print(f"\nDone. Saved to: {args.output_dir}")
+    except Exception as exc:
+        runtime_metrics = {
+            "training_time_sec": (
+                time.perf_counter() - train_start_time
+                if "train_start_time" in locals()
+                else None
+            ),
+            "peak_memory_mb": get_peak_memory_mb(),
+            "peak_memory_allocated_mb": get_peak_memory_mb(),
+            "peak_memory_reserved_mb": get_peak_memory_reserved_mb(),
+            "gpu_type": gpu_type,
+            "mixed_precision": precision_policy["mixed_precision"],
+            "gradient_checkpointing": args.gradient_checkpointing,
+            "status": "failed",
+        }
+        failure_path = write_failure_file(
+            args.output_dir,
+            config=experiment_config,
+            error=exc,
+            runtime_metrics=runtime_metrics,
+        )
+        if wandb_run is not None:
+            wandb_run.log(
+                {
+                    "status": "failed",
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                }
+            )
+        print(f"\nFailure summary: {failure_path}")
+        raise
     finally:
         finish_wandb_run(wandb_run)
 
