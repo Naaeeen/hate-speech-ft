@@ -10,8 +10,11 @@ TF-IDF, Bi-LSTM, or any other method.
   script paths, and builds method-specific commands.
 - `hpo.py`: loads `configs/search_spaces.json` and builds deterministic HPO
   trial overrides.
+- `aggregate_results.py`: reads local run summaries and builds grouped
+  mean/std reports.
 - `../run_experiment.py`: CLI entry point for listing, dry-running, and running
   catalog experiments.
+- `../aggregate_results.py`: CLI entry point for aggregation.
 
 ## Design Rule
 
@@ -35,7 +38,7 @@ code
 Current precedence:
 
 ```text
-catalog defaults < catalog experiment args < CLI --set overrides
+global command defaults < family command defaults < experiment args < CLI --set overrides
 ```
 
 For example:
@@ -62,6 +65,21 @@ needs a specific Python executable.
 training. It samples from `configs/search_spaces.json`, stamps each command with
 a unique `trial_id` and `output_dir`, and keeps HPO planning deterministic via
 `--hpo_seed`.
+
+## Result Aggregation
+
+After a batch finishes, aggregate local summaries:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
+The aggregator includes failed runs in counts and excludes them from metric
+means. This keeps HPO accounting honest without breaking final mean/std tables.
 
 ## Adding More Shared Behavior
 

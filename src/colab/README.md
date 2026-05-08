@@ -64,6 +64,16 @@ launcher.preview_trial_commands()
 This prints deterministic commands with unique `trial_id` and `output_dir`.
 Call `launcher.run_trial_commands()` only after reviewing the preview.
 
+After a batch finishes in Drive-backed outputs, aggregate from a notebook cell:
+
+```python
+!python src/aggregate_results.py /content/drive/MyDrive/hate_speech_ft/outputs/hpo \
+  --output /content/drive/MyDrive/hate_speech_ft/outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
 ## Old DistilBERT-Only Launcher
 
 The old DistilBERT-only W&B launcher was removed. New notebook work should use

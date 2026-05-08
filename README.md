@@ -219,6 +219,19 @@ The CLI refuses to create HPO trials from smoke experiments unless
 `--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
 checks.
 
+After running several trials or final seeds, aggregate local summaries:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
+For final test reporting, include `--metric test_f1_macro` and group by the
+fields that define the fixed config, usually `method config_hash`.
+
 ## Direct DistilBERT Runner
 
 The generic runner dispatches to method-specific scripts. The current ready

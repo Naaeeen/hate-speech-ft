@@ -19,6 +19,7 @@ The notebook should:
 5. Load `ExperimentLauncher`.
 6. Preview and run catalog experiments.
 7. Optionally preview HPO trial commands from `configs/search_spaces.json`.
+8. Aggregate finished run summaries with `src/aggregate_results.py`.
 
 ## Do Not Put Training Logic Here
 

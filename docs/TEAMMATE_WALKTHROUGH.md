@@ -142,6 +142,19 @@ them, then runs the selected commands in Colab.
 Sam does not use `distilbert_full_smoke` here because smoke runs intentionally
 use tiny sample caps for setup checks.
 
+After the runs finish, Sam aggregates the local summaries:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
+Sam checks `aggregate_summary.json` for completed/failed trial counts and the
+mean validation macro-F1 per config.
+
 ## 5. Sam Promotes A Useful Config
 
 Suppose the override becomes a team experiment. Sam edits:

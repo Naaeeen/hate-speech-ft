@@ -115,6 +115,17 @@ tuning,lora,peft
 final,seed42
 ```
 
+W&B is the dashboard, but the repo still writes local summaries. After a batch
+finishes, aggregate local files and compare them with W&B tables:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
 ## Model Artifacts
 
 The local model always belongs under the run's `output_dir`.

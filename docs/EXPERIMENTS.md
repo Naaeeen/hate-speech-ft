@@ -155,6 +155,38 @@ The current DistilBERT runner writes these files through
 `src/experiments/results.py`. New method scripts should reuse that helper or
 write the same file names with the same meaning.
 
+## Aggregating Runs
+
+Use `src/aggregate_results.py` after a HPO batch, validation confirmation batch,
+or final seed batch. It recursively reads `result_summary.json` and
+`failure_summary.json`, then writes a single aggregate report with completed
+counts, failed counts, and mean/std for selected metrics.
+
+Example for HPO:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
+Example for final seed reporting:
+
+```bash
+python src/aggregate_results.py outputs/final \
+  --output outputs/final/aggregate_summary.json \
+  --group_by method config_hash \
+  --metric eval_f1_macro \
+  --metric test_f1_macro \
+  --metric training_time_sec
+```
+
+The `std` field is sample standard deviation when at least two completed runs
+exist in the group. Failed runs are counted in the group but excluded from
+metric means.
+
 ## Adding A New Method
 
 1. Create a separate method script, for example:

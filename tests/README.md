@@ -23,6 +23,7 @@ Current tests cover:
 - global training switches
 - HPO search-space sampling
 - structured failure summaries
+- result aggregation over completed and failed run summaries
 
 ## When To Add Tests
 
@@ -45,7 +46,9 @@ python -m py_compile \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/experiments/results.py \
+  src/experiments/aggregate_results.py \
   src/experiments/hpo.py \
+  src/aggregate_results.py \
   src/colab/experiment_launcher.py \
   src/utils/wandb_config.py
 ```
