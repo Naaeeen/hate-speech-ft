@@ -138,6 +138,12 @@ src/methods/distilbert_lora/train.py
 --wandb_mode
 --wandb_log_model
 --run_test
+--eval_strategy
+--save_strategy
+--save_total_limit
+--load_best_model_at_end
+--metric_for_best_model
+--no_save_final_model
 ```
 
 3. Use shared data preprocessing from `src/data`.
@@ -148,12 +154,14 @@ src/methods/distilbert_lora/train.py
 method
 search_stage
 trial_id
+hpo_seed
 seed
 dataset
 data_fraction
 model_name
 tokenizer_name
 hyperparameters
+checkpoint_policy
 trainable_params
 total_params
 training_time_sec
@@ -168,6 +176,26 @@ gpu_type
 
 Only final runs should use `--run_test`. Smoke, quick, and tuning runs must
 select models with validation metrics only.
+
+Checkpoint and model-saving policy must be visible in the resolved config and
+W&B config. For Transformer methods, use these fields unless a method has a
+documented reason not to:
+
+```text
+eval_strategy
+save_strategy
+save_total_limit
+load_best_model_at_end
+metric_for_best_model
+greater_is_better
+save_final_model
+wandb_log_model
+```
+
+The current DistilBERT ready experiments save checkpoints each epoch, keep at
+most two checkpoints, and load the best validation macro-F1 checkpoint at the
+end. The final saved model in `output_dir` therefore comes from the best
+validation checkpoint, not necessarily the last epoch.
 
 ## Current Catalog Meaning
 

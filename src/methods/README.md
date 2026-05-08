@@ -41,6 +41,12 @@ Where possible, method scripts should accept:
 --wandb_mode
 --wandb_log_model
 --run_test
+--eval_strategy
+--save_strategy
+--save_total_limit
+--load_best_model_at_end
+--metric_for_best_model
+--no_save_final_model
 ```
 
 Method-specific scripts can add their own arguments:
@@ -79,6 +85,7 @@ data_fraction
 model_name
 tokenizer_name
 hyperparameters
+checkpoint_policy
 trainable_params
 total_params
 training_time_sec
@@ -99,6 +106,24 @@ result_summary.json
 
 Reuse `src/experiments/results.py` when possible. Only final runs should accept
 `--run_test`; smoke, quick, and tuning runs should use validation metrics only.
+
+## Model Saving
+
+Every method that trains a model should document where the model is saved.
+Prefer this convention:
+
+```text
+output_dir/checkpoint-*     intermediate checkpoints, if the method has them
+output_dir/                 final model plus config and metrics
+```
+
+If a method supports best-checkpoint selection, expose it through arguments such
+as `load_best_model_at_end` and `metric_for_best_model`. If the method only
+saves the last model, record that in `checkpoint_policy.final_model_source`.
+
+Classical methods should follow the same idea even if they do not use Hugging
+Face checkpoints. For example, a TF-IDF baseline can save its vectorizer and
+classifier under `output_dir/` and record `final_model_source=last_fit`.
 
 ## Registration
 

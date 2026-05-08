@@ -58,6 +58,31 @@ def parse_args():
     parser.add_argument("--max_eval_samples", type=int, default=None)
     parser.add_argument("--max_test_samples", type=int, default=None)
 
+    parser.add_argument(
+        "--eval_strategy",
+        choices=("no", "steps", "epoch"),
+        default="epoch",
+    )
+    parser.add_argument(
+        "--save_strategy",
+        choices=("no", "steps", "epoch"),
+        default="epoch",
+    )
+    parser.add_argument(
+        "--logging_strategy",
+        choices=("no", "steps", "epoch"),
+        default="steps",
+    )
+    parser.add_argument("--logging_steps", type=int, default=20)
+    parser.add_argument("--eval_steps", type=int, default=None)
+    parser.add_argument("--save_steps", type=int, default=500)
+    parser.add_argument("--save_total_limit", type=int, default=2)
+    parser.add_argument("--load_best_model_at_end", action="store_true")
+    parser.add_argument("--metric_for_best_model", type=str, default="eval_f1_macro")
+    parser.add_argument("--lower_is_better", action="store_true")
+    parser.add_argument("--no_save_final_model", action="store_true")
+    parser.add_argument("--fp16", action="store_true")
+
     parser.add_argument("--use_wandb", action="store_true")
     parser.add_argument("--wandb_project", type=str, default=None)
     parser.add_argument("--wandb_entity", type=str, default=None)
@@ -134,6 +159,7 @@ def resolve_wandb_settings(args) -> WandbSettings:
         max_train_samples=args.max_train_samples,
         num_train_epochs=args.num_train_epochs,
         learning_rate=args.learning_rate,
+        trial_id=args.trial_id,
     )
     return WandbSettings(
         enabled=args.use_wandb,
@@ -192,6 +218,35 @@ def build_experiment_config(
             "batch_size": args.per_device_train_batch_size,
             "eval_batch_size": args.per_device_eval_batch_size,
             "epochs": args.num_train_epochs,
+            "eval_strategy": args.eval_strategy,
+            "save_strategy": args.save_strategy,
+            "logging_strategy": args.logging_strategy,
+            "logging_steps": args.logging_steps,
+            "eval_steps": args.eval_steps,
+            "save_steps": args.save_steps,
+            "save_total_limit": args.save_total_limit,
+            "load_best_model_at_end": args.load_best_model_at_end,
+            "metric_for_best_model": args.metric_for_best_model,
+            "greater_is_better": not args.lower_is_better,
+            "save_final_model": not args.no_save_final_model,
+            "fp16": args.fp16,
+        },
+        "checkpoint_policy": {
+            "eval_strategy": args.eval_strategy,
+            "save_strategy": args.save_strategy,
+            "logging_strategy": args.logging_strategy,
+            "logging_steps": args.logging_steps,
+            "eval_steps": args.eval_steps,
+            "save_steps": args.save_steps,
+            "save_total_limit": args.save_total_limit,
+            "load_best_model_at_end": args.load_best_model_at_end,
+            "metric_for_best_model": args.metric_for_best_model,
+            "greater_is_better": not args.lower_is_better,
+            "save_final_model": not args.no_save_final_model,
+            "final_model_source": (
+                "best_checkpoint" if args.load_best_model_at_end else "last_training_state"
+            ),
+            "wandb_log_model": args.wandb_log_model,
         },
         "max_train_samples": args.max_train_samples,
         "max_eval_samples": args.max_eval_samples,
@@ -254,6 +309,36 @@ def validate_test_evaluation_policy(*, search_stage: str, run_test: bool) -> Non
         )
 
 
+def validate_checkpoint_policy(args) -> None:
+    if not args.load_best_model_at_end:
+        return
+
+    if args.eval_strategy == "no":
+        raise ValueError(
+            "--load_best_model_at_end requires evaluation. "
+            "Set --eval_strategy steps or epoch."
+        )
+    if args.save_strategy == "no":
+        raise ValueError(
+            "--load_best_model_at_end requires checkpoint saving. "
+            "Set --save_strategy steps or epoch."
+        )
+    if args.save_strategy != args.eval_strategy:
+        raise ValueError(
+            "--load_best_model_at_end requires --save_strategy to match "
+            "--eval_strategy for Hugging Face Trainer."
+        )
+    if args.save_strategy == "steps":
+        eval_steps = args.eval_steps or args.logging_steps
+        if eval_steps <= 0 or args.save_steps <= 0:
+            raise ValueError("Step-based best-model selection requires positive steps.")
+        if args.save_steps % eval_steps != 0:
+            raise ValueError(
+                "For step-based best-model selection, --save_steps must be a "
+                "multiple of --eval_steps."
+            )
+
+
 def compute_metrics_fn():
     import evaluate
     import numpy as np
@@ -306,6 +391,7 @@ def main():
         search_stage=args.search_stage,
         run_test=args.run_test,
     )
+    validate_checkpoint_policy(args)
 
     from datasets import load_dataset
     from transformers import (
@@ -426,14 +512,19 @@ def main():
         warmup_ratio=args.warmup_ratio,
         seed=args.seed,
         data_seed=args.seed,
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        logging_strategy="steps",
-        logging_steps=20,
+        eval_strategy=args.eval_strategy,
+        save_strategy=args.save_strategy,
+        logging_strategy=args.logging_strategy,
+        logging_steps=args.logging_steps,
+        eval_steps=args.eval_steps,
+        save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
         report_to=wandb_settings.report_to,
         run_name=wandb_settings.run_name if wandb_settings.enabled else None,
-        load_best_model_at_end=False,
-        fp16=False,  # safer default; Colab can handle fp16 later if you want
+        load_best_model_at_end=args.load_best_model_at_end,
+        metric_for_best_model=args.metric_for_best_model,
+        greater_is_better=not args.lower_is_better,
+        fp16=args.fp16,
     )
 
     trainer = build_trainer(
@@ -498,9 +589,15 @@ def main():
         for k, v in result_paths.items():
             print(f"{k}: {v}")
 
-        print("\nSaving model and tokenizer...")
-        trainer.save_model(args.output_dir)
-        tokenizer.save_pretrained(args.output_dir)
+        if args.no_save_final_model:
+            print("\nSkipping final model save because --no_save_final_model was set.")
+        else:
+            model_source = (
+                "best checkpoint" if args.load_best_model_at_end else "last training state"
+            )
+            print(f"\nSaving final model and tokenizer from {model_source}...")
+            trainer.save_model(args.output_dir)
+            tokenizer.save_pretrained(args.output_dir)
 
         print(f"\nDone. Saved to: {args.output_dir}")
     finally:

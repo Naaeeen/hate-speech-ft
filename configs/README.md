@@ -55,6 +55,20 @@ Each experiment should have:
 }
 ```
 
+For training scripts that save checkpoints, include the checkpoint policy in the
+experiment args instead of leaving it implicit:
+
+```json
+"eval_strategy": "epoch",
+"save_strategy": "epoch",
+"save_total_limit": 2,
+"load_best_model_at_end": true,
+"metric_for_best_model": "eval_f1_macro"
+```
+
+This makes it clear whether the final saved model is the last training state or
+the best validation checkpoint.
+
 ## Status
 
 Use:

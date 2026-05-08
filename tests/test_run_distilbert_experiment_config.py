@@ -20,6 +20,19 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             max_train_samples=None,
             max_eval_samples=None,
             max_test_samples=None,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            logging_strategy="steps",
+            logging_steps=20,
+            eval_steps=None,
+            save_steps=500,
+            save_total_limit=2,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_f1_macro",
+            lower_is_better=False,
+            no_save_final_model=False,
+            fp16=False,
+            wandb_log_model="false",
             max_length=128,
             learning_rate=2e-5,
             weight_decay=0.01,
@@ -53,6 +66,12 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertEqual(config["warmup_ratio"], 0.06)
         self.assertEqual(config["output_dir"], "outputs/example")
         self.assertIs(config["run_test"], False)
+        self.assertEqual(config["checkpoint_policy"]["save_strategy"], "epoch")
+        self.assertEqual(
+            config["checkpoint_policy"]["final_model_source"],
+            "best_checkpoint",
+        )
+        self.assertIs(config["hyperparameters"]["load_best_model_at_end"], True)
 
     def test_test_evaluation_policy_blocks_non_final_runs(self):
         from src.run_distilbert_hatexplain import validate_test_evaluation_policy
@@ -61,6 +80,24 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             validate_test_evaluation_policy(search_stage="tuning", run_test=True)
 
         validate_test_evaluation_policy(search_stage="final", run_test=True)
+
+    def test_best_model_checkpoint_policy_requires_matching_save_and_eval(self):
+        from src.run_distilbert_hatexplain import validate_checkpoint_policy
+
+        args = argparse.Namespace(
+            load_best_model_at_end=True,
+            eval_strategy="epoch",
+            save_strategy="steps",
+            logging_steps=20,
+            eval_steps=None,
+            save_steps=500,
+        )
+
+        with self.assertRaises(ValueError):
+            validate_checkpoint_policy(args)
+
+        args.save_strategy = "epoch"
+        validate_checkpoint_policy(args)
 
 
 if __name__ == "__main__":

@@ -30,6 +30,23 @@ class WandbConfigTests(unittest.TestCase):
             "full-ft_distilbert-base-uncased_seed42_train64_ep1_lr2e-05",
         )
 
+    def test_build_wandb_run_name_can_include_trial_id(self):
+        self.assertEqual(
+            build_wandb_run_name(
+                method="full-ft",
+                model_name="distilbert-base-uncased",
+                seed=42,
+                max_train_samples=64,
+                num_train_epochs=1.0,
+                learning_rate=2e-5,
+                trial_id="distilbert/full smoke",
+            ),
+            (
+                "distilbert-full-smoke_"
+                "full-ft_distilbert-base-uncased_seed42_train64_ep1_lr2e-05"
+            ),
+        )
+
     def test_wandb_settings_report_to_switches_with_enabled_flag(self):
         self.assertEqual(WandbSettings(enabled=True).report_to, "wandb")
         self.assertEqual(WandbSettings(enabled=False).report_to, "none")

@@ -75,3 +75,52 @@ result_summary.json
 
 These files make the run understandable even if W&B is disabled, offline, or
 someone looks at the output directory later.
+
+## Many Runs Per Method
+
+For hyperparameter search, every trial should have a distinct `trial_id`,
+`output_dir`, and W&B run. The current runner includes `trial_id` in the
+auto-generated W&B run name, so repeated runs of the same method are easier to
+separate in the dashboard.
+
+Use W&B groups for method-level grouping, for example:
+
+```text
+wandb_group=full-ft
+wandb_group=lora
+wandb_group=tfidf-logreg
+```
+
+Use tags for stage and method labels, for example:
+
+```text
+smoke,distilbert,full-ft
+tuning,lora,peft
+final,seed42
+```
+
+## Model Artifacts
+
+The local model always belongs under the run's `output_dir`.
+
+For the current DistilBERT runner:
+
+```text
+output_dir/checkpoint-*     intermediate Hugging Face checkpoints
+output_dir/                 final saved model, tokenizer, metrics, and config
+```
+
+If `load_best_model_at_end=true`, the final saved model is the best validation
+checkpoint according to `metric_for_best_model`. If it is false, the final saved
+model is the last training state.
+
+W&B model upload is controlled separately:
+
+```text
+--wandb_log_model false       do not upload model artifacts
+--wandb_log_model end         upload the final model
+--wandb_log_model checkpoint  upload checkpoints
+```
+
+Keep `false` for smoke and most tuning runs unless the team explicitly wants to
+store model artifacts in W&B.

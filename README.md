@@ -257,12 +257,14 @@ Every method should log comparable top-level metadata:
 method
 search_stage
 trial_id
+hpo_seed
 seed
 dataset
 data_fraction
 model_name
 tokenizer_name
 hyperparameters
+checkpoint_policy
 trainable_params
 total_params
 training_time_sec
@@ -281,6 +283,27 @@ result_summary.json
 
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
 `hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.
+
+Checkpoint and model-saving behavior should be explicit. For the current
+DistilBERT runner, the catalog records:
+
+```text
+eval_strategy=epoch
+save_strategy=epoch
+save_total_limit=2
+load_best_model_at_end=true
+metric_for_best_model=eval_f1_macro
+```
+
+During training, Hugging Face checkpoints are written under
+`output_dir/checkpoint-*`. At the end, `trainer.save_model(output_dir)` writes
+the final model files directly into `output_dir`. When
+`load_best_model_at_end=true`, that final model is the best validation
+checkpoint; otherwise it is the last training state.
+
+W&B can also upload model artifacts when `--wandb_log_model end` or
+`--wandb_log_model checkpoint` is used. The default is `false` to avoid large
+uploads during smoke and tuning runs.
 
 For more setup detail, see [docs/WANDB.md](docs/WANDB.md).
 

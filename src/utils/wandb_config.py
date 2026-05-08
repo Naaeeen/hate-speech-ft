@@ -72,16 +72,20 @@ def build_wandb_run_name(
     max_train_samples: int | None,
     num_train_epochs: float,
     learning_rate: float,
+    trial_id: str | None = None,
 ) -> str:
     method_part = slugify_run_part(method, default="method")
     model_part = slugify_run_part(model_name, default="model")
     sample_part = f"train{max_train_samples}" if max_train_samples else "full"
     epoch_part = f"{num_train_epochs:g}"
     lr_part = f"{learning_rate:g}"
-    return (
+    base_name = (
         f"{method_part}_{model_part}_seed{seed}_"
         f"{sample_part}_ep{epoch_part}_lr{lr_part}"
     )
+    if trial_id:
+        return f"{slugify_run_part(trial_id, default='trial')}_{base_name}"
+    return base_name
 
 
 @dataclass(frozen=True)
