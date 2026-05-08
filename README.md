@@ -45,6 +45,8 @@ Run the setup cells, then use the experiment launcher widget.
 
 - [Experiment running guide](docs/EXPERIMENTS.md): commands, overrides, and the
   method onboarding contract.
+- [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
+  responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
   of how a teammate should use the repo from start to finish.
 - [Docs index](docs/README.md): durable project docs and what each one is for.
@@ -82,6 +84,10 @@ Planned templates exist for:
 `planned` means the experiment is documented in the catalog, but the method
 script is not implemented yet. The generic runner will not silently run a
 missing method script.
+
+The catalog default records the intended final seed policy as `42, 43, 44`, but
+only `distilbert_full_final_seed42` is currently instantiated. Add the remaining
+seed entries after the final experiment set is agreed by the team.
 
 ## Repo Layout
 
@@ -227,6 +233,9 @@ Fixed rules:
 
 W&B is optional but recommended for all serious runs.
 
+W&B does not own the experiment settings. It records the settings that came from
+`configs/experiments.json`, `--set` overrides, or the Colab launcher.
+
 For Colab, add a secret named:
 
 ```text
@@ -272,6 +281,8 @@ result_summary.json
 
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
 `hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.
+
+For more setup detail, see [docs/WANDB.md](docs/WANDB.md).
 
 Do not commit W&B keys, local W&B folders, checkpoints, caches, or model outputs.
 
@@ -350,13 +361,20 @@ Do not commit:
 - `data/cache/`
 - large model files
 
-If a key file is accidentally staged:
+If a key file is accidentally staged but has never been tracked:
 
 ```bash
 git restore --staged wandb-key.txt
 ```
 
-Then remove or rotate the exposed key if it was ever committed.
+If a key file is already tracked by Git, remove it from the index without
+reading it:
+
+```bash
+git rm --cached -f -- wandb-key.txt
+```
+
+Then remove or rotate the exposed key if it was ever committed or shared.
 
 ## Practical Rule
 

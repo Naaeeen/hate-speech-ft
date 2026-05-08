@@ -33,7 +33,7 @@ code
 Current precedence:
 
 ```text
-catalog args < CLI --set overrides
+catalog defaults < catalog experiment args < CLI --set overrides
 ```
 
 For example:
@@ -46,6 +46,13 @@ python src/run_experiment.py \
 ```
 
 The dry-run should show `--learning_rate 3e-05`.
+
+Metadata defaults such as `final_seeds`, `selection_metric`, `test_policy`, and
+`wandb_project` stay on the registry object. They document shared policy but are
+not automatically appended to every method command.
+
+Use `--python` on `src/run_experiment.py` when Colab or another environment
+needs a specific Python executable.
 
 ## Adding More Shared Behavior
 

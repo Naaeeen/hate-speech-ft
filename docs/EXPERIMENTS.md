@@ -106,6 +106,10 @@ result_summary.json
 
 This is required even when W&B is disabled or unavailable.
 
+The current DistilBERT runner writes these files through
+`src/experiments/results.py`. New method scripts should reuse that helper or
+write the same file names with the same meaning.
+
 ## Adding A New Method
 
 1. Create a separate method script, for example:
@@ -133,6 +137,7 @@ src/methods/distilbert_lora/train.py
 --wandb_tags
 --wandb_mode
 --wandb_log_model
+--run_test
 ```
 
 3. Use shared data preprocessing from `src/data`.
@@ -160,6 +165,9 @@ gpu_type
 
 6. Mark it `planned` while the script is missing. Mark it `ready` only after the
    script exists and a smoke run works.
+
+Only final runs should use `--run_test`. Smoke, quick, and tuning runs must
+select models with validation metrics only.
 
 ## Current Catalog Meaning
 
@@ -189,7 +197,12 @@ Fixed across methods:
 - Label policy: strict majority vote, drop no-majority samples
 - Main selection metric: validation macro-F1
 - Test set: final evaluation only
-- Final seed protocol: 42, 43, 44
+- Final seed policy: 42, 43, 44
+
+The default seed policy is recorded in `configs/experiments.json`, but the
+catalog currently only includes `distilbert_full_final_seed42` as a ready final
+run. Add seed 43 and 44 entries after the final method list and budget are
+settled.
 
 Flexible per method:
 

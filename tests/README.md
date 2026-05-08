@@ -17,6 +17,9 @@ Current tests cover:
 - W&B config helpers
 - experiment catalog loading
 - command generation and CLI overrides
+- local result file recording
+- final-only test evaluation policy
+- Colab launcher working-directory behavior
 
 ## When To Add Tests
 
@@ -38,6 +41,7 @@ python -m py_compile \
   src/run_distilbert_hatexplain.py \
   src/run_experiment.py \
   src/experiments/registry.py \
+  src/experiments/results.py \
   src/colab/experiment_launcher.py \
   src/utils/wandb_config.py
 ```

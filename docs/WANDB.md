@@ -1,4 +1,8 @@
-W&B setup for this repo
+# W&B Setup
+
+This repo treats W&B as the shared experiment dashboard, not as the place where
+hyperparameters are defined. Hyperparameters live in
+`configs/experiments.json` or in temporary `--set key=value` overrides.
 
 Current status:
 - `src/run_experiment.py` is the preferred entry point for listed experiments.
@@ -25,6 +29,9 @@ Colab workflow:
    - Project: `hate-speech-ft`
    - Optional overrides such as `learning_rate=3e-5`
 5. Preview the command, then run it.
+
+Do not paste the API key into the notebook, a README, a Python file, or
+`configs/experiments.json`.
 
 CLI smoke example:
 
@@ -56,3 +63,15 @@ Do not commit:
 - `wandb-key.txt`
 - API keys or tokens
 - checkpoints, logs, Hugging Face cache, or model outputs
+
+Every serious run should still write local files in `output_dir`:
+
+```text
+resolved_config.json
+metrics.json
+runtime.json
+result_summary.json
+```
+
+These files make the run understandable even if W&B is disabled, offline, or
+someone looks at the output directory later.

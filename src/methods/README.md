@@ -40,6 +40,7 @@ Where possible, method scripts should accept:
 --wandb_tags
 --wandb_mode
 --wandb_log_model
+--run_test
 ```
 
 Method-specific scripts can add their own arguments:
@@ -75,6 +76,8 @@ trial_id
 seed
 dataset
 data_fraction
+model_name
+tokenizer_name
 hyperparameters
 trainable_params
 total_params
@@ -84,6 +87,18 @@ gpu_type
 ```
 
 Method-specific knobs go inside `hyperparameters`.
+
+Every completed run should also write the standard local result files:
+
+```text
+resolved_config.json
+metrics.json
+runtime.json
+result_summary.json
+```
+
+Reuse `src/experiments/results.py` when possible. Only final runs should accept
+`--run_test`; smoke, quick, and tuning runs should use validation metrics only.
 
 ## Registration
 

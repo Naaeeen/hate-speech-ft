@@ -28,6 +28,7 @@ distilbert_full_quick            ready
 distilbert_full_final_seed42     ready
 lora_distilbert_template         planned
 tfidf_logreg_template            planned
+...
 ```
 
 Sam understands:
@@ -94,9 +95,12 @@ Sam also checks the local output:
 
 ```text
 outputs/distilbert_full_smoke/resolved_config.json
+outputs/distilbert_full_smoke/metrics.json
+outputs/distilbert_full_smoke/runtime.json
+outputs/distilbert_full_smoke/result_summary.json
 ```
 
-That file records what actually ran.
+These files record what actually ran and the metrics produced locally.
 
 ## 4. Sam Tries One Temporary Override
 
@@ -209,6 +213,10 @@ python src/run_experiment.py --experiment lora_distilbert_template --dry_run
 ```
 
 If the dry-run works, Sam runs a smoke test.
+
+Sam does not add final seed 43 and 44 runs yet. The default seed policy is
+documented, but the team should instantiate final seed entries only after the
+final method list and budget are settled.
 
 ## 7. Sam's Rules
 

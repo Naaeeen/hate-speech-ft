@@ -10,6 +10,16 @@ The catalog is the team-facing list of experiments. It is intentionally JSON so
 `python src/run_experiment.py --list` works without extra dependencies such as
 PyYAML.
 
+## Defaults
+
+The top-level `defaults` block stores shared assumptions such as the dataset,
+selection metric, test policy, final seed policy, and default W&B project.
+
+Command-safe defaults such as `dataset_name` are merged into each experiment at
+load time. Metadata-only defaults such as `final_seeds`, `selection_metric`,
+`test_policy`, and `wandb_project` are kept as catalog metadata and are not
+passed blindly to every method script.
+
 ## When To Edit This Directory
 
 Edit `experiments.json` when:
@@ -80,6 +90,10 @@ distilbert_full_final_seed42
 lora_distilbert_template
 tfidf_logreg_template
 ```
+
+The default final seed policy is `42, 43, 44`, but the catalog currently only
+defines `distilbert_full_final_seed42` as a ready final run. Add seed 43 and 44
+entries only after the team agrees on the final experiment set.
 
 ## Validation
 

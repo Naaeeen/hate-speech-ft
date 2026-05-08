@@ -34,6 +34,10 @@ Then register runnable experiments in:
 configs/experiments.json
 ```
 
+Do not make permanent hyperparameter changes inside notebook cells. Use the
+launcher override box for one run, or edit `configs/experiments.json` for a
+shared experiment.
+
 ## W&B Secret
 
 For online W&B logging in Colab, add this Colab Secret:

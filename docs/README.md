@@ -8,6 +8,8 @@ contracts.
 
 - [EXPERIMENTS.md](EXPERIMENTS.md): how to list, preview, run, override, and add
   experiments.
+- [WANDB.md](WANDB.md): W&B team setup, Colab secrets, online/offline modes, and
+  local result files.
 - [TEAMMATE_WALKTHROUGH.md](TEAMMATE_WALKTHROUGH.md): a fictional teammate
   workflow showing the expected day-to-day usage.
 
