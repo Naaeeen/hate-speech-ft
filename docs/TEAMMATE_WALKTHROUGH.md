@@ -123,6 +123,8 @@ python src/run_experiment.py \
 
 This is a temporary exploratory run. If it is not important, Sam does not edit
 `configs/experiments.json`.
+Sam uses a fresh `output_dir` for each real manual run. If that directory
+already contains a previous result, the runner stops before overwriting it.
 
 ## 4B. Sam Plans A Small HPO Batch
 
@@ -141,6 +143,9 @@ Sam gets three commands with unique `trial_id` and `output_dir`. Sam previews
 them, then runs the selected commands in Colab.
 Sam does not use `distilbert_full_smoke` here because smoke runs intentionally
 use tiny sample caps for setup checks.
+Sam does not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
+`config_hash` during HPO. If the trial location should change, Sam changes the
+trial output root instead.
 
 After the runs finish, Sam aggregates the local summaries:
 

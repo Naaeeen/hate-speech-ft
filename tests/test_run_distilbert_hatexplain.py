@@ -1,11 +1,15 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from src.run_distilbert_hatexplain import (
     build_fixed_label_maps,
     build_trainer,
     build_tokenized_dataset,
     compute_balanced_class_weights,
+    find_existing_run_artifacts,
     resolve_class_weights,
+    validate_output_dir_for_run,
 )
 
 
@@ -162,6 +166,29 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             ),
             [1.0, 1.0, 1.0],
         )
+
+    def test_output_dir_guard_protects_existing_run_artifacts(self):
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
+            (output_dir / "checkpoint-1").mkdir()
+
+            artifacts = find_existing_run_artifacts(output_dir)
+
+            self.assertIn(output_dir / "result_summary.json", artifacts)
+            self.assertIn(output_dir / "checkpoint-1", artifacts)
+            with self.assertRaisesRegex(ValueError, "already contains run artifacts"):
+                validate_output_dir_for_run(output_dir, overwrite=False)
+            validate_output_dir_for_run(output_dir, overwrite=True)
+
+    def test_output_dir_guard_allows_empty_or_missing_directory(self):
+        with TemporaryDirectory() as tmp:
+            empty_dir = Path(tmp) / "empty"
+            empty_dir.mkdir()
+            missing_dir = Path(tmp) / "missing"
+
+            validate_output_dir_for_run(empty_dir, overwrite=False)
+            validate_output_dir_for_run(missing_dir, overwrite=False)
 
 
 if __name__ == "__main__":

@@ -10,8 +10,21 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SEARCH_SPACE_PATH = REPO_ROOT / "configs" / "search_spaces.json"
-TRIAL_METADATA_KEYS = {"search_stage", "trial_id", "hpo_seed", "output_dir", "config_hash"}
-PROTECTED_USER_OVERRIDE_KEYS = {"search_stage", "trial_id", "hpo_seed", "output_dir"}
+TRIAL_METADATA_KEYS = {
+    "search_stage",
+    "trial_id",
+    "hpo_seed",
+    "output_dir",
+    "config_hash",
+    "overwrite_output_dir",
+}
+PROTECTED_USER_OVERRIDE_KEYS = {
+    "search_stage",
+    "trial_id",
+    "hpo_seed",
+    "output_dir",
+    "config_hash",
+}
 
 
 def load_hpo_config(path: str | Path = DEFAULT_SEARCH_SPACE_PATH) -> dict[str, Any]:

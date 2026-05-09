@@ -190,9 +190,11 @@ python src/run_experiment.py \
 Use `--set` for one-off exploration. If a configuration becomes a team standard,
 add a named experiment to [configs/experiments.json](configs/experiments.json).
 
-Global training switches live in `configs/experiments.json` under
-`command_defaults`. They apply to every catalog experiment unless an experiment
-or `--set` override changes them:
+Shared training switches live in `configs/experiments.json`. Repo-wide command
+defaults are under `command_defaults`; model-family defaults are under
+`family_command_defaults`. The current transformer switches live in
+`family_command_defaults.transformer` and apply to transformer catalog
+experiments unless an experiment or `--set` override changes them:
 
 ```text
 mixed_precision=none|fp16|bf16
@@ -215,6 +217,9 @@ python src/run_experiment.py \
 
 This prints deterministic trial commands with unique `trial_id` and `output_dir`.
 Preview them before running expensive training.
+In HPO mode, do not override identity fields such as `output_dir`, `trial_id`,
+`search_stage`, `hpo_seed`, or `config_hash` with `--set`; use
+`--trial_output_root`, `--hpo_seed`, or a named catalog experiment instead.
 The CLI refuses to create HPO trials from smoke experiments unless
 `--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
 checks.
@@ -328,6 +333,11 @@ runtime.json
 result_summary.json
 failure_summary.json        # only when a run fails after setup
 ```
+
+By default, the DistilBERT runner refuses to start if `output_dir` already
+contains result, checkpoint, or model artifacts. Use a new `output_dir` for each
+real experiment run. Pass `--overwrite_output_dir` only when you intentionally
+want to replace the previous local files in that directory.
 
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
 `hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.

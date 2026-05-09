@@ -98,6 +98,9 @@ python src/run_experiment.py \
 Use a tuning experiment for real HPO. Smoke experiments keep tiny sample caps for
 setup checks, so the CLI blocks smoke-based HPO suggestions unless explicitly
 overridden.
+Do not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
+`config_hash` with `--set` in HPO mode. Use `--trial_output_root` for where
+trial directories are created.
 
 Use W&B groups for method-level grouping, for example:
 
@@ -129,6 +132,11 @@ python src/aggregate_results.py outputs/hpo \
 ## Model Artifacts
 
 The local model always belongs under the run's `output_dir`.
+The runner refuses to start if that directory already contains summaries,
+checkpoints, or saved model files. This protects local evidence from accidental
+reruns. Use a fresh output directory for a new run, or pass
+`--overwrite_output_dir` only when replacing the previous local files is
+intentional.
 
 For the current DistilBERT runner:
 

@@ -66,6 +66,10 @@ training. It samples from `configs/search_spaces.json`, stamps each command with
 a unique `trial_id` and `output_dir`, and keeps HPO planning deterministic via
 `--hpo_seed`.
 
+Identity fields are launcher-managed in trial mode. Do not pass
+`output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or `config_hash` through
+`--set`; use `--trial_output_root`, `--hpo_seed`, or the experiment catalog.
+
 ## Result Aggregation
 
 After a batch finishes, aggregate local summaries:

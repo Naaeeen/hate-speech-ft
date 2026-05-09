@@ -19,7 +19,7 @@ The notebook should:
 5. Load `ExperimentLauncher`.
 6. Preview and run catalog experiments.
 7. Optionally preview HPO trial commands from `configs/search_spaces.json`.
-8. Aggregate finished run summaries with `src/aggregate_results.py`.
+8. Aggregate finished run summaries with `launcher.aggregate_results()`.
 
 ## Do Not Put Training Logic Here
 
@@ -39,6 +39,10 @@ configs/experiments.json
 Do not make permanent hyperparameter changes inside notebook cells. Use the
 launcher override box for one run, or edit `configs/experiments.json` for a
 shared experiment.
+
+When `Trials > 0`, do not put `output_dir`, `trial_id`, `search_stage`,
+`hpo_seed`, or `config_hash` in the override box. Trial identity is generated
+from the selected experiment, search space, HPO seed, and Trial root.
 
 ## W&B Secret
 

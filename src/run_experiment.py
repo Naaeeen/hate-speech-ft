@@ -65,6 +65,11 @@ def parse_args():
         help="Allow --suggest_trials to exceed configs/search_spaces.json trial_caps.",
     )
     parser.add_argument(
+        "--overwrite_output_dir",
+        action="store_true",
+        help="Pass --overwrite_output_dir to method scripts for an intentional rerun.",
+    )
+    parser.add_argument(
         "--set",
         dest="overrides",
         action="append",
@@ -111,6 +116,8 @@ def main() -> int:
     try:
         spec = registry.get(args.experiment)
         overrides = parse_override_pairs(args.overrides)
+        if args.overwrite_output_dir:
+            overrides["overwrite_output_dir"] = True
     except (ValueError, KeyError) as exc:
         print(f"Cannot run experiment: {exc}", file=sys.stderr)
         print("Use --list --include_planned to inspect available experiments.", file=sys.stderr)

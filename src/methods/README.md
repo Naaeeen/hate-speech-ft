@@ -33,6 +33,7 @@ Where possible, method scripts should accept:
 --max_train_samples
 --max_eval_samples
 --output_dir
+--overwrite_output_dir
 --use_wandb
 --wandb_entity
 --wandb_project
@@ -131,6 +132,8 @@ output_dir/                 final model plus config and metrics
 If a method supports best-checkpoint selection, expose it through arguments such
 as `load_best_model_at_end` and `metric_for_best_model`. If the method only
 saves the last model, record that in `checkpoint_policy.final_model_source`.
+Protect existing `output_dir` artifacts by default and only replace them when
+an explicit overwrite flag is passed.
 
 If a method supports weighted loss, expose it through `class_weighting` rather
 than a method-specific hidden flag. For Transformer methods, `balanced` means

@@ -46,6 +46,11 @@ These overrides are temporary. Reusable configs belong in
 
 Use the override box for one run. Edit `configs/experiments.json` only when the
 setting should become a shared team experiment.
+Use `output_dir` here only when `Trials = 0`. When `Trials > 0`, the launcher
+owns `trial_id`, `output_dir`, `search_stage`, `hpo_seed`, and `config_hash`;
+change the `Trial root` field instead of overriding those identity fields.
+Leave `Overwrite output` off for normal work. Turn it on only when you want to
+replace a previous local run in the same directory.
 
 ## HPO Trial Suggestions
 
@@ -67,12 +72,14 @@ Call `launcher.run_trial_commands()` only after reviewing the preview.
 After a batch finishes in Drive-backed outputs, aggregate from a notebook cell:
 
 ```python
-!python src/aggregate_results.py /content/drive/MyDrive/hate_speech_ft/outputs/hpo \
-  --output /content/drive/MyDrive/hate_speech_ft/outputs/hpo/aggregate_summary.json \
-  --group_by method search_stage config_hash \
-  --metric eval_f1_macro \
-  --metric training_time_sec
+launcher.preview_aggregate_command()
+aggregate_report = launcher.aggregate_results()
+aggregate_report["groups"][:5]
 ```
+
+By default, aggregation follows `Trial root`. Fill `Agg input` or `Agg output`
+only when the summaries live somewhere else or the report should be written to a
+custom path.
 
 ## Old DistilBERT-Only Launcher
 

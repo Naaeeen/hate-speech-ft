@@ -124,6 +124,38 @@ class HpoTests(unittest.TestCase):
                 user_overrides={"output_dir": "outputs/manual"},
                 trial_overrides={"trial_id": "trial001"},
             )
+        with self.assertRaises(ValueError):
+            merge_trial_overrides(
+                base_args={},
+                user_overrides={"config_hash": "manual"},
+                trial_overrides={"trial_id": "trial001"},
+            )
+
+    def test_overwrite_output_dir_does_not_change_config_hash(self):
+        trial = {
+            "learning_rate": 2e-5,
+            "search_stage": "tuning",
+            "trial_id": "trial001",
+            "hpo_seed": 42,
+            "output_dir": "outputs/hpo/trial001",
+        }
+
+        without_overwrite = merge_trial_overrides(
+            base_args={"model_name": "distilbert-base-uncased"},
+            user_overrides={},
+            trial_overrides=trial,
+        )
+        with_overwrite = merge_trial_overrides(
+            base_args={"model_name": "distilbert-base-uncased"},
+            user_overrides={"overwrite_output_dir": True},
+            trial_overrides=trial,
+        )
+
+        self.assertEqual(
+            without_overwrite["config_hash"],
+            with_overwrite["config_hash"],
+        )
+        self.assertIs(with_overwrite["overwrite_output_dir"], True)
 
     def test_get_search_space_reports_available_names(self):
         config = {"search_spaces": {"full_ft": {"learning_rate": [2e-5]}}}

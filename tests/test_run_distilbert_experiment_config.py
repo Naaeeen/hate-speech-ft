@@ -53,6 +53,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             per_device_eval_batch_size=8,
             num_train_epochs=3,
             output_dir="outputs/example",
+            overwrite_output_dir=False,
         )
 
         config = build_experiment_config(
@@ -83,6 +84,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertEqual(config["output_dir"], "outputs/example")
         self.assertIs(config["run_test"], False)
         self.assertEqual(config["checkpoint_policy"]["save_strategy"], "epoch")
+        self.assertIs(config["checkpoint_policy"]["overwrite_output_dir"], False)
         self.assertEqual(config["training_policy"]["class_weighting"], "balanced")
         self.assertEqual(config["training_policy"]["class_weights"], [1.0, 2.0, 0.5])
         self.assertEqual(config["training_policy"]["max_grad_norm"], 1.0)
@@ -141,6 +143,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             per_device_eval_batch_size=8,
             num_train_epochs=1,
             output_dir="outputs/smoke",
+            overwrite_output_dir=False,
         )
 
         config = build_experiment_config(
@@ -182,6 +185,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             max_grad_norm=1.0,
             warmup_ratio=0.06,
             weight_decay=0.01,
+            overwrite_output_dir=False,
         )
 
         config = build_setup_failure_config(
@@ -195,6 +199,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertEqual(config["global_switches"]["mixed_precision"], "bf16")
         self.assertIs(config["global_switches"]["weighted_ce"], True)
         self.assertEqual(config["training_policy"]["class_weighting"], "balanced")
+        self.assertIs(config["output_safety"]["overwrite_output_dir"], False)
 
     def test_test_evaluation_policy_blocks_non_final_runs(self):
         from src.run_distilbert_hatexplain import validate_test_evaluation_policy

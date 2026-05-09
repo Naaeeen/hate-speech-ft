@@ -35,6 +35,20 @@ from src.utils.wandb_config import (
 
 
 MODEL_NAME = "distilbert-base-uncased"
+RUN_ARTIFACT_NAMES = {
+    "result_summary.json",
+    "failure_summary.json",
+    "metrics.json",
+    "runtime.json",
+    "resolved_config.json",
+    "trainer_state.json",
+    "config.json",
+    "model.safetensors",
+    "pytorch_model.bin",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+}
 
 
 def parse_args():
@@ -88,6 +102,15 @@ def parse_args():
     parser.add_argument("--eval_steps", type=int, default=None)
     parser.add_argument("--save_steps", type=int, default=500)
     parser.add_argument("--save_total_limit", type=int, default=2)
+    parser.add_argument(
+        "--overwrite_output_dir",
+        action="store_true",
+        help=(
+            "Allow writing into an output directory that already contains run "
+            "artifacts. By default, existing result/checkpoint/model files are "
+            "protected to avoid accidental experiment loss."
+        ),
+    )
     parser.add_argument("--load_best_model_at_end", action="store_true")
     parser.add_argument("--metric_for_best_model", type=str, default="eval_f1_macro")
     parser.add_argument("--lower_is_better", action="store_true")
@@ -183,6 +206,38 @@ def get_peak_memory_reserved_mb() -> float | None:
     if not torch.cuda.is_available():
         return None
     return torch.cuda.max_memory_reserved() / (1024 * 1024)
+
+
+def find_existing_run_artifacts(output_dir: str | Path) -> list[Path]:
+    output_path = Path(output_dir)
+    if not output_path.exists() or not output_path.is_dir():
+        return []
+
+    artifacts = [
+        output_path / name
+        for name in RUN_ARTIFACT_NAMES
+        if (output_path / name).exists()
+    ]
+    artifacts.extend(path for path in output_path.glob("checkpoint-*") if path.exists())
+    return sorted(set(artifacts), key=lambda path: path.as_posix())
+
+
+def validate_output_dir_for_run(output_dir: str | Path, *, overwrite: bool) -> None:
+    output_path = Path(output_dir)
+    if output_path.exists() and not output_path.is_dir():
+        raise ValueError(f"Output path exists but is not a directory: {output_path}")
+
+    artifacts = find_existing_run_artifacts(output_path)
+    if artifacts and not overwrite:
+        preview = ", ".join(path.name for path in artifacts[:5])
+        if len(artifacts) > 5:
+            preview += f", +{len(artifacts) - 5} more"
+        raise ValueError(
+            f"Output directory already contains run artifacts: {output_path} "
+            f"({preview}). Use a unique --output_dir for a new experiment run, "
+            "or pass --overwrite_output_dir only when intentionally replacing "
+            "the previous local results."
+        )
 
 
 def synchronize_cuda() -> None:
@@ -386,6 +441,7 @@ def build_experiment_config(
             "eval_steps": args.eval_steps,
             "save_steps": args.save_steps,
             "save_total_limit": args.save_total_limit,
+            "overwrite_output_dir": args.overwrite_output_dir,
             "load_best_model_at_end": args.load_best_model_at_end,
             "metric_for_best_model": args.metric_for_best_model,
             "greater_is_better": not args.lower_is_better,
@@ -416,6 +472,7 @@ def build_experiment_config(
             "wandb_log_model": args.wandb_log_model,
             "early_stopping_patience": args.early_stopping_patience,
             "early_stopping_threshold": args.early_stopping_threshold,
+            "overwrite_output_dir": args.overwrite_output_dir,
         },
         "max_train_samples": args.max_train_samples,
         "max_eval_samples": args.max_eval_samples,
@@ -485,6 +542,9 @@ def build_setup_failure_config(
         },
         "runtime_context": {
             "gpu_type": gpu_type,
+        },
+        "output_safety": {
+            "overwrite_output_dir": getattr(args, "overwrite_output_dir", False),
         },
     }
 
@@ -693,6 +753,15 @@ def build_model_selection_summary(
 
 def main():
     args = parse_args()
+    try:
+        validate_output_dir_for_run(
+            args.output_dir,
+            overwrite=args.overwrite_output_dir,
+        )
+    except ValueError as exc:
+        print(f"Cannot start run: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
     os.makedirs(args.output_dir, exist_ok=True)
     wandb_run = None
     gpu_type = get_gpu_type()
@@ -860,6 +929,7 @@ def main():
             eval_steps=args.eval_steps,
             save_steps=args.save_steps,
             save_total_limit=args.save_total_limit,
+            overwrite_output_dir=args.overwrite_output_dir,
             report_to=wandb_settings.report_to,
             run_name=wandb_settings.run_name if wandb_settings.enabled else None,
             load_best_model_at_end=args.load_best_model_at_end,

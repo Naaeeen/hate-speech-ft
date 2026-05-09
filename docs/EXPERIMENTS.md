@@ -78,9 +78,11 @@ add a named experiment to `configs/experiments.json`.
 
 ## Global Switches
 
-Global switches are stored in `configs/experiments.json` under
-`command_defaults`. Use them for decisions that must stay consistent across
-methods:
+Shared switches are stored in `configs/experiments.json`. Repo-wide command
+defaults are under `command_defaults`; model-family defaults are under
+`family_command_defaults`. The current transformer switches live in
+`family_command_defaults.transformer`. Use them for decisions that must stay
+consistent across comparable methods:
 
 ```text
 mixed_precision=none|fp16|bf16
@@ -116,6 +118,9 @@ python src/run_experiment.py \
 
 Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
 `output_dir`. This prevents HPO runs from overwriting each other.
+Do not set HPO identity fields (`output_dir`, `trial_id`, `search_stage`,
+`hpo_seed`, or `config_hash`) through `--set`; use `--trial_output_root`,
+`--hpo_seed`, or a catalog experiment edit instead.
 Trial caps from `configs/search_spaces.json` are enforced by default. Use
 `--allow_over_cap` only for exploratory runs that intentionally exceed the
 research protocol. The CLI also refuses HPO suggestions from smoke experiments
@@ -138,6 +143,15 @@ max_train_samples=128
 output_dir=/content/drive/MyDrive/hate_speech_ft/outputs/manual_run
 ```
 
+Use `output_dir` in the override box only for a single manual run. When
+`Trials > 0`, trial identity and output directories are managed by the launcher;
+change the `Trial root` widget instead.
+Leave the Colab `Overwrite output` checkbox off unless the goal is to replace a
+previous local run in the same directory.
+The Colab aggregation fields default to the `Trial root`; fill `Agg input` or
+`Agg output` only when aggregating a different folder or writing the report to a
+custom path.
+
 ## Local Result Files
 
 Completed runs should write:
@@ -152,6 +166,11 @@ result_summary.json
 This is required even when W&B is disabled or unavailable.
 Failed runs that reach the runner write `failure_summary.json` with the error
 type, message, partial runtime, and config.
+
+The DistilBERT runner protects existing local run artifacts by default. If
+`output_dir` already contains summaries, checkpoints, or saved model files, the
+run exits before writing anything. Use a new output directory for a new run, or
+pass `--overwrite_output_dir` only for an intentional replacement.
 
 The current DistilBERT runner writes these files through
 `src/experiments/results.py`. New method scripts should reuse that helper or

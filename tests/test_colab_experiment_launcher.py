@@ -1,10 +1,17 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from src.colab.experiment_launcher import ExperimentLauncher
 from src.experiments.hpo import load_hpo_config
 from src.experiments.registry import REPO_ROOT
 from src.experiments.registry import load_experiment_registry
+
+
+class ValueBox:
+    def __init__(self, value):
+        self.value = value
 
 
 class ColabExperimentLauncherTests(unittest.TestCase):
@@ -39,6 +46,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
             "wandb_tags": None,
             "wandb_mode": "online",
             "wandb_log_model": "false",
+            "overwrite_output_dir": True,
             "suggest_trials": 2,
             "search_space": "full_ft",
             "hpo_seed": 42,
@@ -55,6 +63,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("adamw_torch", commands[0])
         self.assertIn("--mixed_precision", commands[0])
         self.assertIn("bf16", commands[0])
+        self.assertIn("--overwrite_output_dir", commands[0])
 
     def test_trial_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)
@@ -85,6 +94,71 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.run_trial_commands = lambda: ["trial-result"]
 
         self.assertEqual(launcher.run(), ["trial-result"])
+
+    def test_build_aggregate_command_uses_widget_settings(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.trial_output_root = ValueBox("outputs/hpo")
+        launcher.aggregate_input = ValueBox("outputs/hpo")
+        launcher.aggregate_output = ValueBox("outputs/hpo/aggregate_summary.json")
+        launcher.aggregate_group_by = ValueBox("method search_stage config_hash")
+        launcher.aggregate_metrics = ValueBox("eval_f1_macro,training_time_sec")
+
+        command = launcher.build_aggregate_command()
+
+        self.assertIn("src/aggregate_results.py", command)
+        self.assertIn("outputs/hpo", command)
+        self.assertIn("--group_by", command)
+        self.assertIn("config_hash", command)
+        self.assertEqual(command.count("--metric"), 2)
+
+    def test_aggregate_defaults_follow_trial_output_root(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.trial_output_root = ValueBox("outputs/custom_hpo")
+        launcher.aggregate_input = ValueBox("")
+        launcher.aggregate_output = ValueBox("")
+        launcher.aggregate_group_by = ValueBox("method search_stage config_hash")
+        launcher.aggregate_metrics = ValueBox("eval_f1_macro,training_time_sec")
+
+        config = launcher.get_aggregate_config()
+
+        self.assertEqual(config["input"], "outputs/custom_hpo")
+        self.assertEqual(
+            config["output"],
+            "outputs/custom_hpo/aggregate_summary.json",
+        )
+
+    def test_aggregate_results_writes_report_from_widget_settings(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir = root / "trial001"
+            run_dir.mkdir()
+            (run_dir / "result_summary.json").write_text(
+                """{
+  "status": "completed",
+  "config": {
+    "method": "full-ft",
+    "search_stage": "tuning",
+    "config_hash": "abc",
+    "output_dir": "trial001"
+  },
+  "metrics": {"eval": {"eval_f1_macro": 0.7}},
+  "runtime": {"training_time_sec": 12.0}
+}
+""",
+                encoding="utf-8",
+            )
+            launcher = object.__new__(ExperimentLauncher)
+            launcher.trial_output_root = ValueBox(str(root))
+            launcher.aggregate_input = ValueBox(str(root))
+            launcher.aggregate_output = ValueBox(str(root / "aggregate_summary.json"))
+            launcher.aggregate_group_by = ValueBox("method search_stage config_hash")
+            launcher.aggregate_metrics = ValueBox("eval_f1_macro,training_time_sec")
+
+            with patch("builtins.print"):
+                report = launcher.aggregate_results()
+
+            self.assertEqual(report["total_runs"], 1)
+            self.assertTrue((root / "aggregate_summary.json").is_file())
 
 
 if __name__ == "__main__":

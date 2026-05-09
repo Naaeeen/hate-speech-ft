@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
+from src.experiments.aggregate_results import (
+    build_aggregate_report,
+    write_aggregate_report,
+)
 from src.experiments.hpo import (
     DEFAULT_SEARCH_SPACE_PATH,
     build_trial_overrides,
@@ -86,6 +91,10 @@ class ExperimentLauncher:
             value="false",
             description="Log model",
         )
+        self.overwrite_output_dir = widgets.Checkbox(
+            value=False,
+            description="Overwrite output",
+        )
         self.overrides = widgets.Textarea(
             value="",
             placeholder="Optional one per line, e.g.\nlearning_rate=3e-5\nseed=43\noutput_dir=/content/drive/MyDrive/hate_speech_ft/outputs/my_run",
@@ -107,15 +116,40 @@ class ExperimentLauncher:
             description="Trial root",
             layout=widgets.Layout(width="520px"),
         )
+        self.aggregate_input = widgets.Text(
+            value="",
+            placeholder="blank follows Trial root",
+            description="Agg input",
+            layout=widgets.Layout(width="520px"),
+        )
+        self.aggregate_output = widgets.Text(
+            value="",
+            placeholder="blank writes aggregate_summary.json under Agg input",
+            description="Agg output",
+            layout=widgets.Layout(width="620px"),
+        )
+        self.aggregate_group_by = widgets.Text(
+            value="method search_stage config_hash",
+            description="Group by",
+            layout=widgets.Layout(width="520px"),
+        )
+        self.aggregate_metrics = widgets.Text(
+            value="eval_f1_macro,training_time_sec",
+            description="Metrics",
+            layout=widgets.Layout(width="520px"),
+        )
         self.view = widgets.VBox(
             [
                 self.experiment,
                 widgets.HBox([self.use_wandb, self.wandb_mode, self.wandb_log_model]),
+                self.overwrite_output_dir,
                 widgets.HBox([self.wandb_entity, self.wandb_project]),
                 widgets.HBox([self.wandb_group, self.wandb_tags]),
                 self.overrides,
                 widgets.HBox([self.suggest_trials, self.search_space, self.hpo_seed]),
                 self.trial_output_root,
+                widgets.HBox([self.aggregate_input, self.aggregate_group_by]),
+                widgets.HBox([self.aggregate_output, self.aggregate_metrics]),
             ]
         )
 
@@ -130,18 +164,42 @@ class ExperimentLauncher:
             "wandb_tags": self.wandb_tags.value or None,
             "wandb_mode": self.wandb_mode.value,
             "wandb_log_model": self.wandb_log_model.value,
+            "overwrite_output_dir": self.overwrite_output_dir.value,
             "suggest_trials": self.suggest_trials.value,
             "search_space": self.search_space.value or None,
             "hpo_seed": self.hpo_seed.value,
             "trial_output_root": self.trial_output_root.value,
         }
 
+    def get_aggregate_config(self) -> dict[str, Any]:
+        group_by = [
+            item.strip()
+            for item in (self.aggregate_group_by.value or "").replace(",", " ").split()
+            if item.strip()
+        ]
+        metrics = [
+            item.strip()
+            for item in (self.aggregate_metrics.value or "").replace("\n", ",").split(",")
+            if item.strip()
+        ]
+        aggregate_input = (self.aggregate_input.value or self.trial_output_root.value).rstrip("/")
+        return {
+            "input": aggregate_input,
+            "output": self.aggregate_output.value
+            or f"{aggregate_input.rstrip('/')}/aggregate_summary.json",
+            "group_by": group_by or ["method", "search_stage", "config_hash"],
+            "metrics": metrics or ["eval_f1_macro", "training_time_sec"],
+        }
+
     def build_command(self) -> list[str]:
         config = self.get_config()
         spec = self.registry.get(config["experiment"])
+        overrides = dict(config["overrides"])
+        if config.get("overwrite_output_dir"):
+            overrides["overwrite_output_dir"] = True
         return build_experiment_command(
             spec,
-            overrides=config["overrides"],
+            overrides=overrides,
             use_wandb=config["use_wandb"],
             wandb_entity=config["wandb_entity"],
             wandb_project=config["wandb_project"],
@@ -166,6 +224,9 @@ class ExperimentLauncher:
             return []
 
         spec = self.registry.get(config["experiment"])
+        user_overrides = dict(config["overrides"])
+        if config.get("overwrite_output_dir"):
+            user_overrides["overwrite_output_dir"] = True
         if spec.stage == "smoke":
             raise ValueError(
                 "HPO trial generation should use a tuning experiment, not a smoke "
@@ -188,7 +249,7 @@ class ExperimentLauncher:
         for overrides in trial_overrides:
             merged_overrides = merge_trial_overrides(
                 base_args=spec.args,
-                user_overrides=config["overrides"],
+                user_overrides=user_overrides,
                 trial_overrides=overrides,
             )
             commands.append(
@@ -225,3 +286,38 @@ class ExperimentLauncher:
             print(format_command(command))
             results.append(subprocess.run(command, check=True, cwd=REPO_ROOT))
         return results
+
+    def build_aggregate_command(self) -> list[str]:
+        config = self.get_aggregate_config()
+        command = [
+            sys.executable,
+            "src/aggregate_results.py",
+            config["input"],
+            "--output",
+            config["output"],
+            "--group_by",
+            *config["group_by"],
+        ]
+        for metric in config["metrics"]:
+            command.extend(["--metric", metric])
+        return command
+
+    def preview_aggregate_command(self) -> str:
+        rendered = format_command(self.build_aggregate_command())
+        print(rendered)
+        return rendered
+
+    def aggregate_results(self) -> dict[str, Any]:
+        config = self.get_aggregate_config()
+        report = build_aggregate_report(
+            [config["input"]],
+            group_by=config["group_by"],
+            metrics=config["metrics"],
+        )
+        output_path = write_aggregate_report(config["output"], report)
+        print(f"Wrote aggregate report: {output_path}")
+        print(
+            f"Runs: {report['total_runs']} "
+            f"completed={report['completed_runs']} failed={report['failed_runs']}"
+        )
+        return report
