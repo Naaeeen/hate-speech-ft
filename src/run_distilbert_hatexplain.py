@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import os
 import subprocess
 import sys
@@ -705,6 +706,25 @@ def build_trainer(
     return trainer_cls(**trainer_kwargs)
 
 
+def build_training_arguments(training_args_cls, **kwargs):
+    signature = inspect.signature(training_args_cls.__init__)
+    parameters = signature.parameters
+    accepts_arbitrary_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+    if accepts_arbitrary_kwargs:
+        return training_args_cls(**kwargs)
+
+    supported_keys = set(parameters) - {"self"}
+    filtered_kwargs = {
+        key: value
+        for key, value in kwargs.items()
+        if key in supported_keys
+    }
+    return training_args_cls(**filtered_kwargs)
+
+
 def build_model_selection_summary(
     trainer,
     *,
@@ -909,7 +929,8 @@ def main():
         print(f"Resolved config: {resolved_config_path}")
         wandb_run = init_wandb_run(wandb_settings, config=experiment_config)
 
-        training_args = TrainingArguments(
+        training_args = build_training_arguments(
+            TrainingArguments,
             output_dir=args.output_dir,
             learning_rate=args.learning_rate,
             per_device_train_batch_size=args.per_device_train_batch_size,

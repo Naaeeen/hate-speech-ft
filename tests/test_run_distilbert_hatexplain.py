@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 from src.run_distilbert_hatexplain import (
     build_fixed_label_maps,
+    build_training_arguments,
     build_trainer,
     build_tokenized_dataset,
     compute_balanced_class_weights,
@@ -129,6 +130,30 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
         )
 
         self.assertIs(captured_kwargs["callbacks"], callbacks)
+
+    def test_build_training_arguments_filters_unsupported_kwargs(self):
+        captured_kwargs = {}
+
+        class FakeTrainingArguments:
+            def __init__(self, output_dir, learning_rate):
+                captured_kwargs.update(
+                    {
+                        "output_dir": output_dir,
+                        "learning_rate": learning_rate,
+                    }
+                )
+
+        args = build_training_arguments(
+            FakeTrainingArguments,
+            output_dir="outputs/example",
+            learning_rate=2e-5,
+            overwrite_output_dir=False,
+        )
+
+        self.assertIsInstance(args, FakeTrainingArguments)
+        self.assertEqual(captured_kwargs["output_dir"], "outputs/example")
+        self.assertEqual(captured_kwargs["learning_rate"], 2e-5)
+        self.assertNotIn("overwrite_output_dir", captured_kwargs)
 
     def test_balanced_class_weights_use_final_training_subset(self):
         dataset = [
