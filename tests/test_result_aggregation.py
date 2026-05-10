@@ -24,6 +24,8 @@ def completed_summary(
     seed: int,
     eval_f1: float,
     test_f1: float | None = None,
+    trainable_params: int | None = None,
+    total_params: int | None = None,
 ) -> dict:
     return {
         "status": "completed",
@@ -35,6 +37,8 @@ def completed_summary(
             "seed": seed,
             "hpo_seed": 42,
             "output_dir": f"outputs/{trial_id}",
+            "trainable_params": trainable_params,
+            "total_params": total_params,
         },
         "metrics": {
             "eval": {"eval_f1_macro": eval_f1, "eval_loss": 0.9},
@@ -105,6 +109,8 @@ class ResultAggregationTests(unittest.TestCase):
             seed=42,
             eval_f1=0.61,
             test_f1=0.58,
+            trainable_params=10,
+            total_params=100,
         )
 
         record = flatten_summary_record(payload, Path("outputs/seed42/result_summary.json"))
@@ -115,6 +121,9 @@ class ResultAggregationTests(unittest.TestCase):
         self.assertEqual(record["seed"], 42)
         self.assertEqual(record["eval_f1_macro"], 0.61)
         self.assertEqual(record["test_f1_macro"], 0.58)
+        self.assertEqual(record["trainable_params"], 10)
+        self.assertEqual(record["total_params"], 100)
+        self.assertEqual(record["trainable_pct"], 10.0)
         self.assertEqual(record["best_model_checkpoint"], "outputs/seed42/checkpoint-1")
         self.assertEqual(record["summary_path"], "outputs/seed42/result_summary.json")
 
@@ -142,7 +151,7 @@ class ResultAggregationTests(unittest.TestCase):
                         "seed": 44,
                     },
                     "runtime": {},
-                    "error": {"type": "RuntimeError", "message": "oom"},
+                    "error": {"type": "RuntimeError", "message": "CUDA out of memory"},
                 },
                 Path("seed44/failure_summary.json"),
             ),
@@ -159,9 +168,38 @@ class ResultAggregationTests(unittest.TestCase):
         self.assertEqual(group["runs"], 3)
         self.assertEqual(group["completed"], 2)
         self.assertEqual(group["failed"], 1)
+        self.assertEqual(group["failed_oom"], 1)
         self.assertAlmostEqual(group["metrics"]["eval_f1_macro"]["mean"], 0.65)
         self.assertAlmostEqual(group["metrics"]["eval_f1_macro"]["std"], 0.0707106781)
         self.assertAlmostEqual(group["metrics"]["test_f1_macro"]["mean"], 0.60)
+
+    def test_aggregate_records_summarizes_parameter_efficiency_fields(self):
+        records = [
+            flatten_summary_record(completed_summary(
+                trial_id="seed42",
+                seed=42,
+                eval_f1=0.60,
+                trainable_params=10,
+                total_params=100,
+            ), Path("seed42/result_summary.json")),
+            flatten_summary_record(completed_summary(
+                trial_id="seed43",
+                seed=43,
+                eval_f1=0.70,
+                trainable_params=20,
+                total_params=100,
+            ), Path("seed43/result_summary.json")),
+        ]
+
+        groups = aggregate_records(
+            records,
+            group_by=["method"],
+            metrics=["trainable_params", "total_params", "trainable_pct"],
+        )
+
+        self.assertEqual(groups[0]["metrics"]["trainable_params"]["mean"], 15.0)
+        self.assertEqual(groups[0]["metrics"]["total_params"]["mean"], 100.0)
+        self.assertEqual(groups[0]["metrics"]["trainable_pct"]["mean"], 15.0)
 
     def test_build_and_write_aggregate_report(self):
         with tempfile.TemporaryDirectory() as temp_dir:

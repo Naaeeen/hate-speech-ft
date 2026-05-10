@@ -57,7 +57,8 @@ def main() -> int:
     print(f"Wrote aggregate report: {output_path}")
     print(
         f"Runs: {report['total_runs']} "
-        f"completed={report['completed_runs']} failed={report['failed_runs']}"
+        f"completed={report['completed_runs']} failed={report['failed_runs']} "
+        f"failed_oom={report['failed_oom_runs']}"
     )
     for group in report["groups"]:
         group_label = ", ".join(
@@ -65,7 +66,8 @@ def main() -> int:
         )
         print(
             f"{group_label}: runs={group['runs']} "
-            f"completed={group['completed']} failed={group['failed']}"
+            f"completed={group['completed']} failed={group['failed']} "
+            f"failed_oom={group['failed_oom']}"
         )
         for metric, summary in group["metrics"].items():
             mean = summary["mean"]

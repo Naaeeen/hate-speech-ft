@@ -20,6 +20,9 @@ DEFAULT_METRICS = (
     "test_recall_macro",
     "training_time_sec",
     "peak_memory_reserved_mb",
+    "trainable_params",
+    "total_params",
+    "trainable_pct",
 )
 
 
@@ -57,12 +60,21 @@ def load_summary(path: str | Path) -> dict[str, Any]:
 def _metric_value(payload: dict[str, Any], key: str) -> Any:
     metrics = payload.get("metrics") or {}
     runtime = payload.get("runtime") or {}
+    config = payload.get("config") or {}
+    if key == "trainable_pct":
+        trainable = _as_float(config.get("trainable_params"))
+        total = _as_float(config.get("total_params"))
+        if trainable is None or not total:
+            return None
+        return 100 * trainable / total
     for section in ("eval", "test"):
         section_metrics = metrics.get(section) or {}
         if key in section_metrics:
             return section_metrics[key]
     if key in runtime:
         return runtime[key]
+    if key in config:
+        return config[key]
     return None
 
 
@@ -87,6 +99,8 @@ def flatten_summary_record(
     runtime = payload.get("runtime") or {}
     model_selection = payload.get("model_selection") or {}
     error = payload.get("error") or {}
+    trainable_params = config.get("trainable_params")
+    total_params = config.get("total_params")
 
     record: dict[str, Any] = {
         "summary_path": Path(summary_path).as_posix(),
@@ -104,14 +118,34 @@ def flatten_summary_record(
         "failure_phase": runtime.get("failure_phase"),
         "error_type": error.get("type"),
         "error_message": error.get("message"),
+        "is_oom": is_oom_failure(error.get("message"), error.get("type")),
         "best_model_checkpoint": model_selection.get("best_model_checkpoint"),
         "best_metric": model_selection.get("best_metric"),
+        "trainable_params": trainable_params,
+        "total_params": total_params,
+        "trainable_pct": _metric_value(payload, "trainable_pct"),
     }
     for metric in metrics:
         value = _metric_value(payload, metric)
         if value is not None:
             record[metric] = value
     return record
+
+
+def is_oom_failure(message: Any, error_type: Any = None) -> bool:
+    text = " ".join(
+        str(item).lower()
+        for item in (error_type, message)
+        if item is not None
+    )
+    oom_markers = (
+        "out of memory",
+        "cuda oom",
+        "cublas_status_alloc_failed",
+        "memoryerror",
+        "resourceexhaustederror",
+    )
+    return any(marker in text for marker in oom_markers)
 
 
 def _metric_summary(values: list[float]) -> dict[str, float | int | None]:
@@ -141,6 +175,7 @@ def aggregate_records(
     for key, group_records in sorted(grouped.items(), key=lambda item: str(item[0])):
         completed = [record for record in group_records if record.get("status") == "completed"]
         failed = [record for record in group_records if record.get("status") == "failed"]
+        failed_oom = [record for record in failed if record.get("is_oom")]
         metric_summaries = {}
         for metric in metric_names:
             values = [
@@ -157,6 +192,7 @@ def aggregate_records(
                 "runs": len(group_records),
                 "completed": len(completed),
                 "failed": len(failed),
+                "failed_oom": len(failed_oom),
                 "metrics": metric_summaries,
             }
         )
@@ -183,6 +219,11 @@ def build_aggregate_report(
         "total_runs": len(records),
         "completed_runs": sum(1 for record in records if record.get("status") == "completed"),
         "failed_runs": sum(1 for record in records if record.get("status") == "failed"),
+        "failed_oom_runs": sum(
+            1
+            for record in records
+            if record.get("status") == "failed" and record.get("is_oom")
+        ),
         "runs": records,
         "groups": aggregate_records(records, group_by=group_by, metrics=metric_names),
     }
