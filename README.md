@@ -113,7 +113,6 @@ src/
   data/                         # shared HateXplain preprocessing policy
   experiments/                  # catalog loading and command building
   methods/                      # future method-specific training scripts
-  models/                       # model loading/check utilities
   utils/                        # W&B and environment helpers
 
 tests/
@@ -138,8 +137,9 @@ Local:
 pip install -r requirements.txt
 ```
 
-The local `requirements.txt` is currently a pinned environment snapshot. Colab
-work should use `requirements-colab.txt`.
+`requirements.txt` intentionally points at the same lean dependency set as
+`requirements-colab.txt` so local dry-runs and Colab runs install from one
+source of truth.
 
 ## Experiment Catalog Workflow
 
