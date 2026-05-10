@@ -19,6 +19,20 @@ src/methods/distilbert_lp_ft/train.py
 One method family should have its own script or package. Do not put every method
 inside `src/methods/distilbert_full/train.py`.
 
+For a new method, copy the starter template:
+
+```text
+src/methods/_template/
+```
+
+to a method-owned directory such as:
+
+```text
+src/methods/distilbert_lora/
+```
+
+Then edit that copied `train.py`, not the template itself.
+
 ## Shared Arguments
 
 Where possible, method scripts should accept:
