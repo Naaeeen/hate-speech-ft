@@ -252,6 +252,22 @@ errors.
 
 ## Adding A New Method
 
+Fast path:
+
+```bash
+python src/methods/scaffold.py \
+  --method-package distilbert_lora \
+  --method-id lora \
+  --family transformer-peft \
+  --description "DistilBERT LoRA fine-tuning."
+```
+
+This creates a package from `src/methods/_template/train.py` and prints a
+catalog snippet. Paste the snippet into `configs/experiments.json`, keep it
+`planned`, implement the method, then mark it `ready` after a smoke run works.
+
+Manual path:
+
 1. Create a separate method script, for example:
 
 ```text

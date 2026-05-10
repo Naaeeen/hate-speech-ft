@@ -401,7 +401,22 @@ Do not commit W&B keys, local W&B folders, checkpoints, caches, or model outputs
 
 ## Adding A New Method
 
-Use this pattern:
+Fastest path:
+
+```bash
+python src/methods/scaffold.py \
+  --method-package distilbert_lora \
+  --method-id lora \
+  --family transformer-peft \
+  --description "DistilBERT LoRA fine-tuning."
+```
+
+The scaffold command creates a method package and prints a catalog snippet to
+paste into `configs/experiments.json`. It does not edit the catalog
+automatically, so the team still reviews the experiment name, status, family,
+tags, and defaults.
+
+Manual pattern:
 
 ```text
 src/methods/<method_name>/train.py

@@ -1,0 +1,1 @@
+"""Copyable method template package."""

@@ -50,6 +50,9 @@ python -m py_compile \
   src/experiments/hpo.py \
   src/aggregate_results.py \
   src/colab/experiment_launcher.py \
+  src/methods/common.py \
+  src/methods/scaffold.py \
+  src/methods/_template/train.py \
   src/utils/wandb_config.py
 ```
 
