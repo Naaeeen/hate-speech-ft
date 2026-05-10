@@ -46,6 +46,8 @@ Run the setup cells, then use the experiment launcher widget.
 
 - [Experiment running guide](docs/EXPERIMENTS.md): commands, overrides, and the
   method onboarding contract.
+- [Adding a method](docs/ADDING_METHOD.md): the shortest path for teammates who
+  need to implement a new model or training method.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
@@ -108,11 +110,12 @@ notebooks/
 
 src/
   run_experiment.py             # generic list / dry-run / run entry point
-  methods/distilbert_full/train.py  # current ready DistilBERT full-FT runner
   colab/                        # notebook-facing launcher widgets
   data/                         # shared HateXplain preprocessing policy
   experiments/                  # catalog loading and command building
-  methods/                      # future method-specific training scripts
+  methods/                      # method packages and shared method helpers
+    _template/                  # copyable starter for new methods
+    distilbert_full/            # current ready DistilBERT full-FT method
   utils/                        # W&B and environment helpers
 
 tests/

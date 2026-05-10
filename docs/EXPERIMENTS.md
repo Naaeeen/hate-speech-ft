@@ -252,134 +252,25 @@ errors.
 
 ## Adding A New Method
 
-1. Copy the method template:
+Use [ADDING_METHOD.md](ADDING_METHOD.md) as the implementation checklist.
+
+The essential flow is:
 
 ```text
-src/methods/_template/
+copy src/methods/_template/ -> src/methods/<method_name>/
+implement method-owned code
+register the experiment in configs/experiments.json as planned
+add HPO space in configs/search_spaces.json if needed
+run protocol validation and a smoke dry-run
+mark the catalog entry ready only after a smoke run works
 ```
-
-to a method-owned package, for example:
-
-```text
-src/methods/distilbert_lora/
-```
-
-2. Update the copied `train.py` defaults:
-
-```python
-DEFAULT_METHOD_ID = "lora"
-DEFAULT_METHOD_PACKAGE = "distilbert_lora"
-DEFAULT_DESCRIPTION = "DistilBERT LoRA fine-tuning."
-```
-
-3. Keep using `src.methods.common` for shared arguments, tracking config,
-   output-dir safety, and final-test policy validation.
-
-4. Add method-specific arguments and implementation. Do not put method-specific
-   model code in `src/methods/common.py`.
-
-5. Create or update the separate method script, for example:
-
-```text
-src/methods/distilbert_lora/train.py
-```
-
-6. Make it accept shared arguments when possible:
-
-```text
---method
---search_stage
---trial_id
---seed
---dataset_name
---data_fraction
---max_train_samples
---max_eval_samples
---output_dir
---use_wandb
---wandb_entity
---wandb_project
---wandb_group
---wandb_tags
---wandb_mode
---wandb_log_model
---run_test
---max_length
---weight_decay
---warmup_ratio
---max_grad_norm
---optim
---lr_scheduler_type
---eval_strategy
---save_strategy
---logging_strategy
---logging_steps
---eval_steps
---save_steps
---save_total_limit
---load_best_model_at_end
---metric_for_best_model
---no_save_final_model
-```
-
-7. Use shared data preprocessing from `src/data`.
-
-8. Log comparable W&B keys:
-
-```text
-method
-search_stage
-trial_id
-hpo_seed
-seed
-dataset
-data_fraction
-effective_train_fraction
-model_name
-tokenizer_name
-hyperparameters
-checkpoint_policy
-trainable_params
-total_params
-training_time_sec
-peak_memory_mb
-gpu_type
-status
-model_selection
-```
-
-9. Add an entry to `configs/experiments.json`.
-
-10. Mark it `planned` while the script is missing. Mark it `ready` only after the
-   script exists and a smoke run works.
 
 Only final runs should use `--run_test`. Smoke, quick, and tuning runs must
 select models with validation metrics only.
 
-Checkpoint and model-saving policy must be visible in the resolved config and
-W&B config. For Transformer methods, use these fields unless a method has a
-documented reason not to:
-
-```text
-eval_strategy
-save_strategy
-save_total_limit
-load_best_model_at_end
-metric_for_best_model
-greater_is_better
-save_final_model
-wandb_log_model
-early_stopping_patience
-early_stopping_threshold
-mixed_precision
-gradient_checkpointing
-class_weighting
-```
-
-The current DistilBERT ready experiments save checkpoints each epoch, keep at
-most two checkpoints, and load the best validation macro-F1 checkpoint at the
-end. The final saved model in `output_dir` therefore comes from the best
-validation checkpoint, not necessarily the last epoch.
+Checkpoint, W&B, mixed precision, gradient checkpointing, class weighting, and
+early-stopping decisions must be visible in the resolved config. Do not hide
+those switches inside a method implementation.
 
 ## Current Catalog Meaning
 
@@ -426,5 +317,5 @@ Flexible per method:
 - Trial budget
 - Output directory
 
-This is the balance the abstract needs: methods can differ, but the comparison
-surface stays consistent.
+This is the intended balance: methods can differ, but the comparison surface
+stays consistent.

@@ -3,6 +3,12 @@
 This directory is a copyable starter for new methods. It is not a generator and
 does not modify `configs/experiments.json`.
 
+Use the full teammate checklist:
+
+```text
+docs/ADDING_METHOD.md
+```
+
 Manual workflow:
 
 1. Copy this directory to a method-owned package:
