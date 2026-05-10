@@ -2,6 +2,25 @@
 
 This package owns the ready DistilBERT full fine-tuning method.
 
+File responsibilities:
+
+```text
+args.py     CLI arguments for this method.
+config.py   DistilBERT full-FT resolved config and setup-failure config.
+data.py     HateXplain split lookup, filtering, and tokenization glue.
+train.py    Runtime orchestration only.
+```
+
+Shared method-agnostic behavior lives outside this package:
+
+```text
+src/methods/common.py     shared method contract and output/test policy
+src/methods/hf_common.py  Hugging Face Trainer utilities
+```
+
+This keeps `train.py` readable and prevents future methods from copying a
+single large runner.
+
 Run through the shared experiment catalog whenever possible:
 
 ```bash

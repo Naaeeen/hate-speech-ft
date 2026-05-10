@@ -444,7 +444,11 @@ def find_existing_run_artifacts(output_dir: str | Path) -> list[Path]:
 
 
 def validate_output_dir_for_run(output_dir: str | Path, *, overwrite: bool) -> None:
-    artifacts = find_existing_run_artifacts(output_dir)
+    output_path = Path(output_dir)
+    if output_path.exists() and not output_path.is_dir():
+        raise ValueError(f"Output path exists but is not a directory: {output_path}")
+
+    artifacts = find_existing_run_artifacts(output_path)
     if artifacts and not overwrite:
         preview = ", ".join(path.name for path in artifacts[:5])
         raise ValueError(

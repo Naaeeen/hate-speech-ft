@@ -122,6 +122,14 @@ class MethodCommonTests(unittest.TestCase):
                 validate_output_dir_for_run(output_dir, overwrite=False)
             validate_output_dir_for_run(output_dir, overwrite=True)
 
+    def test_output_dir_guard_rejects_existing_file_path(self):
+        with TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "not-a-directory"
+            output_path.write_text("occupied", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "not a directory"):
+                validate_output_dir_for_run(output_path, overwrite=False)
+
     def test_test_evaluation_policy_allows_only_final_stage(self):
         with self.assertRaises(ValueError):
             validate_test_evaluation_policy(search_stage="tuning", run_test=True)

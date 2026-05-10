@@ -51,7 +51,11 @@ python -m py_compile \
   src/aggregate_results.py \
   src/colab/experiment_launcher.py \
   src/methods/common.py \
+  src/methods/hf_common.py \
   src/methods/_template/train.py \
+  src/methods/distilbert_full/args.py \
+  src/methods/distilbert_full/config.py \
+  src/methods/distilbert_full/data.py \
   src/utils/wandb_config.py
 ```
 

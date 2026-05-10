@@ -18,6 +18,7 @@ Shared method utilities live in:
 
 ```text
 src/methods/common.py
+src/methods/hf_common.py
 ```
 
 Copyable starter code lives in:
@@ -33,8 +34,14 @@ inside `src/methods/distilbert_full/train.py`.
 
 `common.py` is intentionally method-agnostic. Use it for shared CLI arguments,
 tracking config, checkpoint policy metadata, output directory protection, and
-test-evaluation policy validation. Do not put model architecture, Hugging Face
-Trainer setup, PEFT code, TF-IDF vectorizers, or Bi-LSTM modules in common.
+test-evaluation policy validation.
+
+`hf_common.py` is for Hugging Face Trainer utilities that can be shared across
+full fine-tuning, frozen-backbone, partial fine-tuning, LoRA, LP-FT, and other
+Transformer methods.
+
+Do not put model architecture, PEFT adapter choices, TF-IDF vectorizers, or
+Bi-LSTM modules in common.
 
 ## Adding A Method
 
