@@ -27,6 +27,11 @@ logs/
 wandb/
 wandb-key.txt
 
+# Local research notes / source planning drafts
+Abstract.txt
+deep-research-report-setup.md
+hyperparameter_policy.txt
+
 # OS
 .DS_Store
 Thumbs.db
