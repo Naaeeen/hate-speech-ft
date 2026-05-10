@@ -48,8 +48,6 @@ Run the setup cells, then use the experiment launcher widget.
   method onboarding contract.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
-- [Deep research protocol](deep-research-report-setup.md): research rationale
-  for the mixed hyperparameter strategy.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
   of how a teammate should use the repo from start to finish.
 - [Docs index](docs/README.md): durable project docs and what each one is for.
@@ -121,6 +119,10 @@ src/
 tests/
   test_*.py                     # data, command, W&B, and runner tests
 ```
+
+`src/methods/common.py` contains method-agnostic helpers for shared CLI
+arguments, common tracking config, output-dir protection, and final-test policy
+validation. New methods should reuse it instead of duplicating those contracts.
 
 ## Setup
 
@@ -414,6 +416,16 @@ src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
 src/methods/distilbert_lora/train.py
 ```
+
+Start by copying:
+
+```text
+src/methods/_template/
+```
+
+Then update the copied package defaults and implement the method-specific
+training logic. The template already imports `src.methods.common` and exposes
+the shared CLI contract expected by `configs/experiments.json` and Colab.
 
 Then register the method in:
 

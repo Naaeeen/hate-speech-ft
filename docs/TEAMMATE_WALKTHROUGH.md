@@ -209,11 +209,21 @@ python -m unittest discover -v
 
 Sam wants to implement LoRA later. Sam does not edit the full fine-tuning script.
 
-Sam creates:
+Sam first copies the method template:
+
+```text
+src/methods/_template/
+```
+
+to:
 
 ```text
 src/methods/distilbert_lora/train.py
 ```
+
+The copied `train.py` should keep the `src.methods.common` helpers for shared
+arguments, tracking config, output safety, and final-test policy checks. Sam
+then implements only the LoRA-specific model setup and training logic.
 
 Sam reads:
 

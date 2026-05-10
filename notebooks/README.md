@@ -32,6 +32,10 @@ src/methods/distilbert_full/train.py
 src/methods/<method>/train.py
 ```
 
+For new methods, copy `src/methods/_template/` and keep shared boilerplate in
+`src.methods.common`. The notebook should only select registered experiments;
+it should not own method code.
+
 Then register runnable experiments in:
 
 ```text

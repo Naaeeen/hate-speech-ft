@@ -252,13 +252,39 @@ errors.
 
 ## Adding A New Method
 
-1. Create a separate method script, for example:
+1. Copy the method template:
+
+```text
+src/methods/_template/
+```
+
+to a method-owned package, for example:
+
+```text
+src/methods/distilbert_lora/
+```
+
+2. Update the copied `train.py` defaults:
+
+```python
+DEFAULT_METHOD_ID = "lora"
+DEFAULT_METHOD_PACKAGE = "distilbert_lora"
+DEFAULT_DESCRIPTION = "DistilBERT LoRA fine-tuning."
+```
+
+3. Keep using `src.methods.common` for shared arguments, tracking config,
+   output-dir safety, and final-test policy validation.
+
+4. Add method-specific arguments and implementation. Do not put method-specific
+   model code in `src/methods/common.py`.
+
+5. Create or update the separate method script, for example:
 
 ```text
 src/methods/distilbert_lora/train.py
 ```
 
-2. Make it accept shared arguments when possible:
+6. Make it accept shared arguments when possible:
 
 ```text
 --method
@@ -278,17 +304,27 @@ src/methods/distilbert_lora/train.py
 --wandb_mode
 --wandb_log_model
 --run_test
+--max_length
+--weight_decay
+--warmup_ratio
+--max_grad_norm
+--optim
+--lr_scheduler_type
 --eval_strategy
 --save_strategy
+--logging_strategy
+--logging_steps
+--eval_steps
+--save_steps
 --save_total_limit
 --load_best_model_at_end
 --metric_for_best_model
 --no_save_final_model
 ```
 
-3. Use shared data preprocessing from `src/data`.
+7. Use shared data preprocessing from `src/data`.
 
-4. Log comparable W&B keys:
+8. Log comparable W&B keys:
 
 ```text
 method
@@ -312,9 +348,9 @@ status
 model_selection
 ```
 
-5. Add an entry to `configs/experiments.json`.
+9. Add an entry to `configs/experiments.json`.
 
-6. Mark it `planned` while the script is missing. Mark it `ready` only after the
+10. Mark it `planned` while the script is missing. Mark it `ready` only after the
    script exists and a smoke run works.
 
 Only final runs should use `--run_test`. Smoke, quick, and tuning runs must

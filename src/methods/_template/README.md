@@ -27,3 +27,7 @@ runtime.json
 result_summary.json
 failure_summary.json
 ```
+
+The template imports `src.methods.common` for shared arguments, config metadata,
+output directory protection, and final-test policy checks. Keep method-specific
+model code in the copied method package, not in common.

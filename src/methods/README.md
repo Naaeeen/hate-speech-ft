@@ -14,10 +14,29 @@ src/methods/distilbert_lora/train.py
 src/methods/distilbert_lp_ft/train.py
 ```
 
+Shared method utilities live in:
+
+```text
+src/methods/common.py
+```
+
+Copyable starter code lives in:
+
+```text
+src/methods/_template/
+```
+
 ## Rule
 
 One method family should have its own script or package. Do not put every method
 inside `src/methods/distilbert_full/train.py`.
+
+`common.py` is intentionally method-agnostic. Use it for shared CLI arguments,
+tracking config, checkpoint policy metadata, output directory protection, and
+test-evaluation policy validation. Do not put model architecture, Hugging Face
+Trainer setup, PEFT code, TF-IDF vectorizers, or Bi-LSTM modules in common.
+
+## Adding A Method
 
 For a new method, copy the starter template:
 
@@ -32,6 +51,41 @@ src/methods/distilbert_lora/
 ```
 
 Then edit that copied `train.py`, not the template itself.
+
+Update the copied file's defaults:
+
+```python
+DEFAULT_METHOD_ID = "lora"
+DEFAULT_METHOD_PACKAGE = "distilbert_lora"
+DEFAULT_DESCRIPTION = "DistilBERT LoRA fine-tuning."
+```
+
+Keep the common import:
+
+```python
+from src.methods.common import (
+    add_common_method_arguments,
+    build_common_experiment_config,
+    validate_output_dir_for_run,
+    validate_test_evaluation_policy,
+)
+```
+
+Add method-specific arguments after `add_common_method_arguments(...)`, then
+implement only the method-specific data loading, training, evaluation, and model
+saving blocks.
+
+Register the method in `configs/experiments.json` as `planned` first. Change it
+to `ready` only after a smoke run works.
+
+Useful checks:
+
+```bash
+python src/run_experiment.py --validate_protocol
+python src/run_experiment.py --list --include_planned
+python src/run_experiment.py --experiment <experiment_id> --dry_run
+python -m unittest discover -v
+```
 
 ## Shared Arguments
 
@@ -57,8 +111,18 @@ Where possible, method scripts should accept:
 --wandb_mode
 --wandb_log_model
 --run_test
+--max_length
+--weight_decay
+--warmup_ratio
+--max_grad_norm
+--optim
+--lr_scheduler_type
 --eval_strategy
 --save_strategy
+--logging_strategy
+--logging_steps
+--eval_steps
+--save_steps
 --save_total_limit
 --load_best_model_at_end
 --metric_for_best_model
