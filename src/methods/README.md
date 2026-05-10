@@ -19,32 +19,6 @@ src/methods/distilbert_lp_ft/train.py
 One method family should have its own script or package. Do not put every method
 inside `src/methods/distilbert_full/train.py`.
 
-## Fast Path
-
-Create a new method package with the scaffold command:
-
-```bash
-python src/methods/scaffold.py \
-  --method-package distilbert_lora \
-  --method-id lora \
-  --family transformer-peft \
-  --description "DistilBERT LoRA fine-tuning."
-```
-
-This creates:
-
-```text
-src/methods/distilbert_lora/train.py
-src/methods/distilbert_lora/README.md
-src/methods/distilbert_lora/__init__.py
-```
-
-The command also prints a `configs/experiments.json` snippet. Paste that under
-the top-level `experiments` object, keep it `planned` until a smoke run works,
-then change it to `ready`.
-
-For manual setup, copy `src/methods/_template/train.py`.
-
 ## Shared Arguments
 
 Where possible, method scripts should accept:
@@ -69,18 +43,8 @@ Where possible, method scripts should accept:
 --wandb_mode
 --wandb_log_model
 --run_test
---max_length
---weight_decay
---warmup_ratio
---max_grad_norm
---optim
---lr_scheduler_type
 --eval_strategy
 --save_strategy
---logging_strategy
---logging_steps
---eval_steps
---save_steps
 --save_total_limit
 --load_best_model_at_end
 --metric_for_best_model
