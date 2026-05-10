@@ -31,6 +31,16 @@ python src/run_experiment.py --list --include_planned
 `planned` means the config template exists, but the method script does not yet.
 Trying to run a planned experiment fails clearly.
 
+Validate the protocol before a Colab batch:
+
+```bash
+python src/run_experiment.py --validate_protocol
+```
+
+This checks the catalog, method templates, search spaces, trial caps, shared
+fixed settings, ready script paths, and the final-only test policy against the
+final experiment protocol.
+
 ## Preview Before Running
 
 ```bash
@@ -126,6 +136,35 @@ Trial caps from `configs/search_spaces.json` are enforced by default. Use
 research protocol. The CLI also refuses HPO suggestions from smoke experiments
 unless `--allow_smoke_hpo` is passed.
 
+## Confirmation And Final Seed Runs
+
+After HPO aggregation identifies a selected config, use seed-run generation
+rather than hand-copying seed commands:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs confirm \
+  --set learning_rate=2e-5
+```
+
+Confirmation runs use `shared_fixed.seeds_confirm` from
+`configs/search_spaces.json` and keep `run_test=false`.
+
+For final reporting:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs final \
+  --set learning_rate=2e-5
+```
+
+Final runs use `shared_fixed.seeds_final`, set `search_stage=final`, and add
+`--run_test`. The generated commands keep the same `config_hash` for the fixed
+hyperparameter config across HPO, confirmation, and final seeds; aggregate final
+results by `method config_hash`.
+
 ## Colab
 
 Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb`.
@@ -201,12 +240,15 @@ python src/aggregate_results.py outputs/final \
   --group_by method config_hash \
   --metric eval_f1_macro \
   --metric test_f1_macro \
-  --metric training_time_sec
+  --metric training_time_sec \
+  --metric trainable_pct
 ```
 
 The `std` field is sample standard deviation when at least two completed runs
 exist in the group. Failed runs are counted in the group but excluded from
-metric means.
+metric means. Aggregation also reports `failed_oom` per group and
+`failed_oom_runs` at the top level when failure messages indicate out-of-memory
+errors.
 
 ## Adding A New Method
 
@@ -316,6 +358,7 @@ Templates for later scripts:
 
 - `tfidf_logreg_template`
 - `bilstm_template`
+- `random_init_distilbert_template`
 - `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`

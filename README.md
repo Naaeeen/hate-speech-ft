@@ -19,6 +19,7 @@ If you only want to run the current ready experiment:
 
 ```bash
 python src/run_experiment.py --list
+python src/run_experiment.py --validate_protocol
 python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
 python src/run_experiment.py --experiment distilbert_full_smoke
 ```
@@ -78,6 +79,7 @@ Planned templates exist for:
 
 - `tfidf_logreg_template`
 - `bilstm_template`
+- `random_init_distilbert_template`
 - `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
@@ -224,6 +226,32 @@ The CLI refuses to create HPO trials from smoke experiments unless
 `--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
 checks.
 
+Before running a batch, validate the catalog and HPO protocol:
+
+```bash
+python src/run_experiment.py --validate_protocol
+```
+
+After selecting a fixed config from HPO results, generate confirmation or final
+seed commands from the configured seed policy:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs confirm \
+  --set learning_rate=2e-5
+
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs final \
+  --set learning_rate=2e-5
+```
+
+`confirm` uses seeds `42,43` and validation only. `final` uses seeds
+`42,43,44` and adds `--run_test`. All generated seed runs share one
+`config_hash` for the selected fixed hyperparameter config, so HPO,
+confirmation, and final aggregation can be traced by `method config_hash`.
+
 After running several trials or final seeds, aggregate local summaries:
 
 ```bash
@@ -231,7 +259,8 @@ python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
   --group_by method search_stage \
   --metric eval_f1_macro \
-  --metric training_time_sec
+  --metric training_time_sec \
+  --metric trainable_pct
 ```
 
 For final test reporting, include `--metric test_f1_macro` and group by the

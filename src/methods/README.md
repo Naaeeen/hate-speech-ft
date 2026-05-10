@@ -7,6 +7,7 @@ Examples:
 ```text
 src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
+src/methods/distilbert_random_init/train.py
 src/methods/distilbert_frozen/train.py
 src/methods/distilbert_partial/train.py
 src/methods/distilbert_lora/train.py
@@ -62,8 +63,9 @@ Method-specific scripts can add their own arguments:
 TF-IDF: ngram_range, min_df, max_features, C, class_weight
 Bi-LSTM: embedding_size, hidden_size, dropout, learning_rate, batch_size, epochs
 LoRA: lora_r, lora_alpha, lora_dropout, target_modules
-Partial FT: unfrozen_layers
+Partial FT: top_k_unfrozen_layers
 LP-FT: stage1_* and stage2_* settings
+Random-init DistilBERT: random initialization policy, learning_rate, epochs
 ```
 
 ## Required Data Policy

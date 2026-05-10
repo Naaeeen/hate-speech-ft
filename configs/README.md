@@ -99,6 +99,10 @@ Edit `search_spaces.json` when the team changes the HPO protocol:
 - `trial_caps`: maximum trials per method, enforced by `run_experiment.py`
 - `search_spaces`: method-specific knobs to sample
 
+`tfidf_logreg` is the CLI-default search-space name for method
+`tfidf-logreg`. `tfidf_lr` is kept as a protocol/report alias for the same
+TF-IDF + Logistic Regression space.
+
 Generate deterministic trial commands with:
 
 ```bash
@@ -113,6 +117,21 @@ setup checks and are blocked for HPO unless `--allow_smoke_hpo` is passed.
 HPO trial identity fields are launcher-managed: do not set `output_dir`,
 `trial_id`, `search_stage`, `hpo_seed`, or `config_hash` through `--set`.
 Use `--trial_output_root` or edit the catalog/search-space config instead.
+
+Generate confirmation and final seed commands from `shared_fixed.seeds_confirm`
+and `shared_fixed.seeds_final`:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs confirm \
+  --set learning_rate=2e-5
+
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs final \
+  --set learning_rate=2e-5
+```
 
 ## Status
 
@@ -149,6 +168,7 @@ distilbert_full_tuning
 distilbert_full_final_seed42
 lora_distilbert_template
 tfidf_logreg_template
+random_init_distilbert_template
 ```
 
 The default final seed policy is `42, 43, 44`, but the catalog currently only
@@ -161,6 +181,7 @@ After editing:
 
 ```bash
 python -c "import json; json.load(open('configs/experiments.json', encoding='utf-8')); print('ok')"
+python src/run_experiment.py --validate_protocol
 python src/run_experiment.py --list --include_planned
 python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
 python -m unittest discover -v
