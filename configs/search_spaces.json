@@ -19,6 +19,7 @@
     "seeds_final": [42, 43, 44]
   },
   "trial_caps": {
+    "tfidf_lr": 12,
     "tfidf_logreg": 12,
     "bilstm": 8,
     "random_init_distilbert": 4,
@@ -30,6 +31,11 @@
     "efficient_head_ft": 4
   },
   "search_spaces": {
+    "tfidf_lr": {
+      "ngram_range": [[1, 1], [1, 2], [1, 3]],
+      "C": [0.01, 0.1, 1.0, 10.0],
+      "min_df": [1, 2, 5]
+    },
     "tfidf_logreg": {
       "ngram_range": [[1, 1], [1, 2], [1, 3]],
       "C": [0.01, 0.1, 1.0, 10.0],
@@ -40,6 +46,10 @@
       "dropout": [0.1, 0.3, 0.5],
       "learning_rate": [0.0003, 0.001, 0.003]
     },
+    "random_init_distilbert": {
+      "learning_rate": [0.0001, 0.0002],
+      "num_train_epochs": [5, 10]
+    },
     "full_ft": {
       "learning_rate": [0.00001, 0.00002, 0.00003]
     },
@@ -48,7 +58,7 @@
       "num_train_epochs": [5, 10]
     },
     "partial_ft": {
-      "unfrozen_layers": [1, 2, 3],
+      "top_k_unfrozen_layers": [1, 2, 3],
       "learning_rate": [0.00001, 0.00002, 0.00003]
     },
     "lora": {
@@ -66,8 +76,11 @@
       "stage2_epochs": [2, 3]
     },
     "efficient_head_ft": {
+      "stage1_target_modules": [["q_lin", "v_lin"]],
+      "stage1_modules_to_save": [["pre_classifier", "classifier"]],
       "stage1_learning_rate": [0.0001, 0.0002],
       "stage1_lora_r": [4, 8],
+      "stage1_lora_alpha_rule": "alpha = 2 * r",
       "stage1_lora_dropout": [0.0, 0.1],
       "stage2_learning_rate": [0.00001, 0.00002],
       "stage2_epochs": [2, 3]

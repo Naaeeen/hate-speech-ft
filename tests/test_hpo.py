@@ -2,6 +2,7 @@ import unittest
 
 from src.experiments.hpo import (
     build_config_hash,
+    build_seed_run_overrides,
     build_trial_overrides,
     default_search_space_name,
     enumerate_search_space,
@@ -31,6 +32,17 @@ class HpoTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(first["lora_alpha"], 2 * first["lora_r"])
+
+    def test_sample_search_space_applies_stage1_lora_rule(self):
+        space = {
+            "stage1_learning_rate": [1e-4],
+            "stage1_lora_r": [4, 8],
+            "stage1_lora_alpha_rule": "alpha = 2 * r",
+        }
+
+        trial = sample_search_space(space, seed=42, trial_index=0)
+
+        self.assertEqual(trial["stage1_lora_alpha"], 2 * trial["stage1_lora_r"])
 
     def test_build_trial_overrides_adds_tracking_fields(self):
         trials = build_trial_overrides(
@@ -76,6 +88,21 @@ class HpoTests(unittest.TestCase):
         )
         self.assertEqual(len(trials), 3)
 
+    def test_build_seed_run_overrides_forces_full_data_without_sample_caps(self):
+        runs = build_seed_run_overrides(
+            base_experiment_id="distilbert_full_tuning",
+            method="full-ft",
+            seeds=[42],
+            output_root="outputs/final",
+            search_stage="final",
+        )
+
+        self.assertEqual(runs[0]["data_fraction"], 1.0)
+        self.assertIsNone(runs[0]["max_train_samples"])
+        self.assertIsNone(runs[0]["max_eval_samples"])
+        self.assertIsNone(runs[0]["max_test_samples"])
+        self.assertIs(runs[0]["run_test"], True)
+
     def test_enumerate_search_space_expands_combinations(self):
         combinations = enumerate_search_space(
             {
@@ -88,11 +115,38 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(len(combinations), 2)
         self.assertEqual({item["lora_alpha"] for item in combinations}, {8})
 
+    def test_enumerate_search_space_applies_stage1_lora_rule(self):
+        combinations = enumerate_search_space(
+            {
+                "stage1_learning_rate": [1e-4, 2e-4],
+                "stage1_lora_r": [4],
+                "stage1_lora_alpha_rule": "alpha = 2 * r",
+            }
+        )
+
+        self.assertEqual(len(combinations), 2)
+        self.assertEqual({item["stage1_lora_alpha"] for item in combinations}, {8})
+
     def test_build_config_hash_is_stable(self):
         first = build_config_hash({"b": 2, "a": 1})
         second = build_config_hash({"a": 1, "b": 2})
 
         self.assertEqual(first, second)
+
+    def test_config_hash_payload_excludes_run_identity_seed(self):
+        from src.experiments.hpo import build_config_hash_payload
+
+        payload = build_config_hash_payload(
+            {
+                "learning_rate": 2e-5,
+                "seed": 42,
+                "run_test": True,
+                "trial_id": "trial001",
+                "output_dir": "outputs/trial001",
+            }
+        )
+
+        self.assertEqual(payload, {"learning_rate": 2e-5})
 
     def test_merge_trial_overrides_lets_user_override_global_switches_and_rehashes(self):
         trial = {
@@ -129,6 +183,21 @@ class HpoTests(unittest.TestCase):
                 base_args={},
                 user_overrides={"config_hash": "manual"},
                 trial_overrides={"trial_id": "trial001"},
+            )
+        with self.assertRaises(ValueError):
+            merge_trial_overrides(
+                base_args={},
+                user_overrides={"seed": 777},
+                trial_overrides={"trial_id": "trial001"},
+            )
+        with self.assertRaises(ValueError):
+            merge_trial_overrides(
+                base_args={},
+                user_overrides={"data_fraction": 0.2},
+                trial_overrides={"trial_id": "trial001"},
+                protected_user_override_keys={
+                    "data_fraction",
+                },
             )
 
     def test_overwrite_output_dir_does_not_change_config_hash(self):

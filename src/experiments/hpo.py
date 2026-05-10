@@ -14,6 +14,8 @@ TRIAL_METADATA_KEYS = {
     "search_stage",
     "trial_id",
     "hpo_seed",
+    "seed",
+    "run_test",
     "output_dir",
     "config_hash",
     "overwrite_output_dir",
@@ -22,8 +24,17 @@ PROTECTED_USER_OVERRIDE_KEYS = {
     "search_stage",
     "trial_id",
     "hpo_seed",
+    "seed",
     "output_dir",
     "config_hash",
+}
+SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS = PROTECTED_USER_OVERRIDE_KEYS | {
+    "run_test",
+    "data_fraction",
+    "data_fraction_seed",
+    "max_train_samples",
+    "max_eval_samples",
+    "max_test_samples",
 }
 
 
@@ -60,18 +71,36 @@ def build_config_hash_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def apply_deferred_rules(
+    overrides: dict[str, Any],
+    deferred_rules: dict[str, Any],
+) -> dict[str, Any]:
+    resolved = dict(overrides)
+    if deferred_rules.get("lora_alpha_rule") == "alpha = 2 * r" and "lora_r" in resolved:
+        resolved["lora_alpha"] = 2 * int(resolved["lora_r"])
+    if (
+        deferred_rules.get("stage1_lora_alpha_rule") == "alpha = 2 * r"
+        and "stage1_lora_r" in resolved
+    ):
+        resolved["stage1_lora_alpha"] = 2 * int(resolved["stage1_lora_r"])
+    return resolved
+
+
 def merge_trial_overrides(
     *,
     base_args: dict[str, Any],
     user_overrides: dict[str, Any],
     trial_overrides: dict[str, Any],
+    protected_user_override_keys: set[str] | None = None,
 ) -> dict[str, Any]:
-    protected_user_keys = sorted(PROTECTED_USER_OVERRIDE_KEYS & set(user_overrides))
+    protected_keys = protected_user_override_keys or PROTECTED_USER_OVERRIDE_KEYS
+    protected_user_keys = sorted(protected_keys & set(user_overrides))
     if protected_user_keys:
         blocked = ", ".join(protected_user_keys)
         raise ValueError(
-            f"HPO trial identity fields are managed by the launcher: {blocked}. "
-            "Use --trial_output_root, --hpo_seed, or the experiment catalog instead."
+            f"Run identity/protocol fields are managed by the launcher: {blocked}. "
+            "Use --trial_output_root, --seed_output_root, --hpo_seed, or the "
+            "experiment catalog instead."
         )
 
     merged = {**trial_overrides, **user_overrides}
@@ -84,6 +113,31 @@ def get_trial_cap(config: dict[str, Any], search_space_name: str) -> int | None:
     caps = config.get("trial_caps") or {}
     cap = caps.get(search_space_name)
     return int(cap) if cap is not None else None
+
+
+def get_seed_policy(config: dict[str, Any], stage: str) -> list[int]:
+    policy_key_by_stage = {
+        "confirm": "seeds_confirm",
+        "final": "seeds_final",
+    }
+    try:
+        policy_key = policy_key_by_stage[stage]
+    except KeyError as exc:
+        valid = ", ".join(sorted(policy_key_by_stage))
+        raise ValueError(f"Unsupported seed-run stage '{stage}'. Valid: {valid}.") from exc
+
+    seeds = (config.get("shared_fixed") or {}).get(policy_key)
+    if not seeds:
+        raise ValueError(f"Missing shared_fixed.{policy_key} in HPO config.")
+    return [int(seed) for seed in seeds]
+
+
+def validate_seed_run_base_stage(stage: str) -> None:
+    if stage != "tuning":
+        raise ValueError(
+            "Seed-run generation must start from a tuning experiment so smoke "
+            "sample caps and final-only test flags are not inherited."
+        )
 
 
 def shared_fixed_command_overrides(config: dict[str, Any]) -> dict[str, Any]:
@@ -122,10 +176,7 @@ def sample_search_space(
             continue
         overrides[key] = _choose_value(rng, spec)
 
-    if deferred_rules.get("lora_alpha_rule") == "alpha = 2 * r" and "lora_r" in overrides:
-        overrides["lora_alpha"] = 2 * int(overrides["lora_r"])
-
-    return overrides
+    return apply_deferred_rules(overrides, deferred_rules)
 
 
 def enumerate_search_space(search_space: dict[str, Any]) -> list[dict[str, Any]]:
@@ -151,12 +202,7 @@ def enumerate_search_space(search_space: dict[str, Any]) -> list[dict[str, Any]]
     combinations = []
     for values in product(*values_by_key):
         overrides = dict(zip(keys, values))
-        if (
-            deferred_rules.get("lora_alpha_rule") == "alpha = 2 * r"
-            and "lora_r" in overrides
-        ):
-            overrides["lora_alpha"] = 2 * int(overrides["lora_r"])
-        combinations.append(overrides)
+        combinations.append(apply_deferred_rules(overrides, deferred_rules))
     return combinations
 
 
@@ -207,6 +253,40 @@ def build_trial_overrides(
         )
         trials.append(overrides)
     return trials
+
+
+def build_seed_run_overrides(
+    *,
+    base_experiment_id: str,
+    method: str,
+    seeds: list[int],
+    output_root: str,
+    search_stage: str,
+    fixed_overrides: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if search_stage not in {"confirm", "final"}:
+        raise ValueError("--suggest_seed_runs supports only confirm or final.")
+
+    method_part = default_search_space_name(method)
+    fixed_overrides = dict(fixed_overrides or {})
+    seed_runs = []
+    for seed in seeds:
+        trial_id = f"{base_experiment_id}__{method_part}__{search_stage}_seed{seed}"
+        overrides = {
+            **fixed_overrides,
+            "search_stage": search_stage,
+            "seed": seed,
+            "data_fraction": 1.0,
+            "max_train_samples": None,
+            "max_eval_samples": None,
+            "max_test_samples": None,
+            "trial_id": trial_id,
+            "output_dir": f"{output_root.rstrip('/')}/{trial_id}",
+        }
+        if search_stage == "final":
+            overrides["run_test"] = True
+        seed_runs.append(overrides)
+    return seed_runs
 
 
 def get_search_space(config: dict[str, Any], name: str) -> dict[str, Any]:

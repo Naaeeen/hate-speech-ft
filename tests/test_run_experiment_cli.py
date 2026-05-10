@@ -13,6 +13,12 @@ class RunExperimentCliTests(unittest.TestCase):
             text=True,
         )
 
+    def test_validate_protocol_cli_passes(self):
+        completed = self.run_cli("--validate_protocol")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Protocol validation: PASS", completed.stdout)
+
     def test_hpo_set_overrides_global_switches(self):
         completed = self.run_cli(
             "--experiment",
@@ -46,7 +52,7 @@ class RunExperimentCliTests(unittest.TestCase):
         )
 
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("HPO trial identity fields", completed.stderr)
+        self.assertIn("managed by the launcher", completed.stderr)
 
     def test_hpo_rejects_config_hash_override_with_clear_error(self):
         completed = self.run_cli(
@@ -96,6 +102,115 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIsNotNone(base_hash)
         self.assertIsNotNone(overwrite_hash)
         self.assertEqual(base_hash.group(1), overwrite_hash.group(1))
+
+    def test_suggest_final_seed_runs_uses_final_seeds_and_test_policy(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "learning_rate=2e-5",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.count("--search_stage final"), 3)
+        self.assertEqual(completed.stdout.count("--run_test"), 3)
+        self.assertIn("--seed 42", completed.stdout)
+        self.assertIn("--seed 43", completed.stdout)
+        self.assertIn("--seed 44", completed.stdout)
+        hashes = re.findall(r"--config_hash ([0-9a-f]+)", completed.stdout)
+        self.assertEqual(len(hashes), 3)
+        self.assertEqual(len(set(hashes)), 1)
+
+    def test_seed_run_hash_matches_hpo_hash_for_same_fixed_config(self):
+        hpo = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "full_ft",
+            "--python",
+            "python",
+        )
+        final = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "learning_rate=2e-5",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(hpo.returncode, 0, hpo.stderr)
+        self.assertEqual(final.returncode, 0, final.stderr)
+        hpo_hash = re.search(r"--config_hash ([0-9a-f]+)", hpo.stdout)
+        final_hash = re.search(r"--config_hash ([0-9a-f]+)", final.stdout)
+        self.assertIsNotNone(hpo_hash)
+        self.assertIsNotNone(final_hash)
+        self.assertEqual(hpo_hash.group(1), final_hash.group(1))
+
+    def test_suggest_seed_runs_rejects_seed_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "seed=777",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("seed", completed.stderr)
+
+    def test_suggest_seed_runs_rejects_data_fraction_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "data_fraction=0.2",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("data_fraction", completed.stderr)
+
+    def test_suggest_seed_runs_rejects_smoke_and_final_bases(self):
+        smoke = self.run_cli(
+            "--experiment",
+            "distilbert_full_smoke",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "learning_rate=2e-5",
+            "--python",
+            "python",
+        )
+        final = self.run_cli(
+            "--experiment",
+            "distilbert_full_final_seed42",
+            "--suggest_seed_runs",
+            "confirm",
+            "--set",
+            "learning_rate=2e-5",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(smoke.returncode, 2)
+        self.assertEqual(final.returncode, 2)
+        self.assertIn("tuning experiment", smoke.stderr)
+        self.assertIn("tuning experiment", final.stderr)
 
     def test_allow_smoke_hpo_marks_smoke_stage(self):
         completed = self.run_cli(
