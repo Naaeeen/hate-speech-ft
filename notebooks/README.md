@@ -16,10 +16,12 @@ The notebook should:
 2. Clone or update the repo.
 3. Install `requirements-colab.txt`.
 4. Check environment versions.
-5. Load `ExperimentLauncher`.
-6. Preview and run catalog experiments.
-7. Optionally preview HPO trial commands from `configs/search_spaces.json`.
-8. Aggregate finished run summaries with `launcher.aggregate_results()`.
+5. Run `python src/run_experiment.py --validate_protocol`.
+6. Load `ExperimentLauncher`.
+7. Preview and run catalog experiments.
+8. Optionally preview HPO, confirmation, or final seed commands from
+   `configs/search_spaces.json`.
+9. Aggregate finished run summaries with `launcher.aggregate_results()`.
 
 ## Do Not Put Training Logic Here
 
@@ -43,6 +45,12 @@ shared experiment.
 When `Trials > 0`, do not put `output_dir`, `trial_id`, `search_stage`,
 `hpo_seed`, or `config_hash` in the override box. Trial identity is generated
 from the selected experiment, search space, HPO seed, and Trial root.
+
+For confirmation or final seed batches, leave `Trials` at `0` and set
+`Seed runs` to `confirm` or `final`. Confirmation uses validation only. Final
+seed runs add `--run_test` and should be used only after the selected config is
+frozen. Leave `Seed root` blank to use the stage-specific default Drive folder,
+or set it explicitly for a custom batch folder.
 
 ## W&B Secret
 

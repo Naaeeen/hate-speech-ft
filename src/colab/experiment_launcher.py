@@ -11,13 +11,17 @@ from src.experiments.aggregate_results import (
 )
 from src.experiments.hpo import (
     DEFAULT_SEARCH_SPACE_PATH,
+    build_seed_run_overrides,
     build_trial_overrides,
     default_search_space_name,
+    get_seed_policy,
     get_trial_cap,
     get_search_space,
     load_hpo_config,
     merge_trial_overrides,
+    SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
     shared_fixed_command_overrides,
+    validate_seed_run_base_stage,
 )
 from src.experiments.registry import (
     DEFAULT_REGISTRY_PATH,
@@ -116,6 +120,17 @@ class ExperimentLauncher:
             description="Trial root",
             layout=widgets.Layout(width="520px"),
         )
+        self.seed_run_stage = widgets.Dropdown(
+            options=["none", "confirm", "final"],
+            value="none",
+            description="Seed runs",
+        )
+        self.seed_output_root = widgets.Text(
+            value="",
+            placeholder="blank uses confirm or final output root",
+            description="Seed root",
+            layout=widgets.Layout(width="520px"),
+        )
         self.aggregate_input = widgets.Text(
             value="",
             placeholder="blank follows Trial root",
@@ -148,6 +163,7 @@ class ExperimentLauncher:
                 self.overrides,
                 widgets.HBox([self.suggest_trials, self.search_space, self.hpo_seed]),
                 self.trial_output_root,
+                widgets.HBox([self.seed_run_stage, self.seed_output_root]),
                 widgets.HBox([self.aggregate_input, self.aggregate_group_by]),
                 widgets.HBox([self.aggregate_output, self.aggregate_metrics]),
             ]
@@ -169,6 +185,8 @@ class ExperimentLauncher:
             "search_space": self.search_space.value or None,
             "hpo_seed": self.hpo_seed.value,
             "trial_output_root": self.trial_output_root.value,
+            "seed_run_stage": self.seed_run_stage.value,
+            "seed_output_root": self.seed_output_root.value,
         }
 
     def get_aggregate_config(self) -> dict[str, Any]:
@@ -210,8 +228,11 @@ class ExperimentLauncher:
         )
 
     def preview_command(self) -> str:
-        if int(self.get_config()["suggest_trials"] or 0) > 0:
+        config = self.get_config()
+        if int(config["suggest_trials"] or 0) > 0:
             return "\n".join(self.preview_trial_commands())
+        if config.get("seed_run_stage") not in {None, "none"}:
+            return "\n".join(self.preview_seed_run_commands())
         command = self.build_command()
         rendered = format_command(command)
         print(rendered)
@@ -267,15 +288,69 @@ class ExperimentLauncher:
             )
         return commands
 
+    def build_seed_run_commands(self) -> list[list[str]]:
+        config = self.get_config()
+        seed_stage = config.get("seed_run_stage")
+        if seed_stage == "none":
+            return []
+
+        spec = self.registry.get(config["experiment"])
+        validate_seed_run_base_stage(spec.stage)
+        user_overrides = dict(config["overrides"])
+        if config.get("overwrite_output_dir"):
+            user_overrides["overwrite_output_dir"] = True
+        seed_overrides = build_seed_run_overrides(
+            base_experiment_id=spec.experiment_id,
+            method=spec.method,
+            seeds=get_seed_policy(self.search_config, seed_stage),
+            output_root=config["seed_output_root"]
+            or f"/content/drive/MyDrive/hate_speech_ft/outputs/{seed_stage}",
+            search_stage=seed_stage,
+            fixed_overrides=shared_fixed_command_overrides(self.search_config),
+        )
+        commands = []
+        for overrides in seed_overrides:
+            merged_overrides = merge_trial_overrides(
+                base_args=spec.args,
+                user_overrides=user_overrides,
+                trial_overrides=overrides,
+                protected_user_override_keys=SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
+            )
+            commands.append(
+                build_experiment_command(
+                    spec,
+                    overrides=merged_overrides,
+                    use_wandb=config["use_wandb"],
+                    wandb_entity=config["wandb_entity"],
+                    wandb_project=config["wandb_project"],
+                    wandb_group=config["wandb_group"],
+                    wandb_tags=config["wandb_tags"],
+                    wandb_mode=config["wandb_mode"],
+                    wandb_log_model=config["wandb_log_model"],
+                )
+            )
+        return commands
+
     def preview_trial_commands(self) -> list[str]:
         rendered_commands = [format_command(command) for command in self.build_trial_commands()]
         for rendered in rendered_commands:
             print(rendered)
         return rendered_commands
 
+    def preview_seed_run_commands(self) -> list[str]:
+        rendered_commands = [
+            format_command(command) for command in self.build_seed_run_commands()
+        ]
+        for rendered in rendered_commands:
+            print(rendered)
+        return rendered_commands
+
     def run(self):
-        if int(self.get_config()["suggest_trials"] or 0) > 0:
+        config = self.get_config()
+        if int(config["suggest_trials"] or 0) > 0:
             return self.run_trial_commands()
+        if config.get("seed_run_stage") not in {None, "none"}:
+            return self.run_seed_run_commands()
         command = self.build_command()
         print(format_command(command))
         return subprocess.run(command, check=True, cwd=REPO_ROOT)
@@ -283,6 +358,13 @@ class ExperimentLauncher:
     def run_trial_commands(self):
         results = []
         for command in self.build_trial_commands():
+            print(format_command(command))
+            results.append(subprocess.run(command, check=True, cwd=REPO_ROOT))
+        return results
+
+    def run_seed_run_commands(self):
+        results = []
+        for command in self.build_seed_run_commands():
             print(format_command(command))
             results.append(subprocess.run(command, check=True, cwd=REPO_ROOT))
         return results

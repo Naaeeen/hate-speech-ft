@@ -18,6 +18,7 @@ for:
 - setting W&B entity/project/mode
 - writing temporary override lines
 - suggesting HPO trial commands from `configs/search_spaces.json`
+- suggesting confirmation and final seed commands from the configured seed policy
 - previewing the exact command
 - running the command
 
@@ -68,6 +69,26 @@ launcher.preview_trial_commands()
 
 This prints deterministic commands with unique `trial_id` and `output_dir`.
 Call `launcher.run_trial_commands()` only after reviewing the preview.
+
+## Confirmation And Final Seed Suggestions
+
+After selecting a fixed config from HPO aggregation, leave `Trials` at `0` and
+set `Seed runs` to `confirm` or `final`.
+
+- `confirm` uses `seeds_confirm` and validation only.
+- `final` uses `seeds_final`, sets `search_stage=final`, and adds `--run_test`.
+
+The override box should contain only the selected config's hyperparameters, for
+example:
+
+```text
+learning_rate=2e-5
+```
+
+The launcher owns seed-run `trial_id`, `output_dir`, `search_stage`, and
+`config_hash` so final seed outputs aggregate cleanly by `method config_hash`.
+Leave `Seed root` blank to use a stage-specific Drive path, or set it when a
+batch should go somewhere else.
 
 After a batch finishes in Drive-backed outputs, aggregate from a notebook cell:
 

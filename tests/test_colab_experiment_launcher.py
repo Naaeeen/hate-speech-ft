@@ -65,6 +65,35 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("bf16", commands[0])
         self.assertIn("--overwrite_output_dir", commands[0])
 
+    def test_build_seed_run_commands_uses_final_seed_policy(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_tuning",
+            "overrides": {"learning_rate": 2e-5},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "final",
+            "seed_output_root": "outputs/final",
+        }
+
+        commands = launcher.build_seed_run_commands()
+
+        self.assertEqual(len(commands), 3)
+        self.assertIn("--search_stage", commands[0])
+        self.assertIn("final", commands[0])
+        self.assertIn("--run_test", commands[0])
+        self.assertIn("--seed", commands[1])
+        self.assertIn("43", commands[1])
+
     def test_trial_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)
         launcher.registry = load_experiment_registry()
@@ -88,12 +117,66 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             launcher.build_trial_commands()
 
+    def test_seed_run_commands_reject_smoke_base(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_smoke",
+            "overrides": {"learning_rate": 2e-5},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "final",
+            "seed_output_root": "outputs/final",
+        }
+
+        with self.assertRaises(ValueError):
+            launcher.build_seed_run_commands()
+
+    def test_seed_run_output_root_defaults_to_stage_when_blank(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_tuning",
+            "overrides": {"learning_rate": 2e-5},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "confirm",
+            "seed_output_root": "",
+        }
+
+        commands = launcher.build_seed_run_commands()
+
+        self.assertIn("outputs/confirm", " ".join(commands[0]))
+
     def test_run_dispatches_to_trial_commands_when_trials_are_requested(self):
         launcher = object.__new__(ExperimentLauncher)
-        launcher.get_config = lambda: {"suggest_trials": 2}
+        launcher.get_config = lambda: {"suggest_trials": 2, "seed_run_stage": "none"}
         launcher.run_trial_commands = lambda: ["trial-result"]
 
         self.assertEqual(launcher.run(), ["trial-result"])
+
+    def test_run_dispatches_to_seed_runs_when_requested(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 0, "seed_run_stage": "final"}
+        launcher.run_seed_run_commands = lambda: ["seed-result"]
+
+        self.assertEqual(launcher.run(), ["seed-result"])
 
     def test_build_aggregate_command_uses_widget_settings(self):
         launcher = object.__new__(ExperimentLauncher)
