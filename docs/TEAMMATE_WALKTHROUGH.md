@@ -50,7 +50,7 @@ python src/run_experiment.py \
 The command prints the real script call:
 
 ```text
-python src/run_distilbert_hatexplain.py --method full-ft ...
+python src/methods/distilbert_full/train.py --method full-ft ...
 ```
 
 Sam checks:
@@ -176,7 +176,7 @@ Sam adds a named experiment:
   "method": "full-ft",
   "family": "transformer",
   "stage": "tuning",
-  "script": "src/run_distilbert_hatexplain.py",
+  "script": "src/methods/distilbert_full/train.py",
   "description": "DistilBERT full fine-tuning with lr=3e-5 on 128 examples.",
   "tags": ["distilbert", "full-ft", "tuning", "lr3e-5"],
   "args": {

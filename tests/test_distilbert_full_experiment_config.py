@@ -2,8 +2,8 @@ import argparse
 import inspect
 import unittest
 
-import src.run_distilbert_hatexplain as run_distilbert
-from src.run_distilbert_hatexplain import build_experiment_config, build_setup_failure_config
+import src.methods.distilbert_full.train as run_distilbert
+from src.methods.distilbert_full.train import build_experiment_config, build_setup_failure_config
 
 
 class RunDistilbertExperimentConfigTests(unittest.TestCase):
@@ -202,7 +202,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertIs(config["output_safety"]["overwrite_output_dir"], False)
 
     def test_test_evaluation_policy_blocks_non_final_runs(self):
-        from src.run_distilbert_hatexplain import validate_test_evaluation_policy
+        from src.methods.distilbert_full.train import validate_test_evaluation_policy
 
         with self.assertRaises(ValueError):
             validate_test_evaluation_policy(search_stage="tuning", run_test=True)
@@ -210,7 +210,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         validate_test_evaluation_policy(search_stage="final", run_test=True)
 
     def test_best_model_checkpoint_policy_requires_matching_save_and_eval(self):
-        from src.run_distilbert_hatexplain import validate_checkpoint_policy
+        from src.methods.distilbert_full.train import validate_checkpoint_policy
 
         args = argparse.Namespace(
             load_best_model_at_end=True,
@@ -238,7 +238,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertLess(source.index("trainer.save_model"), source.index("write_result_files("))
 
     def test_early_stopping_requires_best_model_selection(self):
-        from src.run_distilbert_hatexplain import validate_checkpoint_policy
+        from src.methods.distilbert_full.train import validate_checkpoint_policy
 
         args = argparse.Namespace(
             load_best_model_at_end=False,

@@ -42,7 +42,7 @@ Compile key modules:
 
 ```bash
 python -m py_compile \
-  src/run_distilbert_hatexplain.py \
+  src/methods/distilbert_full/train.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/experiments/results.py \

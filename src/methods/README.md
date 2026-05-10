@@ -17,7 +17,7 @@ src/methods/distilbert_lp_ft/train.py
 ## Rule
 
 One method family should have its own script or package. Do not put every method
-inside `src/run_distilbert_hatexplain.py`.
+inside `src/methods/distilbert_full/train.py`.
 
 ## Shared Arguments
 

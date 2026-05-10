@@ -67,7 +67,7 @@ Each experiment should have:
   "method": "full-ft",
   "family": "transformer",
   "stage": "smoke",
-  "script": "src/run_distilbert_hatexplain.py",
+  "script": "src/methods/distilbert_full/train.py",
   "description": "Short human-readable description.",
   "tags": ["distilbert", "full-ft", "smoke"],
   "args": {

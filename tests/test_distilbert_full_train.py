@@ -2,7 +2,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from src.run_distilbert_hatexplain import (
+from src.methods.distilbert_full.train import (
+    REPO_ROOT,
     build_fixed_label_maps,
     build_training_arguments,
     build_trainer,
@@ -24,6 +25,10 @@ class RecordingTokenizer:
 
 
 class RunDistilbertHatexplainTests(unittest.TestCase):
+    def test_repo_root_points_to_project_root_after_method_move(self):
+        self.assertTrue((REPO_ROOT / "configs" / "experiments.json").is_file())
+        self.assertTrue((REPO_ROOT / "src" / "methods" / "distilbert_full" / "train.py").is_file())
+
     def test_build_fixed_label_maps_uses_hatexplain_class_order(self):
         id2label, label2id, num_labels = build_fixed_label_maps()
 

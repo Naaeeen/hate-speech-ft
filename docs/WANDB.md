@@ -6,7 +6,7 @@ hyperparameters are defined. Hyperparameters live in
 
 Current status:
 - `src/run_experiment.py` is the preferred entry point for listed experiments.
-- `src/run_distilbert_hatexplain.py` still supports direct W&B usage through
+- `src/methods/distilbert_full/train.py` still supports direct W&B usage through
   Hugging Face Trainer.
 - Enable W&B with `--use_wandb`.
 - Colab uses `src/colab/experiment_launcher.py` to pick an experiment and

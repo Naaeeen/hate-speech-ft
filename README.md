@@ -110,7 +110,7 @@ notebooks/
 
 src/
   run_experiment.py             # generic list / dry-run / run entry point
-  run_distilbert_hatexplain.py  # current ready DistilBERT full-FT runner
+  methods/distilbert_full/train.py  # current ready DistilBERT full-FT runner
   colab/                        # notebook-facing launcher widgets
   data/                         # shared HateXplain preprocessing policy
   experiments/                  # catalog loading and command building
@@ -272,13 +272,13 @@ The generic runner dispatches to method-specific scripts. The current ready
 method script is:
 
 ```text
-src/run_distilbert_hatexplain.py
+src/methods/distilbert_full/train.py
 ```
 
 You can still run it directly:
 
 ```bash
-python src/run_distilbert_hatexplain.py \
+python src/methods/distilbert_full/train.py \
   --method full-ft \
   --search_stage smoke \
   --trial_id manual_distilbert_smoke \
@@ -447,7 +447,7 @@ Compile key modules:
 
 ```bash
 python -m py_compile \
-  src/run_distilbert_hatexplain.py \
+  src/methods/distilbert_full/train.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/colab/experiment_launcher.py \

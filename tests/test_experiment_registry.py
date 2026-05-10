@@ -37,7 +37,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         )
 
         self.assertEqual(command[0], sys.executable)
-        self.assertEqual(command[1], "src/run_distilbert_hatexplain.py")
+        self.assertEqual(command[1], "src/methods/distilbert_full/train.py")
         self.assertIn("--method", command)
         self.assertIn("full-ft", command)
         self.assertIn("--search_stage", command)

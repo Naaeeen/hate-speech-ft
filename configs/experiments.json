@@ -47,7 +47,7 @@
       "method": "full-ft",
       "family": "transformer",
       "stage": "smoke",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Fast smoke test for the current DistilBERT full fine-tuning path.",
       "tags": ["distilbert", "full-ft", "smoke"],
       "args": {
@@ -67,7 +67,7 @@
       "method": "full-ft",
       "family": "transformer",
       "stage": "quick",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Quick DistilBERT full fine-tuning sanity run.",
       "tags": ["distilbert", "full-ft", "quick"],
       "args": {
@@ -87,7 +87,7 @@
       "method": "full-ft",
       "family": "transformer",
       "stage": "tuning",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Full-data DistilBERT base used for HPO trial command generation.",
       "tags": ["distilbert", "full-ft", "tuning"],
       "args": {
@@ -106,7 +106,7 @@
       "method": "full-ft",
       "family": "transformer",
       "stage": "final",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Full-data DistilBERT baseline for one final seed.",
       "tags": ["distilbert", "full-ft", "final"],
       "args": {
