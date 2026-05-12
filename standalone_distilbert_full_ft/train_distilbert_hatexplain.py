@@ -36,14 +36,15 @@ OVERWRITE_OUTPUT_DIR = False
 
 MAX_LENGTH = 128
 LEARNING_RATE = 2e-5
-TRAIN_BATCH_SIZE = 16
-EVAL_BATCH_SIZE = 32
+TRAIN_BATCH_SIZE = 8
+EVAL_BATCH_SIZE = 8
 NUM_EPOCHS = 3
 WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.06
 MAX_GRAD_NORM = 1.0
 OPTIM = "adamw_torch"
 LR_SCHEDULER_TYPE = "linear"
+LOGGING_STEPS = 20
 EARLY_STOPPING_PATIENCE = 2
 EARLY_STOPPING_THRESHOLD = 0.001
 MIXED_PRECISION = "none"  # none, fp16, or bf16
@@ -193,7 +194,7 @@ def tokenize_dataset(records: list[dict[str, Any]], tokenizer) -> Dataset:
 def compute_metrics(eval_pred) -> dict[str, float]:
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
-    return {
+    results = {
         "accuracy": float(accuracy_score(labels, predictions)),
         "f1_macro": float(f1_score(labels, predictions, average="macro")),
         "precision_macro": float(
@@ -203,6 +204,34 @@ def compute_metrics(eval_pred) -> dict[str, float]:
             recall_score(labels, predictions, average="macro", zero_division=0)
         ),
     }
+    label_ids = sorted(ID_TO_LABEL)
+    per_class_f1 = f1_score(
+        labels,
+        predictions,
+        average=None,
+        labels=label_ids,
+        zero_division=0,
+    )
+    per_class_precision = precision_score(
+        labels,
+        predictions,
+        average=None,
+        labels=label_ids,
+        zero_division=0,
+    )
+    per_class_recall = recall_score(
+        labels,
+        predictions,
+        average=None,
+        labels=label_ids,
+        zero_division=0,
+    )
+    for index, label_id in enumerate(label_ids):
+        label_name = ID_TO_LABEL[label_id]
+        results[f"f1_{label_name}"] = float(per_class_f1[index])
+        results[f"precision_{label_name}"] = float(per_class_precision[index])
+        results[f"recall_{label_name}"] = float(per_class_recall[index])
+    return results
 
 
 def build_training_args() -> TrainingArguments:
@@ -226,7 +255,7 @@ def build_training_args() -> TrainingArguments:
         "eval_strategy": "epoch",
         "save_strategy": "epoch",
         "logging_strategy": "steps",
-        "logging_steps": 50,
+        "logging_steps": LOGGING_STEPS,
         "save_total_limit": 2,
         "load_best_model_at_end": True,
         "metric_for_best_model": "eval_f1_macro",
@@ -398,6 +427,7 @@ def main() -> None:
         "max_grad_norm": MAX_GRAD_NORM,
         "optim": OPTIM,
         "lr_scheduler_type": LR_SCHEDULER_TYPE,
+        "logging_steps": LOGGING_STEPS,
         "early_stopping_patience": EARLY_STOPPING_PATIENCE,
         "early_stopping_threshold": EARLY_STOPPING_THRESHOLD,
         "mixed_precision": MIXED_PRECISION,
@@ -618,6 +648,7 @@ def main() -> None:
                     "max_grad_norm": MAX_GRAD_NORM,
                     "optim": OPTIM,
                     "lr_scheduler_type": LR_SCHEDULER_TYPE,
+                    "logging_steps": LOGGING_STEPS,
                     "early_stopping_patience": EARLY_STOPPING_PATIENCE,
                     "early_stopping_threshold": EARLY_STOPPING_THRESHOLD,
                     "mixed_precision": MIXED_PRECISION,

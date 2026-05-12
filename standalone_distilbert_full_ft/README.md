@@ -116,8 +116,10 @@ MODEL_NAME = "distilbert-base-uncased"
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft"
 OVERWRITE_OUTPUT_DIR = False
 LEARNING_RATE = 2e-5
-TRAIN_BATCH_SIZE = 16
+TRAIN_BATCH_SIZE = 8
+EVAL_BATCH_SIZE = 8
 NUM_EPOCHS = 3
+LOGGING_STEPS = 20
 EARLY_STOPPING_PATIENCE = 2
 RUN_TEST = False
 ```

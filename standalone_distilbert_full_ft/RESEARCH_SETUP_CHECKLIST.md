@@ -24,8 +24,8 @@ deep research setup requirements. It covers only this folder.
   unless `SEARCH_STAGE="final"`.
 - Output protection: existing metrics, predictions, checkpoints, or final model
   artifacts block a run unless `OVERWRITE_OUTPUT_DIR=True`.
-- Metrics: save train, validation, optional test, model-selection, runtime,
-  memory, dataset-audit, and parameter-count records.
+- Metrics: save train, validation, optional test, macro and per-class metrics,
+  model-selection, runtime, memory, dataset-audit, and parameter-count records.
 - Predictions: save validation predictions every run; save test predictions only
   for final runs.
 - Runtime: save synchronized training time and total runtime.
