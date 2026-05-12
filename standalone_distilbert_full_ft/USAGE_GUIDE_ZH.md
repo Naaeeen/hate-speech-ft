@@ -112,6 +112,10 @@ WANDB_MODE = "offline"
 USE_WANDB = False
 ```
 
+HateXplain 和 `distilbert-base-uncased` 是公开资源，通常不需要 Hugging Face token。
+如果遇到 Hugging Face rate limit，可以在 Colab Secrets 里额外保存 `HF_TOKEN`，并在
+notebook 中登录 Hugging Face；这属于可选加速/稳定性步骤，不是默认必需项。
+
 ## 5. 数据集与标签策略
 
 脚本自动从 Hugging Face Datasets 下载：
@@ -153,10 +157,11 @@ standalone_distilbert_full_ft/train_distilbert_hatexplain.py
 
 ```python
 METHOD = "full-ft"
-TRIAL_ID = "standalone_distilbert_full_ft_seed42"
-SEARCH_STAGE = "final"
+TRIAL_ID = "standalone_distilbert_full_ft_tuning_seed42"
+SEARCH_STAGE = "tuning"
 SEED = 42
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft"
+OVERWRITE_OUTPUT_DIR = False
 ```
 
 建议命名规则：
@@ -167,7 +172,9 @@ tuning: standalone_distilbert_full_ft_lr2e-5_seed42
 final:  standalone_distilbert_full_ft_final_lr2e-5_seed42
 ```
 
-每个重要 run 使用不同 `TRIAL_ID` 和不同 `OUTPUT_DIR`，避免覆盖结果。
+每个重要 run 使用不同 `TRIAL_ID` 和不同 `OUTPUT_DIR`，避免覆盖结果。脚本默认
+`OVERWRITE_OUTPUT_DIR = False`，如果目录里已经有 `metrics.json`、predictions、
+checkpoint 或 `final_model/`，会直接报错。只有确认要替换旧结果时才改成 `True`。
 
 ### 模型与训练参数
 
@@ -182,7 +189,14 @@ EVAL_BATCH_SIZE = 32
 NUM_EPOCHS = 3
 WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.06
-RUN_TEST = True
+MAX_GRAD_NORM = 1.0
+OPTIM = "adamw_torch"
+LR_SCHEDULER_TYPE = "linear"
+EARLY_STOPPING_PATIENCE = 2
+EARLY_STOPPING_THRESHOLD = 0.001
+MIXED_PRECISION = "none"
+GRADIENT_CHECKPOINTING = False
+RUN_TEST = False
 ```
 
 Full fine-tuning HPO 主要改：
@@ -224,6 +238,22 @@ RUN_TEST = False
 
 调试时可以设样本上限；正式 tuning/final 应使用完整 train/validation/test。
 
+默认脚本是 validation-only tuning：
+
+```python
+SEARCH_STAGE = "tuning"
+RUN_TEST = False
+```
+
+脚本会阻止 `SEARCH_STAGE` 为 `smoke`、`tuning` 或 `confirm` 时运行 test set。只有：
+
+```python
+SEARCH_STAGE = "final"
+RUN_TEST = True
+```
+
+才会生成 test metrics 和 `predictions_test.json`。
+
 ## 7. 输出文件在哪里
 
 默认输出目录：
@@ -236,7 +266,7 @@ standalone_distilbert_full_ft/outputs/distilbert_full_ft/
 
 ```text
 config_snapshot.json          本次运行的配置、seed、设备、依赖版本
-metrics.json                  train / validation / test / runtime / memory / params
+metrics.json                  train / validation / test / runtime / memory / params / dataset audit
 run_summary.json              一次运行的总摘要
 trainer_log_history.json      Hugging Face Trainer 原始日志
 predictions_validation.json   validation 预测、真实标签、概率
@@ -266,6 +296,8 @@ runtime.gpu_synchronized_train_time_sec
 runtime.total_runtime_sec
 runtime.peak_mem_allocated_mb
 runtime.peak_mem_reserved_mb
+runtime.run_peak_mem_allocated_mb
+runtime.run_peak_mem_reserved_mb
 parameters.trainable_params
 parameters.total_params
 model_selection.best_epoch
@@ -311,13 +343,19 @@ total_runtime_sec
 ```text
 peak_mem_allocated_mb
 peak_mem_reserved_mb
+run_peak_mem_allocated_mb
+run_peak_mem_reserved_mb
 ```
 
 含义：
 
+- `peak_mem_allocated_mb` / `peak_mem_reserved_mb`：按 setup 要求，在训练前 reset，
+  训练结束后读取的训练峰值显存。
+- `run_peak_mem_allocated_mb` / `run_peak_mem_reserved_mb`：训练、验证、测试和保存过程
+  全部结束后的整体峰值。
 - `allocated`：PyTorch 实际分配给 tensor 的峰值显存。
 - `reserved`：PyTorch caching allocator 向 GPU 预留的峰值显存。
-- 论文或实验表一般记录两者，至少记录 `peak_mem_allocated_mb`。
+- 论文或实验表一般记录训练峰值两者，至少记录 `peak_mem_allocated_mb`。
 
 GPU 型号也必须记录：
 
@@ -326,6 +364,16 @@ gpu_type
 ```
 
 因为 A100、L4、T4 的时间不能直接公平比较。
+
+数据预处理审计保存在：
+
+```text
+metrics.json -> dataset_audit
+config_snapshot.json -> dataset_audit
+```
+
+它记录每个 split 的 raw examples、processed examples、kept examples、因为没有严格多数而
+丢弃的数量，以及是否因为 sample cap 提前停止。
 
 ## 10. Case Walkthrough A：Smoke Run
 
@@ -343,6 +391,7 @@ gpu_type
 ```python
 SEARCH_STAGE = "smoke"
 TRIAL_ID = "standalone_distilbert_full_ft_smoke_seed42"
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft_smoke_seed42"
 SEED = 42
 NUM_EPOCHS = 1
 MAX_TRAIN_SAMPLES = 64
@@ -381,6 +430,7 @@ python standalone_distilbert_full_ft/train_distilbert_hatexplain.py
 ```python
 SEARCH_STAGE = "tuning"
 TRIAL_ID = "standalone_distilbert_full_ft_lr2e-5_seed42"
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft_lr2e-5_seed42"
 SEED = 42
 LEARNING_RATE = 2e-5
 NUM_EPOCHS = 3
@@ -437,6 +487,13 @@ EVAL_BATCH_SIZE
 NUM_EPOCHS
 WEIGHT_DECAY
 WARMUP_RATIO
+MAX_GRAD_NORM
+OPTIM
+LR_SCHEDULER_TYPE
+EARLY_STOPPING_PATIENCE
+EARLY_STOPPING_THRESHOLD
+MIXED_PRECISION
+GRADIENT_CHECKPOINTING
 SEED
 RUN_TEST = False
 ```
@@ -490,10 +547,13 @@ notes
 - 主排序：最高 validation macro-F1。
 - 若差距很小，优先选更稳定、更快、显存更低的配置。
 - 不要用 test set 选择 learning rate。
+- 如果预算允许，保留 validation 排名前 2 的 configs 进入 confirmation；如果预算不足，
+  至少清楚记录只 confirmation 了 top-1。
 
 ## 13. Case Walkthrough D：Confirmation Runs
 
-目的：确认 HPO 选出来的配置不是 seed luck。
+目的：确认 HPO 选出来的配置不是 seed luck。严格按 setup 方案，应该对 HPO top-2
+configs 都做 confirmation；如果时间不够，至少对 top-1 做 confirmation，并在报告里说明预算限制。
 
 什么时候跑：
 
@@ -512,6 +572,7 @@ SEED = 43
 ```python
 SEARCH_STAGE = "confirm"
 TRIAL_ID = "standalone_distilbert_full_ft_confirm_lr2e-5_seed42"
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft_confirm_lr2e-5_seed42"
 LEARNING_RATE = 2e-5
 SEED = 42
 RUN_TEST = False
@@ -522,6 +583,7 @@ MAX_EVAL_SAMPLES = None
 记录：
 
 ```text
+config_rank_from_hpo
 seed
 val_macro_f1
 best_epoch
@@ -558,6 +620,7 @@ status
 ```python
 SEARCH_STAGE = "final"
 TRIAL_ID = "standalone_distilbert_full_ft_final_lr2e-5_seed42"
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft_final_lr2e-5_seed42"
 LEARNING_RATE = 2e-5
 SEED = 42
 RUN_TEST = True
@@ -695,6 +758,13 @@ learning_rate:
 epochs:
 batch_size:
 max_length:
+optim:
+lr_scheduler_type:
+max_grad_norm:
+early_stopping_patience:
+early_stopping_threshold:
+mixed_precision:
+gradient_checkpointing:
 run_test:
 best_epoch:
 val_macro_f1:

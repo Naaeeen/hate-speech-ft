@@ -18,6 +18,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
+    EarlyStoppingCallback,
     Trainer,
     TrainingArguments,
 )
@@ -25,12 +26,13 @@ from transformers import (
 
 # Edit these constants directly for a different run.
 METHOD = "full-ft"
-TRIAL_ID = "standalone_distilbert_full_ft_seed42"
-SEARCH_STAGE = "final"  # use "tuning" when RUN_TEST is False
+TRIAL_ID = "standalone_distilbert_full_ft_tuning_seed42"
+SEARCH_STAGE = "tuning"  # smoke, tuning, confirm, or final
 SEED = 42
 DATASET_NAME = "Hate-speech-CNERG/hatexplain"
 MODEL_NAME = "distilbert-base-uncased"
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft"
+OVERWRITE_OUTPUT_DIR = False
 
 MAX_LENGTH = 128
 LEARNING_RATE = 2e-5
@@ -39,14 +41,22 @@ EVAL_BATCH_SIZE = 32
 NUM_EPOCHS = 3
 WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.06
+MAX_GRAD_NORM = 1.0
+OPTIM = "adamw_torch"
+LR_SCHEDULER_TYPE = "linear"
+EARLY_STOPPING_PATIENCE = 2
+EARLY_STOPPING_THRESHOLD = 0.001
+MIXED_PRECISION = "none"  # none, fp16, or bf16
+GRADIENT_CHECKPOINTING = False
 
 # Set these to small numbers for a smoke run. Use None for full data.
 MAX_TRAIN_SAMPLES = None
 MAX_EVAL_SAMPLES = None
 MAX_TEST_SAMPLES = None
 
-# Keep RUN_TEST=False during tuning. Use True only for a final-style run.
-RUN_TEST = True
+# Keep RUN_TEST=False during smoke/tuning/confirmation.
+# Use True only after the final configuration is frozen.
+RUN_TEST = False
 
 USE_WANDB = True
 WANDB_PROJECT = "hate-speech-ft"
@@ -102,6 +112,8 @@ def count_parameters(model) -> dict[str, float | int]:
 
 
 def strict_majority_label(labels: list[int]) -> int | None:
+    if not labels:
+        return None
     counts = Counter(int(label) for label in labels)
     label, count = counts.most_common(1)[0]
     if count > len(labels) / 2:
@@ -109,11 +121,35 @@ def strict_majority_label(labels: list[int]) -> int | None:
     return None
 
 
-def make_records(raw_split, max_samples: int | None = None) -> list[dict[str, Any]]:
+def validate_stage_policy() -> None:
+    valid_stages = {"smoke", "tuning", "confirm", "final"}
+    if SEARCH_STAGE not in valid_stages:
+        raise ValueError(f"SEARCH_STAGE must be one of {sorted(valid_stages)}")
+    if RUN_TEST and SEARCH_STAGE != "final":
+        raise ValueError(
+            "RUN_TEST=True is only allowed when SEARCH_STAGE='final'. "
+            "Use validation only for smoke, tuning, and confirmation runs."
+        )
+    if SEARCH_STAGE == "final" and not RUN_TEST:
+        print(
+            "Warning: SEARCH_STAGE='final' but RUN_TEST=False; "
+            "no test metrics will be saved."
+        )
+
+
+def make_records(
+    raw_split,
+    split_name: str,
+    max_samples: int | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     records = []
+    processed_examples = 0
+    dropped_no_majority = 0
     for row in raw_split:
+        processed_examples += 1
         label = strict_majority_label(row["annotators"]["label"])
         if label is None:
+            dropped_no_majority += 1
             continue
         records.append(
             {
@@ -124,7 +160,15 @@ def make_records(raw_split, max_samples: int | None = None) -> list[dict[str, An
         )
         if max_samples is not None and len(records) >= max_samples:
             break
-    return records
+    return records, {
+        "split": split_name,
+        "raw_examples": len(raw_split),
+        "processed_examples": processed_examples,
+        "kept_examples": len(records),
+        "dropped_no_majority": dropped_no_majority,
+        "max_samples": max_samples,
+        "stopped_at_sample_cap": max_samples is not None and len(records) >= max_samples,
+    }
 
 
 def tokenize_dataset(records: list[dict[str, Any]], tokenizer) -> Dataset:
@@ -162,6 +206,9 @@ def compute_metrics(eval_pred) -> dict[str, float]:
 
 
 def build_training_args() -> TrainingArguments:
+    if MIXED_PRECISION not in {"none", "fp16", "bf16"}:
+        raise ValueError("MIXED_PRECISION must be one of: none, fp16, bf16")
+
     kwargs = {
         "output_dir": str(OUTPUT_DIR / "checkpoints"),
         "learning_rate": LEARNING_RATE,
@@ -170,6 +217,12 @@ def build_training_args() -> TrainingArguments:
         "num_train_epochs": NUM_EPOCHS,
         "weight_decay": WEIGHT_DECAY,
         "warmup_ratio": WARMUP_RATIO,
+        "max_grad_norm": MAX_GRAD_NORM,
+        "optim": OPTIM,
+        "lr_scheduler_type": LR_SCHEDULER_TYPE,
+        "fp16": MIXED_PRECISION == "fp16",
+        "bf16": MIXED_PRECISION == "bf16",
+        "gradient_checkpointing": GRADIENT_CHECKPOINTING,
         "eval_strategy": "epoch",
         "save_strategy": "epoch",
         "logging_strategy": "steps",
@@ -193,6 +246,15 @@ def build_training_args() -> TrainingArguments:
 
 
 def build_trainer(model, training_args, train_dataset, eval_dataset, tokenizer) -> Trainer:
+    callbacks = []
+    if EARLY_STOPPING_PATIENCE is not None and EARLY_STOPPING_PATIENCE > 0:
+        callbacks.append(
+            EarlyStoppingCallback(
+                early_stopping_patience=EARLY_STOPPING_PATIENCE,
+                early_stopping_threshold=EARLY_STOPPING_THRESHOLD,
+            )
+        )
+
     kwargs = {
         "model": model,
         "args": training_args,
@@ -202,6 +264,8 @@ def build_trainer(model, training_args, train_dataset, eval_dataset, tokenizer) 
         "compute_metrics": compute_metrics,
     }
     trainer_signature = inspect.signature(Trainer.__init__)
+    if "callbacks" in trainer_signature.parameters:
+        kwargs["callbacks"] = callbacks
     if "processing_class" in trainer_signature.parameters:
         kwargs["processing_class"] = tokenizer
     else:
@@ -217,6 +281,27 @@ def save_json(path: Path, payload: Any) -> None:
 def print_json(title: str, payload: Any) -> None:
     print(f"\n{title}")
     print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def ensure_output_dir_is_available() -> None:
+    if OVERWRITE_OUTPUT_DIR or not OUTPUT_DIR.exists():
+        return
+    blocking_paths = [
+        OUTPUT_DIR / "metrics.json",
+        OUTPUT_DIR / "run_summary.json",
+        OUTPUT_DIR / "predictions_validation.json",
+        OUTPUT_DIR / "predictions_test.json",
+        OUTPUT_DIR / "final_model",
+        OUTPUT_DIR / "checkpoints",
+    ]
+    existing = [path for path in blocking_paths if path.exists()]
+    if existing:
+        existing_list = "\n".join(f"- {path}" for path in existing)
+        raise RuntimeError(
+            "OUTPUT_DIR already contains experiment artifacts. Use a new OUTPUT_DIR "
+            "or set OVERWRITE_OUTPUT_DIR=True if you intentionally want to replace them.\n"
+            f"Existing artifacts:\n{existing_list}"
+        )
 
 
 def model_selection_summary(trainer) -> dict[str, Any]:
@@ -289,6 +374,8 @@ def init_wandb(config: dict[str, Any]):
 def main() -> None:
     script_start_time = time.perf_counter()
     set_all_seeds(SEED)
+    validate_stage_policy()
+    ensure_output_dir_is_available()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     config = {
@@ -300,6 +387,7 @@ def main() -> None:
         "dataset_name": DATASET_NAME,
         "model_name": MODEL_NAME,
         "output_dir": str(OUTPUT_DIR),
+        "overwrite_output_dir": OVERWRITE_OUTPUT_DIR,
         "max_length": MAX_LENGTH,
         "learning_rate": LEARNING_RATE,
         "train_batch_size": TRAIN_BATCH_SIZE,
@@ -307,6 +395,13 @@ def main() -> None:
         "num_epochs": NUM_EPOCHS,
         "weight_decay": WEIGHT_DECAY,
         "warmup_ratio": WARMUP_RATIO,
+        "max_grad_norm": MAX_GRAD_NORM,
+        "optim": OPTIM,
+        "lr_scheduler_type": LR_SCHEDULER_TYPE,
+        "early_stopping_patience": EARLY_STOPPING_PATIENCE,
+        "early_stopping_threshold": EARLY_STOPPING_THRESHOLD,
+        "mixed_precision": MIXED_PRECISION,
+        "gradient_checkpointing": GRADIENT_CHECKPOINTING,
         "max_train_samples": MAX_TRAIN_SAMPLES,
         "max_eval_samples": MAX_EVAL_SAMPLES,
         "max_test_samples": MAX_TEST_SAMPLES,
@@ -324,7 +419,12 @@ def main() -> None:
         "cuda_version": torch.version.cuda,
         "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
-        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpu_type": (
+            torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+        ),
+        "gpu_name": (
+            torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+        ),
     }
     save_json(OUTPUT_DIR / "config_snapshot.json", config)
     print_json("Run config snapshot", config)
@@ -335,14 +435,47 @@ def main() -> None:
         raw = load_dataset(DATASET_NAME)
 
         print("Preparing records")
-        train_records = make_records(raw["train"], MAX_TRAIN_SAMPLES)
-        eval_records = make_records(raw["validation"], MAX_EVAL_SAMPLES)
-        test_records = make_records(raw["test"], MAX_TEST_SAMPLES) if RUN_TEST else []
+        train_records, train_audit = make_records(
+            raw["train"],
+            "train",
+            MAX_TRAIN_SAMPLES,
+        )
+        eval_records, eval_audit = make_records(
+            raw["validation"],
+            "validation",
+            MAX_EVAL_SAMPLES,
+        )
+        if RUN_TEST:
+            test_records, test_audit = make_records(
+                raw["test"],
+                "test",
+                MAX_TEST_SAMPLES,
+            )
+        else:
+            test_records = []
+            test_audit = {
+                "split": "test",
+                "raw_examples": len(raw["test"]),
+                "processed_examples": 0,
+                "kept_examples": None,
+                "dropped_no_majority": None,
+                "max_samples": MAX_TEST_SAMPLES,
+                "stopped_at_sample_cap": False,
+                "skipped_because_run_test_false": True,
+            }
+        dataset_audit = {
+            "train": train_audit,
+            "validation": eval_audit,
+            "test": test_audit,
+        }
+        config["dataset_audit"] = dataset_audit
+        save_json(OUTPUT_DIR / "config_snapshot.json", config)
 
         print(f"Train examples: {len(train_records)}")
         print(f"Validation examples: {len(eval_records)}")
         if RUN_TEST:
             print(f"Test examples: {len(test_records)}")
+        print_json("Dataset preprocessing audit", dataset_audit)
 
         tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         train_dataset = tokenize_dataset(train_records, tokenizer)
@@ -377,8 +510,19 @@ def main() -> None:
         train_result = trainer.train()
         synchronize_cuda()
         train_time_sec = time.perf_counter() - train_start_time
+        train_memory_metrics = peak_memory_metrics()
         train_metrics = dict(getattr(train_result, "metrics", {}) or {})
         train_metrics["gpu_synchronized_train_time_sec"] = train_time_sec
+        train_metrics.update(
+            {
+                "train_peak_mem_allocated_mb": train_memory_metrics[
+                    "peak_mem_allocated_mb"
+                ],
+                "train_peak_mem_reserved_mb": train_memory_metrics[
+                    "peak_mem_reserved_mb"
+                ],
+            }
+        )
         print_json("Training metrics", train_metrics)
 
         print("Evaluating validation split")
@@ -414,7 +558,7 @@ def main() -> None:
         tokenizer.save_pretrained(str(final_model_dir))
 
         selection = model_selection_summary(trainer)
-        memory_metrics = peak_memory_metrics()
+        run_memory_metrics = peak_memory_metrics()
         runtime = {
             "status": "completed",
             "gpu_synchronized_train_time_sec": train_time_sec,
@@ -422,7 +566,11 @@ def main() -> None:
             "train_examples": len(train_records),
             "validation_examples": len(eval_records),
             "test_examples": len(test_records) if RUN_TEST else None,
-            **memory_metrics,
+            "gpu_type": config["gpu_type"],
+            "peak_mem_allocated_mb": train_memory_metrics["peak_mem_allocated_mb"],
+            "peak_mem_reserved_mb": train_memory_metrics["peak_mem_reserved_mb"],
+            "run_peak_mem_allocated_mb": run_memory_metrics["peak_mem_allocated_mb"],
+            "run_peak_mem_reserved_mb": run_memory_metrics["peak_mem_reserved_mb"],
         }
         metrics = {
             "train": train_metrics,
@@ -431,6 +579,7 @@ def main() -> None:
             "runtime": runtime,
             "model_selection": selection,
             "parameters": parameter_metrics,
+            "dataset_audit": dataset_audit,
         }
         save_json(OUTPUT_DIR / "metrics.json", metrics)
         save_json(OUTPUT_DIR / "trainer_log_history.json", trainer.state.log_history)
@@ -466,14 +615,23 @@ def main() -> None:
                     "max_length": MAX_LENGTH,
                     "weight_decay": WEIGHT_DECAY,
                     "warmup_ratio": WARMUP_RATIO,
+                    "max_grad_norm": MAX_GRAD_NORM,
+                    "optim": OPTIM,
+                    "lr_scheduler_type": LR_SCHEDULER_TYPE,
+                    "early_stopping_patience": EARLY_STOPPING_PATIENCE,
+                    "early_stopping_threshold": EARLY_STOPPING_THRESHOLD,
+                    "mixed_precision": MIXED_PRECISION,
+                    "gradient_checkpointing": GRADIENT_CHECKPOINTING,
                 },
                 "best_epoch": selection["best_epoch"],
                 "val_macro_f1": validation_metrics.get("eval_f1_macro"),
                 "train_time_s": runtime["gpu_synchronized_train_time_sec"],
+                "total_runtime_s": runtime["total_runtime_sec"],
                 "peak_mem_allocated_mb": runtime["peak_mem_allocated_mb"],
                 "peak_mem_reserved_mb": runtime["peak_mem_reserved_mb"],
                 "trainable_params": parameter_metrics["trainable_params"],
                 "total_params": parameter_metrics["total_params"],
+                "gpu_type": runtime["gpu_type"],
                 "status": runtime["status"],
             },
         )
@@ -482,9 +640,16 @@ def main() -> None:
     except Exception as exc:
         failure = {
             "status": "failed",
+            "method": METHOD,
+            "trial_id": TRIAL_ID,
+            "search_stage": SEARCH_STAGE,
+            "seed": SEED,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
             "total_runtime_sec": time.perf_counter() - script_start_time,
+            "gpu_type": (
+                torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+            ),
             **peak_memory_metrics(),
         }
         save_json(OUTPUT_DIR / "failure.json", failure)

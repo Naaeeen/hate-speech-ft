@@ -13,6 +13,7 @@ distilbert_full_ft_colab.ipynb  full Colab walkthrough
 train_distilbert_hatexplain.py  single-file training/evaluation script
 requirements.txt                minimal dependencies
 USAGE_GUIDE_ZH.md               detailed Chinese standalone usage guide
+RESEARCH_SETUP_CHECKLIST.md     setup compliance and experiment checklist
 .gitignore                      ignores local outputs and W&B files
 ```
 
@@ -35,9 +36,12 @@ The script still does the minimum needed for research use:
 - fine-tunes `distilbert-base-uncased`
 - evaluates validation metrics
 - optionally evaluates test metrics
+- uses explicit AdamW, linear scheduler, max grad norm, and early stopping
 - logs basic W&B metrics when enabled
 - saves config, metrics, runtime/memory, predictions, trainer history, summary,
   and the final model
+- defaults to validation-only tuning so the test set is not touched until a
+  final run explicitly sets `SEARCH_STAGE = "final"` and `RUN_TEST = True`
 
 ## Run
 
@@ -65,11 +69,16 @@ The default output directory is:
 standalone_distilbert_full_ft/outputs/distilbert_full_ft
 ```
 
+By default, the script refuses to reuse an output directory that already
+contains metrics, predictions, checkpoints, or a saved model. Use a new
+`OUTPUT_DIR` for each real run, or set `OVERWRITE_OUTPUT_DIR = True` only when
+you intentionally want to replace old artifacts.
+
 Expected output files:
 
 ```text
 config_snapshot.json          seed, hyperparameters, device, params
-metrics.json                  train/validation/test/runtime/model-selection metrics
+metrics.json                  metrics, runtime/memory, model selection, dataset audit
 predictions_validation.json   validation predictions with probabilities
 predictions_test.json         test predictions with probabilities when RUN_TEST=True
 trainer_log_history.json      raw Trainer log history
@@ -102,11 +111,15 @@ Open `train_distilbert_hatexplain.py` and edit constants near the top:
 
 ```python
 SEED = 42
+SEARCH_STAGE = "tuning"
 MODEL_NAME = "distilbert-base-uncased"
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft"
+OVERWRITE_OUTPUT_DIR = False
 LEARNING_RATE = 2e-5
 TRAIN_BATCH_SIZE = 16
 NUM_EPOCHS = 3
-RUN_TEST = True
+EARLY_STOPPING_PATIENCE = 2
+RUN_TEST = False
 ```
 
 For a quick smoke run, set:
