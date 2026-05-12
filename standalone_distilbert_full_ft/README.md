@@ -9,6 +9,7 @@ minimal research setup for full fine-tuning DistilBERT on HateXplain.
 ## Files
 
 ```text
+distilbert_full_ft_colab.ipynb  full Colab walkthrough
 train_distilbert_hatexplain.py  single-file training/evaluation script
 requirements.txt                minimal dependencies
 .gitignore                      ignores local outputs and W&B files
@@ -48,6 +49,12 @@ Run from the repository root or from this folder:
 
 ```bash
 python standalone_distilbert_full_ft/train_distilbert_hatexplain.py
+```
+
+Or open the notebook:
+
+```text
+standalone_distilbert_full_ft/distilbert_full_ft_colab.ipynb
 ```
 
 The default output directory is:
