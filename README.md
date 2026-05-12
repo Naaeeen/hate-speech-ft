@@ -48,6 +48,8 @@ Run the setup cells, then use the experiment launcher widget.
   method onboarding contract.
 - [Adding a method](docs/ADDING_METHOD.md): the shortest path for teammates who
   need to implement a new model or training method.
+- [中文使用指南](docs/USAGE_GUIDE_ZH.md): how to run the project and standalone
+  DistilBERT full fine-tuning workflow.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example

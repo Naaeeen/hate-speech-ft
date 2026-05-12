@@ -10,6 +10,8 @@ contracts.
   experiments.
 - [ADDING_METHOD.md](ADDING_METHOD.md): the teammate checklist for adding a new
   model or method package.
+- [USAGE_GUIDE_ZH.md](USAGE_GUIDE_ZH.md): Chinese guide for running the project
+  and the standalone DistilBERT full fine-tuning workflow.
 - [WANDB.md](WANDB.md): W&B team setup, Colab secrets, online/offline modes, and
   local result files.
 - [TEAMMATE_WALKTHROUGH.md](TEAMMATE_WALKTHROUGH.md): a fictional teammate
