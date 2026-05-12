@@ -1,217 +1,132 @@
-# hate-speech-ft 中文使用指南
+# Standalone DistilBERT Full Fine-Tuning 中文使用指南
 
-本文面向需要在 Colab 中运行仇恨言论检测实验的团队成员，说明当前
-`hate-speech-ft` 项目的用途、运行入口、依赖准备、数据处理、训练/验证/测试
-流程、W&B 记录方式、结果文件位置和常见问题。
+本文只说明 `standalone_distilbert_full_ft/` 这个独立实验文件夹，不涉及本仓库其他
+目录或其他实验入口。
 
-本文重点结合当前已经实现的：
+这个 standalone 文件夹的目标很明确：用最少的工程结构，完成 HateXplain 上
+DistilBERT full fine-tuning 的训练、验证、最终测试、W&B 记录、本地 JSON 记录、
+预测文件保存和最终模型保存。它之后可以单独拆成一个新 repo。
+
+## 1. 文件说明
 
 ```text
 standalone_distilbert_full_ft/
+  distilbert_full_ft_colab.ipynb   Colab 全流程 notebook
+  train_distilbert_hatexplain.py   单文件训练 / 验证 / 测试脚本
+  requirements.txt                 最小依赖
+  README.md                        英文简要说明
+  USAGE_GUIDE_ZH.md                本中文指南
 ```
 
-也会说明主项目实验框架中 `src/run_experiment.py` 的用途。两者的定位不同：
+核心原则：
 
-- `standalone_distilbert_full_ft/`：最小可运行 full fine-tuning 实验，适合先跑通
-  DistilBERT full fine-tuning。
-- `src/` + `configs/`：更完整的团队实验框架，适合后续多方法比较、HPO、seed
-  runs 和聚合结果。
+- 不 import 这个文件夹外的项目代码。
+- 不使用复杂 config system。
+- 不使用自动化 experiment framework。
+- 不使用 reusable pipeline abstraction。
+- 所有关键参数都在 `train_distilbert_hatexplain.py` 顶部用常量写死。
+- 想改实验，就直接改 Python 文件顶部常量。
 
-## 1. 项目用途
+## 2. 什么时候使用 standalone
 
-本项目用于比较不同方法在 HateXplain 仇恨言论三分类任务上的表现与计算成本。
-核心研究目标不是只看分数，而是同时关注：
+使用 standalone 的情况：
 
-- validation / test macro-F1
-- precision / recall
-- 训练时间
-- 峰值显存
-- 可训练参数量
-- W&B 与本地 JSON 记录是否可复现
+- 你只负责 DistilBERT full fine-tuning。
+- 你想先跑通一个 minimum viable deep research 实验。
+- 你希望训练、验证、测试、预测文件和模型保存都能端到端完成。
+- 你可以接受手动改代码、手动复制 HPO 表格、手动对比结果。
 
-当前已经真正可运行的主方法是：
+不适合 standalone 的情况：
 
-```text
-DistilBERT full fine-tuning
-```
+- 你要同时管理很多 method 的统一实验平台。
+- 你需要自动生成大量 trial command。
+- 你需要统一聚合所有 teammate 的结果。
+- 你不希望手动改 Python 常量。
 
-其他方法，例如 TF-IDF、Bi-LSTM、LoRA、partial FT、LP-FT，目前在主项目里是
-`planned` 状态，需要后续分别实现。
+如果当前任务只是 full fine-tuning，standalone 更容易读懂，也更容易交付。
 
-## 2. 运行入口怎么选
+## 3. Colab 环境准备
 
-### 推荐新手先用 standalone
-
-如果你只是想跑通 DistilBERT full fine-tuning，使用：
+在 Colab 中打开：
 
 ```text
 standalone_distilbert_full_ft/distilbert_full_ft_colab.ipynb
 ```
 
-它会一步步完成：
+建议 runtime：
+
+```text
+Runtime -> Change runtime type -> GPU
+```
+
+然后按 notebook 顺序执行：
 
 1. 检查 GPU。
 2. 挂载 Google Drive。
 3. clone 或更新 repo。
 4. 安装依赖。
 5. 登录 W&B。
-6. 检查脚本中的硬编码参数。
-7. 运行训练、验证、测试。
-8. 查看 metrics 和 predictions。
+6. 检查脚本顶部常量。
+7. 运行训练脚本。
+8. 查看 metrics、predictions、model。
 9. 把输出复制到 Google Drive。
 
-### 团队正式实验用主 launcher
-
-如果要跑主项目 catalog 中的实验，使用：
-
-```text
-notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb
-```
-
-或者命令行：
-
-```bash
-python src/run_experiment.py --list
-python src/run_experiment.py --validate_protocol
-python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
-python src/run_experiment.py --experiment distilbert_full_smoke
-```
-
-主 launcher 适合：
-
-- 多个 experiment entry
-- HPO trial command generation
-- confirmation / final seed command generation
-- result aggregation
-- 团队统一命名和输出目录
-
-standalone 适合：
-
-- 快速理解 full fine-tuning 全流程
-- 之后拆成独立 repo
-- 手动改源文件参数
-- 不需要复杂框架
-
-## 3. 环境与依赖准备
-
-### Colab runtime
-
-建议使用 GPU runtime：
-
-```text
-Runtime -> Change runtime type -> GPU
-```
-
-A100、L4、T4 都可以运行，但时间和显存会不同。由于 Colab GPU 类型不稳定，
-实验记录中必须保留 GPU name 和显存数据。
-
-### standalone 依赖
-
-在 Colab 或本地执行：
+依赖安装命令：
 
 ```bash
 pip install -r standalone_distilbert_full_ft/requirements.txt
 ```
 
-当前 standalone 依赖包括：
+## 4. W&B 设置
 
-```text
-torch
-transformers
-datasets
-accelerate
-scikit-learn
-wandb
-```
+W&B 用来在线记录 config、训练曲线、validation/test metrics、runtime、显存和参数量。
+但是最终可复现记录仍然以本地 JSON 文件为准。
 
-### 主项目依赖
-
-主项目 Colab 使用：
-
-```bash
-pip install -r requirements-colab.txt
-```
-
-根目录的 `requirements.txt` 现在只是指向同一份轻量依赖：
-
-```text
--r requirements-colab.txt
-```
-
-## 4. W&B 准备
-
-W&B 用于在线记录实验指标、配置和运行过程，但**本地 JSON 文件仍然是最终可复现
-记录的 source of truth**。
-
-### Colab Secret
-
-在 Colab 左侧 Secrets 中添加：
+Colab 推荐在 Secrets 中添加：
 
 ```text
 WANDB_API_KEY
 ```
 
-standalone notebook 会尝试读取这个 secret 并执行 W&B login。
+并打开 notebook access permission。脚本里不要硬编码 API key。
 
-### standalone 脚本中的 W&B 参数
+如果在线记录：
 
-在：
-
-```text
-standalone_distilbert_full_ft/train_distilbert_hatexplain.py
-```
-
-顶部可以修改：
-
-```text
-USE_WANDB
-WANDB_PROJECT
-WANDB_ENTITY
-WANDB_MODE
-WANDB_RUN_NAME
-```
-
-常见选择：
-
-```text
+```python
 USE_WANDB = True
 WANDB_MODE = "online"
+WANDB_PROJECT = "hate-speech-ft"
+WANDB_ENTITY = None  # 或你的 team/entity 名称
 ```
 
-如果只是测试，不想联网：
+如果只想本地测试：
 
-```text
+```python
+USE_WANDB = True
 WANDB_MODE = "offline"
 ```
 
 如果完全不用 W&B：
 
-```text
+```python
 USE_WANDB = False
 ```
 
-## 5. 数据集准备
+## 5. 数据集与标签策略
 
-项目使用 Hugging Face Datasets 自动下载：
+脚本自动从 Hugging Face Datasets 下载：
 
 ```text
 Hate-speech-CNERG/hatexplain
 ```
 
-不需要手动下载数据文件。
-
-当前 full fine-tuning 使用的数据策略是：
+固定策略：
 
 - 使用官方 `train` / `validation` / `test` split。
-- 输入文本由 `post_tokens` 拼接：
-
-```text
-" ".join(post_tokens)
-```
-
-- 标签采用 strict majority vote。
-- 三名标注者没有严格多数时丢弃样本。
-- 三分类标签为：
+- 输入文本由 `post_tokens` 拼接：`" ".join(post_tokens)`。
+- 标签来自三个 annotators 的 strict majority vote。
+- 没有严格多数的样本会被丢弃。
+- 三分类标签：
 
 ```text
 0 = hatespeech
@@ -219,155 +134,87 @@ Hate-speech-CNERG/hatexplain
 2 = offensive
 ```
 
-standalone 脚本会在运行时打印：
+不要把 rationales、targets、post id、annotator id 加进模型输入，否则就不是同一个
+实验设定。
 
-```text
-Train examples
-Validation examples
-Test examples
-```
+## 6. 关键参数在哪里改
 
-这些数量应该保存在 `run_summary.json` 和 `metrics.json` 中。
-
-## 6. standalone full fine-tuning 训练流程
-
-### 打开 notebook
-
-使用：
-
-```text
-standalone_distilbert_full_ft/distilbert_full_ft_colab.ipynb
-```
-
-按顺序运行每个 cell。
-
-### 直接命令行运行
-
-也可以直接运行：
-
-```bash
-python standalone_distilbert_full_ft/train_distilbert_hatexplain.py
-```
-
-默认输出目录：
-
-```text
-standalone_distilbert_full_ft/outputs/distilbert_full_ft
-```
-
-### 训练过程中会做什么
-
-脚本会执行：
-
-1. 设置随机种子。
-2. 保存 `config_snapshot.json`。
-3. 初始化 W&B。
-4. 加载 HateXplain。
-5. 构造 train / validation / test records。
-6. 加载 tokenizer。
-7. tokenize dataset。
-8. 加载 `DistilBERTForSequenceClassification`。
-9. 统计参数量。
-10. 创建 Hugging Face `Trainer`。
-11. 训练。
-12. 验证集评估。
-13. 保存 validation predictions。
-14. 如果 `RUN_TEST=True`，进行 test 评估并保存 test predictions。
-15. 保存 final model。
-16. 保存 metrics、runtime、memory、model-selection summary。
-17. 打印 manual record fields。
-
-## 7. 关键配置项和参数作用
-
-所有 standalone 配置都在：
+所有实验参数都在：
 
 ```text
 standalone_distilbert_full_ft/train_distilbert_hatexplain.py
 ```
 
-文件顶部。改变实验设置需要直接改这个文件。
+文件顶部。
 
 ### 实验身份
 
-```text
-METHOD
-TRIAL_ID
-SEARCH_STAGE
-SEED
+每次正式运行前至少检查：
+
+```python
+METHOD = "full-ft"
+TRIAL_ID = "standalone_distilbert_full_ft_seed42"
+SEARCH_STAGE = "final"
+SEED = 42
+OUTPUT_DIR = Path(__file__).resolve().parent / "outputs" / "distilbert_full_ft"
 ```
 
-建议：
-
-- tuning run：`SEARCH_STAGE = "tuning"`，`RUN_TEST = False`
-- final run：`SEARCH_STAGE = "final"`，`RUN_TEST = True`
-- 每次正式运行前修改 `TRIAL_ID`，避免不同 run 混在一起
-
-### 数据与模型
+建议命名规则：
 
 ```text
-DATASET_NAME
-MODEL_NAME
-OUTPUT_DIR
-MAX_LENGTH
+smoke:  standalone_distilbert_full_ft_smoke_seed42
+tuning: standalone_distilbert_full_ft_lr2e-5_seed42
+final:  standalone_distilbert_full_ft_final_lr2e-5_seed42
 ```
 
-默认：
+每个重要 run 使用不同 `TRIAL_ID` 和不同 `OUTPUT_DIR`，避免覆盖结果。
 
-```text
-DATASET_NAME = "Hate-speech-CNERG/hatexplain"
+### 模型与训练参数
+
+常用参数：
+
+```python
 MODEL_NAME = "distilbert-base-uncased"
 MAX_LENGTH = 128
-```
-
-如果要换模型，改 `MODEL_NAME`。如果 tokenizer 和模型不一致，不建议在 standalone
-里拆开改，避免最小脚本变复杂。
-
-### 训练超参数
-
-```text
-LEARNING_RATE
-TRAIN_BATCH_SIZE
-EVAL_BATCH_SIZE
-NUM_EPOCHS
-WEIGHT_DECAY
-WARMUP_RATIO
-```
-
-full fine-tuning 默认建议：
-
-```text
 LEARNING_RATE = 2e-5
+TRAIN_BATCH_SIZE = 16
+EVAL_BATCH_SIZE = 32
 NUM_EPOCHS = 3
 WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.06
+RUN_TEST = True
 ```
 
-如果显存不够，优先调小：
+Full fine-tuning HPO 主要改：
+
+```python
+LEARNING_RATE
+```
+
+建议候选：
 
 ```text
-TRAIN_BATCH_SIZE
-EVAL_BATCH_SIZE
+1e-5
+2e-5
+3e-5
 ```
+
+除非有明确原因，不要在同一轮 HPO 里同时改很多参数，否则很难解释哪个因素导致
+结果变化。
 
 ### 样本上限
 
-```text
-MAX_TRAIN_SAMPLES
-MAX_EVAL_SAMPLES
-MAX_TEST_SAMPLES
-```
+完整实验：
 
-完整运行：
-
-```text
+```python
 MAX_TRAIN_SAMPLES = None
 MAX_EVAL_SAMPLES = None
 MAX_TEST_SAMPLES = None
 ```
 
-快速 smoke run：
+快速 smoke：
 
-```text
+```python
 MAX_TRAIN_SAMPLES = 64
 MAX_EVAL_SAMPLES = 64
 MAX_TEST_SAMPLES = 64
@@ -375,223 +222,445 @@ NUM_EPOCHS = 1
 RUN_TEST = False
 ```
 
-### 是否跑测试集
+调试时可以设样本上限；正式 tuning/final 应使用完整 train/validation/test。
 
-```text
-RUN_TEST
-```
+## 7. 输出文件在哪里
 
-规则：
-
-- 调参、debug、HPO：`RUN_TEST = False`
-- 最终固定配置后：`RUN_TEST = True`
-
-不要在 tuning 阶段根据 test 指标改参数。
-
-## 8. 不同场景应该怎么设置
-
-### 场景 A：检查环境是否能跑通
-
-修改：
-
-```text
-MAX_TRAIN_SAMPLES = 64
-MAX_EVAL_SAMPLES = 64
-MAX_TEST_SAMPLES = 64
-NUM_EPOCHS = 1
-RUN_TEST = False
-WANDB_MODE = "offline"
-```
-
-用途：
-
-- 验证依赖安装
-- 验证 dataset 下载
-- 验证 GPU 可用
-- 验证输出文件能生成
-
-### 场景 B：正式 full fine-tuning validation run
-
-修改：
-
-```text
-SEARCH_STAGE = "tuning"
-RUN_TEST = False
-MAX_TRAIN_SAMPLES = None
-MAX_EVAL_SAMPLES = None
-NUM_EPOCHS = 3
-```
-
-用途：
-
-- 比较 validation macro-F1
-- 不看 test
-- 用于选择超参数
-
-### 场景 C：最终 test run
-
-修改：
-
-```text
-SEARCH_STAGE = "final"
-RUN_TEST = True
-SEED = 42
-TRIAL_ID = "standalone_distilbert_full_ft_final_seed42"
-```
-
-之后分别跑：
-
-```text
-SEED = 43
-SEED = 44
-```
-
-最终报告应使用 3 个 seed 的 mean ± std。
-
-### 场景 D：W&B 不稳定或没有 key
-
-修改：
-
-```text
-WANDB_MODE = "offline"
-```
-
-或者：
-
-```text
-USE_WANDB = False
-```
-
-本地 JSON 文件仍然会保存完整结果。
-
-## 9. 评估指标在哪里看
-
-### W&B 中会看到什么
-
-如果 `USE_WANDB=True`，W&B 会记录：
-
-- config
-- train metrics
-- validation metrics
-- test metrics
-- runtime
-- memory
-- parameter counts
-- model selection summary
-
-W&B 适合看曲线和在线比较。
-
-### 本地 JSON 中会看到什么
-
-最终更可靠的记录在：
+默认输出目录：
 
 ```text
 standalone_distilbert_full_ft/outputs/distilbert_full_ft/
 ```
 
-主要文件：
+主要输出：
 
 ```text
-config_snapshot.json
-metrics.json
-run_summary.json
-trainer_log_history.json
+config_snapshot.json          本次运行的配置、seed、设备、依赖版本
+metrics.json                  train / validation / test / runtime / memory / params
+run_summary.json              一次运行的总摘要
+trainer_log_history.json      Hugging Face Trainer 原始日志
+predictions_validation.json   validation 预测、真实标签、概率
+predictions_test.json         test 预测、真实标签、概率；仅 RUN_TEST=True 时生成
+failure.json                  失败时保存错误信息
+final_model/                  最终保存的模型和 tokenizer
+checkpoints/                  中间 checkpoint
 ```
 
-`metrics.json` 中包含：
+实验完成后应把整个输出目录复制到 Google Drive。Colab VM 断开后，本地文件可能丢失。
+
+## 8. 指标看 W&B 还是 JSON
+
+建议分工：
+
+- W&B：看曲线、在线对比、快速检查 run 是否正常。
+- JSON：最终实验记录、论文表格、复现和错误分析的 source of truth。
+
+如果 W&B 和本地 JSON 不一致，以本地 JSON 为准。
+
+必须重点看：
 
 ```text
-train
-validation
-test
-runtime
-model_selection
-parameters
+validation.eval_f1_macro 或 eval_f1_macro
+test.test_f1_macro
+runtime.gpu_synchronized_train_time_sec
+runtime.total_runtime_sec
+runtime.peak_mem_allocated_mb
+runtime.peak_mem_reserved_mb
+parameters.trainable_params
+parameters.total_params
+model_selection.best_epoch
+model_selection.best_model_checkpoint
 ```
 
-关键字段包括：
+预测文件默认不完整上传到 W&B。需要错误分析时，看本地：
 
 ```text
-eval_f1_macro
-eval_accuracy
-test_f1_macro
-test_accuracy
+predictions_validation.json
+predictions_test.json
+```
+
+## 9. 时间和显存怎么算
+
+脚本会在训练前后做 CUDA synchronize，因此 GPU 训练时间更可靠：
+
+```text
 gpu_synchronized_train_time_sec
+```
+
+含义：
+
+- 只围绕 `trainer.train()` 计时。
+- 训练前同步 GPU。
+- 训练后再次同步 GPU。
+- 不包含下载数据、tokenize、保存 JSON、复制到 Drive 的时间。
+
+总 runtime：
+
+```text
 total_runtime_sec
+```
+
+含义：
+
+- 从脚本主流程开始到结束。
+- 包含数据加载、tokenization、训练、验证、测试、保存文件等。
+- 适合估算一次完整 run 在 Colab 中占用多久。
+
+显存：
+
+```text
 peak_mem_allocated_mb
 peak_mem_reserved_mb
-trainable_params
-total_params
-best_epoch
-best_model_checkpoint
 ```
 
-### 哪些需要手动记录
+含义：
 
-脚本最后会打印：
+- `allocated`：PyTorch 实际分配给 tensor 的峰值显存。
+- `reserved`：PyTorch caching allocator 向 GPU 预留的峰值显存。
+- 论文或实验表一般记录两者，至少记录 `peak_mem_allocated_mb`。
+
+GPU 型号也必须记录：
 
 ```text
-Manual record fields
+gpu_type
 ```
 
-这段 printout 是为手动记录准备的，包含：
+因为 A100、L4、T4 的时间不能直接公平比较。
+
+## 10. Case Walkthrough A：Smoke Run
+
+目的：检查环境、依赖、数据、W&B、输出文件是否正常。
+
+什么时候跑：
+
+- 第一次打开 Colab。
+- 换 GPU runtime 后。
+- 改了脚本之后。
+- W&B 或依赖升级后。
+
+修改：
+
+```python
+SEARCH_STAGE = "smoke"
+TRIAL_ID = "standalone_distilbert_full_ft_smoke_seed42"
+SEED = 42
+NUM_EPOCHS = 1
+MAX_TRAIN_SAMPLES = 64
+MAX_EVAL_SAMPLES = 64
+MAX_TEST_SAMPLES = 64
+RUN_TEST = False
+WANDB_MODE = "offline"  # 可选；如果想测试线上 W&B，则用 online
+```
+
+运行：
+
+```bash
+python standalone_distilbert_full_ft/train_distilbert_hatexplain.py
+```
+
+什么时候停止：
+
+- 脚本能完成。
+- `metrics.json` 存在。
+- `predictions_validation.json` 存在。
+- W&B run 能看到，或 offline 文件能生成。
+
+不要根据 smoke 的 F1 做任何实验结论。样本太少，分数没有研究意义。
+
+## 11. Case Walkthrough B：单个 Validation Tuning Run
+
+目的：用完整 train/validation 检查一个候选超参数是否合理。
+
+什么时候跑：
+
+- smoke 通过之后。
+- 你要正式比较 learning rate 之前。
+
+修改：
+
+```python
+SEARCH_STAGE = "tuning"
+TRIAL_ID = "standalone_distilbert_full_ft_lr2e-5_seed42"
+SEED = 42
+LEARNING_RATE = 2e-5
+NUM_EPOCHS = 3
+MAX_TRAIN_SAMPLES = None
+MAX_EVAL_SAMPLES = None
+MAX_TEST_SAMPLES = None
+RUN_TEST = False
+WANDB_MODE = "online"
+```
+
+运行后看：
+
+```text
+validation macro-F1
+best_epoch
+train time
+peak memory
+failure or completed status
+```
+
+什么时候停止并修改：
+
+- 如果训练直接 OOM，先减小 `TRAIN_BATCH_SIZE`。
+- 如果 validation loss/F1 明显异常，例如 F1 接近随机且不动，检查 label、数据量、
+  学习率和 W&B config。
+- 如果训练时间超出预算，记录当前时间后停止，不要静默丢弃失败 trial。
+- 如果成功完成，进入 HPO 或 confirmation。
+
+## 12. Case Walkthrough C：Manual HPO
+
+Standalone 不自动调参。HPO 需要手动跑多个候选，并手动记录表格。
+
+推荐 HPO 目标：
+
+```text
+选择 validation macro-F1 最好的 learning rate
+```
+
+推荐候选：
+
+```text
+LEARNING_RATE = 1e-5
+LEARNING_RATE = 2e-5
+LEARNING_RATE = 3e-5
+```
+
+固定不变：
+
+```text
+MODEL_NAME
+MAX_LENGTH
+TRAIN_BATCH_SIZE
+EVAL_BATCH_SIZE
+NUM_EPOCHS
+WEIGHT_DECAY
+WARMUP_RATIO
+SEED
+RUN_TEST = False
+```
+
+每个 HPO trial 的步骤：
+
+1. 改 `LEARNING_RATE`。
+2. 改 `TRIAL_ID`，把 lr 写进名字。
+3. 改 `OUTPUT_DIR`，避免覆盖前一个 trial。
+4. 确认 `SEARCH_STAGE = "tuning"`。
+5. 确认 `RUN_TEST = False`。
+6. 运行脚本。
+7. 从 `run_summary.json` 或最后 printout 复制记录。
+8. 保存输出目录到 Drive。
+9. 再跑下一个 lr。
+
+HPO 表格至少记录：
 
 ```text
 method
 trial_id
 seed
-hparams_json
+learning_rate
+num_epochs
+batch_size
+max_length
 best_epoch
 val_macro_f1
 train_time_s
+total_runtime_s
 peak_mem_allocated_mb
 peak_mem_reserved_mb
 trainable_params
 total_params
+gpu_type
+status
+output_dir
+wandb_url
+notes
+```
+
+什么时候停止 HPO：
+
+- 所有预先声明的候选都完成。
+- 或某个候选失败，但已经记录 `status=failed` 和失败原因。
+- 不要因为某个 lr 第一个 epoch 看起来不好就提前取消，除非已经出现 OOM、NaN、
+  runtime 预算明显超标，或脚本错误。
+
+怎么选择：
+
+- 主排序：最高 validation macro-F1。
+- 若差距很小，优先选更稳定、更快、显存更低的配置。
+- 不要用 test set 选择 learning rate。
+
+## 13. Case Walkthrough D：Confirmation Runs
+
+目的：确认 HPO 选出来的配置不是 seed luck。
+
+什么时候跑：
+
+- HPO 完成并选定一个 learning rate 后。
+- 还没有碰 test set 之前。
+
+建议：
+
+```text
+SEED = 42
+SEED = 43
+```
+
+每个 seed 修改：
+
+```python
+SEARCH_STAGE = "confirm"
+TRIAL_ID = "standalone_distilbert_full_ft_confirm_lr2e-5_seed42"
+LEARNING_RATE = 2e-5
+SEED = 42
+RUN_TEST = False
+MAX_TRAIN_SAMPLES = None
+MAX_EVAL_SAMPLES = None
+```
+
+记录：
+
+```text
+seed
+val_macro_f1
+best_epoch
+train_time_s
+peak_mem_allocated_mb
 status
 ```
 
-如果你在写表格或论文实验记录，优先复制这段，或者从 `run_summary.json` 中提取。
+什么时候改变配置：
 
-## 10. 预测结果在哪里看
+- 如果两个 seed 都明显低于 HPO 最佳 trial，回头检查 HPO 是否偶然、是否输出目录混淆、
+  是否改错参数。
+- 如果一个 seed 正常，一个 seed 失败，先修复失败原因，再重跑同一个 seed。
+- 如果 confirmation 稳定，再进入 final test。
 
-validation predictions：
+## 14. Case Walkthrough E：Final Test Runs
+
+目的：冻结配置后，只做最终测试集评估。
+
+规则：
+
+- 只能使用已经由 validation 选定的配置。
+- 不要根据 test 指标再改 learning rate、epoch、batch size。
+- 每个 final seed 都应完整保存 `predictions_test.json`。
+
+建议 final seeds：
 
 ```text
-predictions_validation.json
+42, 43, 44
 ```
 
-test predictions：
+每个 seed 修改：
+
+```python
+SEARCH_STAGE = "final"
+TRIAL_ID = "standalone_distilbert_full_ft_final_lr2e-5_seed42"
+LEARNING_RATE = 2e-5
+SEED = 42
+RUN_TEST = True
+MAX_TRAIN_SAMPLES = None
+MAX_EVAL_SAMPLES = None
+MAX_TEST_SAMPLES = None
+```
+
+最终报告记录：
 
 ```text
-predictions_test.json
+final_test_macro_f1_mean
+final_test_macro_f1_std
+final_test_accuracy_mean
+final_train_time_mean
+final_train_time_std
+peak_mem_allocated_mb_mean
+peak_mem_allocated_mb_std
+trainable_params
+total_params
+trainable_pct
 ```
 
-每条 prediction 包含：
+可以用下面的方式手动计算 mean/std：
+
+```python
+import statistics as stats
+
+scores = [0.71, 0.70, 0.72]
+print("mean", stats.mean(scores))
+print("std", stats.stdev(scores))
+```
+
+如果只有一个 final seed，只能报告 single-run result，不能写 mean ± std。
+
+## 15. Case Walkthrough F：OOM 或失败时怎么办
+
+如果出现 CUDA out of memory：
+
+1. 记录失败 trial 的 `TRIAL_ID`、GPU、batch size 和错误。
+2. 不要删除失败输出目录；保留 `failure.json`。
+3. 优先减小 `TRAIN_BATCH_SIZE`。
+4. 如 eval 也 OOM，再减小 `EVAL_BATCH_SIZE`。
+5. 重新跑同一个 lr/seed，但 `TRIAL_ID` 或 `OUTPUT_DIR` 要能看出是 rerun。
+
+如果出现 NaN 或 loss 异常：
+
+1. 确认 learning rate 是否写错，例如 `2e-5` 误写成 `2e-3`。
+2. 确认样本上限是否意外太小。
+3. 确认标签策略没有改。
+4. 先做 smoke，再回到完整 tuning。
+
+如果 W&B 失败：
+
+1. 改成 `WANDB_MODE = "offline"` 或 `USE_WANDB = False`。
+2. 继续确保本地 JSON 生成。
+3. 后续可以手动上传或只用本地记录。
+
+失败也要记录，因为 HPO 成本应包括 failed trials。
+
+## 16. Case Walkthrough G：预测文件错误分析
+
+什么时候看预测文件：
+
+- validation F1 低于预期。
+- 某一类 precision/recall 很差。
+- final test 后需要写 qualitative error analysis。
+
+看哪个文件：
+
+```text
+predictions_validation.json   tuning/confirmation 阶段
+predictions_test.json         final 阶段
+```
+
+每条记录应关注：
 
 ```text
 id
 text
-label
 label_name
-prediction
 prediction_name
 probabilities
 ```
 
-这些预测文件**默认不会完整上传到 W&B**。原因是它们可能比较大，而且文本内容可能不适合全部进入在线 dashboard。
+建议人工记录：
 
-如果需要人工错误分析，应直接下载或查看本地 JSON 文件。
+- 模型把 hatespeech 误判成 offensive 的例子。
+- 模型把 offensive 误判成 normal 的例子。
+- 低置信度样本。
+- 文本很短、讽刺、拼写异常或上下文不足的样本。
 
-## 11. 最终模型保存位置
+不要在看 test 错误后继续调参；test 错误分析只能用于报告，不用于选择配置。
 
-standalone 最终模型保存到：
+## 17. 最终模型保存和交付
+
+最终模型位置：
 
 ```text
-standalone_distilbert_full_ft/outputs/distilbert_full_ft/final_model/
+outputs/distilbert_full_ft/final_model/
 ```
 
-里面包括：
+应确认里面至少有：
 
 ```text
 config.json
@@ -599,176 +668,106 @@ model.safetensors 或 pytorch_model.bin
 tokenizer files
 ```
 
-中间 checkpoint 保存到：
+最终交付应包含：
 
 ```text
-standalone_distilbert_full_ft/outputs/distilbert_full_ft/checkpoints/
+config_snapshot.json
+metrics.json
+run_summary.json
+trainer_log_history.json
+predictions_validation.json
+predictions_test.json
+final_model/
 ```
 
-由于脚本设置了：
+如果 final run 没有 `predictions_test.json`，通常说明 `RUN_TEST=False`，需要检查后重跑。
+
+## 18. 最小记录模板
+
+每个 trial 都记录一行：
 
 ```text
-load_best_model_at_end = True
-metric_for_best_model = "eval_f1_macro"
+method:
+trial_id:
+search_stage:
+seed:
+learning_rate:
+epochs:
+batch_size:
+max_length:
+run_test:
+best_epoch:
+val_macro_f1:
+test_macro_f1:
+gpu_synchronized_train_time_sec:
+total_runtime_sec:
+peak_mem_allocated_mb:
+peak_mem_reserved_mb:
+trainable_params:
+total_params:
+gpu_type:
+status:
+output_dir:
+wandb_url:
+notes:
 ```
 
-最终保存的模型应该来自 validation macro-F1 最好的 checkpoint，而不一定是最后一个 epoch。
+HPO 阶段 `test_macro_f1` 应为空，因为 `RUN_TEST=False`。
 
-## 12. 如何复制结果到 Google Drive
+## 19. 正式运行前 Checklist
 
-standalone Colab notebook 最后有一个 cell，会把输出复制到：
+运行前：
 
-```text
-/content/drive/MyDrive/hate_speech_ft/standalone_distilbert_full_ft/run_<timestamp>/
-```
+- `TRIAL_ID` 是否唯一。
+- `OUTPUT_DIR` 是否唯一。
+- `SEARCH_STAGE` 是否正确。
+- `RUN_TEST` 是否符合阶段。
+- `LEARNING_RATE` 是否是当前候选。
+- `SEED` 是否正确。
+- 样本上限是否为预期。
+- W&B mode 是否为预期。
+- Colab 是否是 GPU runtime。
 
-建议每次正式运行后都执行这个 cell。否则 Colab runtime 断开后，本地 VM 文件可能丢失。
-
-## 13. 主项目 catalog 方式
-
-如果不使用 standalone，而是使用主项目 runner：
-
-```bash
-python src/run_experiment.py --list
-python src/run_experiment.py --validate_protocol
-python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
-python src/run_experiment.py --experiment distilbert_full_smoke
-```
-
-HPO command generation：
-
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_full_tuning \
-  --suggest_trials 3 \
-  --search_space full_ft \
-  --hpo_seed 42
-```
-
-final seed command generation：
-
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_full_tuning \
-  --suggest_seed_runs final \
-  --set learning_rate=2e-5
-```
-
-主项目方式适合团队比较多个方法。standalone 方式适合最小 full fine-tuning 复现。
-
-## 14. 常见问题与排查
-
-### 没有 GPU
-
-现象：
-
-```text
-CUDA available: False
-```
-
-处理：
-
-- Colab 菜单选择 GPU runtime。
-- 重新运行 runtime check cell。
-- 如果仍无 GPU，可能是 Colab 配额或 availability 问题。
-
-### W&B login 失败
-
-处理：
-
-- 确认 Colab Secrets 中有 `WANDB_API_KEY`。
-- 确认 notebook access permission 已打开。
-- 或改成：
-
-```text
-WANDB_MODE = "offline"
-```
-
-### Hugging Face 下载慢或 rate limit
-
-处理：
-
-- 设置 Hugging Face token。
-- 重试 runtime。
-- 确认网络可访问 Hugging Face。
-
-### CUDA out of memory
-
-处理：
-
-优先调小：
-
-```text
-TRAIN_BATCH_SIZE
-EVAL_BATCH_SIZE
-```
-
-如果还不够，可以降低：
-
-```text
-MAX_LENGTH
-```
-
-但降低 `MAX_LENGTH` 会改变实验设置，需要记录。
-
-### 输出目录被旧结果覆盖
-
-standalone 当前会写入固定目录：
-
-```text
-outputs/distilbert_full_ft
-```
-
-如果要保留多次运行，修改：
-
-```text
-OUTPUT_DIR
-TRIAL_ID
-WANDB_RUN_NAME
-```
-
-或者每次运行后先复制到 Google Drive。
-
-### test 指标不应该用于调参
-
-如果当前是 tuning/debug：
-
-```text
-RUN_TEST = False
-```
-
-只有最终配置冻结后才设置：
-
-```text
-RUN_TEST = True
-```
-
-### 结果到底看 W&B 还是 JSON
-
-建议：
-
-- W&B：看训练过程、曲线、快速比较。
-- JSON：作为最终记录、论文表格、错误分析和复现依据。
-
-如果两边不一致，以本地 JSON 为准。
-
-## 15. 最小检查清单
-
-正式运行前确认：
-
-- `SEED` 正确。
-- `TRIAL_ID` 唯一。
-- `SEARCH_STAGE` 与 `RUN_TEST` 一致。
-- `MAX_TRAIN_SAMPLES` / `MAX_EVAL_SAMPLES` / `MAX_TEST_SAMPLES` 是否为预期。
-- `WANDB_PROJECT` / `WANDB_ENTITY` 是否正确。
-- Colab 使用 GPU runtime。
-- 输出目录会被保存到 Google Drive。
-
-运行后确认：
+运行后：
 
 - `metrics.json` 存在。
 - `run_summary.json` 存在。
+- `config_snapshot.json` 存在。
 - `predictions_validation.json` 存在。
 - final run 时 `predictions_test.json` 存在。
 - `final_model/` 存在。
-- `Manual record fields` 已打印或已从 JSON 复制。
+- `Manual record fields` 已复制到实验表。
+- 输出目录已复制到 Google Drive。
+
+## 20. 常见问题
+
+### 分数很低是不是失败？
+
+Smoke run 分数低是正常的。完整 validation/final run 才有研究意义。
+
+### 可以一边 HPO 一边看 test 吗？
+
+不可以。HPO 和 confirmation 只看 validation。test 只在 final 阶段使用。
+
+### W&B 里没有 prediction 文件怎么办？
+
+正常。预测文件主要保存在本地 JSON。W&B 负责曲线、指标和配置对比。
+
+### 为什么同样配置时间差很多？
+
+可能 GPU 型号不同，也可能 Colab runtime 状态不同。报告时间时必须同时记录
+`gpu_type`，不要直接比较不同 GPU 的 wall time。
+
+### 改 batch size 会不会影响实验？
+
+会。batch size 是超参数和计算成本的一部分。如果为了 OOM 调小 batch size，必须记录。
+
+### 可以改 `MAX_LENGTH` 吗？
+
+可以，但这会改变输入截断策略。除非是新的明确实验，否则 full fine-tuning 主实验建议固定
+`MAX_LENGTH = 128`。
+
+### 什么时候可以删输出目录？
+
+只有确认结果已经复制到 Drive、W&B 已记录、实验表已填好之后，才可以清理本地输出。
+不要删除失败 trial 的记录，除非已经在表格中记录失败原因。

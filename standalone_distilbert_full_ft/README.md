@@ -12,6 +12,7 @@ minimal research setup for full fine-tuning DistilBERT on HateXplain.
 distilbert_full_ft_colab.ipynb  full Colab walkthrough
 train_distilbert_hatexplain.py  single-file training/evaluation script
 requirements.txt                minimal dependencies
+USAGE_GUIDE_ZH.md               detailed Chinese standalone usage guide
 .gitignore                      ignores local outputs and W&B files
 ```
 
