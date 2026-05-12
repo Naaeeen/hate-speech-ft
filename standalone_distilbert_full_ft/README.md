@@ -63,6 +63,12 @@ Or open the notebook:
 standalone_distilbert_full_ft/distilbert_full_ft_colab.ipynb
 ```
 
+The notebook is configured to clone this branch:
+
+```text
+standalone-distilbert-full-ft
+```
+
 The default output directory is:
 
 ```text
