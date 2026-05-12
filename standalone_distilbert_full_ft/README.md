@@ -35,7 +35,8 @@ The script still does the minimum needed for research use:
 - evaluates validation metrics
 - optionally evaluates test metrics
 - logs basic W&B metrics when enabled
-- saves config, metrics, predictions, and the final model
+- saves config, metrics, runtime/memory, predictions, trainer history, summary,
+  and the final model
 
 ## Run
 
@@ -61,6 +62,19 @@ The default output directory is:
 
 ```text
 standalone_distilbert_full_ft/outputs/distilbert_full_ft
+```
+
+Expected output files:
+
+```text
+config_snapshot.json          seed, hyperparameters, device, params
+metrics.json                  train/validation/test/runtime/model-selection metrics
+predictions_validation.json   validation predictions with probabilities
+predictions_test.json         test predictions with probabilities when RUN_TEST=True
+trainer_log_history.json      raw Trainer log history
+run_summary.json              config + metrics + final model path
+failure.json                  written if the run fails
+final_model/                  saved model and tokenizer
 ```
 
 ## W&B

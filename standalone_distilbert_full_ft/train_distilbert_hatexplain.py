@@ -24,6 +24,9 @@ from transformers import (
 
 
 # Edit these constants directly for a different run.
+METHOD = "full-ft"
+TRIAL_ID = "standalone_distilbert_full_ft_seed42"
+SEARCH_STAGE = "final"  # use "tuning" when RUN_TEST is False
 SEED = 42
 DATASET_NAME = "Hate-speech-CNERG/hatexplain"
 MODEL_NAME = "distilbert-base-uncased"
@@ -61,6 +64,41 @@ def set_all_seeds(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def synchronize_cuda() -> None:
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+
+def reset_peak_memory() -> None:
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+
+def peak_memory_metrics() -> dict[str, float | None]:
+    if not torch.cuda.is_available():
+        return {
+            "peak_mem_allocated_mb": None,
+            "peak_mem_reserved_mb": None,
+        }
+    return {
+        "peak_mem_allocated_mb": torch.cuda.max_memory_allocated() / (1024 * 1024),
+        "peak_mem_reserved_mb": torch.cuda.max_memory_reserved() / (1024 * 1024),
+    }
+
+
+def count_parameters(model) -> dict[str, float | int]:
+    total_params = sum(param.numel() for param in model.parameters())
+    trainable_params = sum(
+        param.numel() for param in model.parameters() if param.requires_grad
+    )
+    trainable_pct = 100 * trainable_params / total_params if total_params else 0.0
+    return {
+        "trainable_params": int(trainable_params),
+        "total_params": int(total_params),
+        "trainable_pct": float(trainable_pct),
+    }
 
 
 def strict_majority_label(labels: list[int]) -> int | None:
@@ -176,6 +214,35 @@ def save_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def print_json(title: str, payload: Any) -> None:
+    print(f"\n{title}")
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def model_selection_summary(trainer) -> dict[str, Any]:
+    state = trainer.state
+    log_history = getattr(state, "log_history", []) or []
+    best_metric = getattr(state, "best_metric", None)
+    best_epoch = None
+    best_step = None
+    if best_metric is not None:
+        for record in log_history:
+            metric_value = record.get("eval_f1_macro")
+            if metric_value is not None and abs(metric_value - best_metric) < 1e-12:
+                best_epoch = record.get("epoch")
+                best_step = record.get("step")
+                break
+    return {
+        "metric_for_best_model": "eval_f1_macro",
+        "greater_is_better": True,
+        "best_metric": best_metric,
+        "best_epoch": best_epoch,
+        "best_step": best_step,
+        "best_model_checkpoint": getattr(state, "best_model_checkpoint", None),
+        "global_step": getattr(state, "global_step", None),
+    }
+
+
 def prediction_rows(records: list[dict[str, Any]], logits: np.ndarray) -> list[dict[str, Any]]:
     probabilities = torch.softmax(torch.tensor(logits), dim=-1).numpy()
     predictions = np.argmax(probabilities, axis=-1)
@@ -220,11 +287,15 @@ def init_wandb(config: dict[str, Any]):
 
 
 def main() -> None:
+    script_start_time = time.perf_counter()
     set_all_seeds(SEED)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     config = {
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "method": METHOD,
+        "trial_id": TRIAL_ID,
+        "search_stage": SEARCH_STAGE,
         "seed": SEED,
         "dataset_name": DATASET_NAME,
         "model_name": MODEL_NAME,
@@ -250,12 +321,15 @@ def main() -> None:
         },
         "torch_version": torch.__version__,
         "cuda_available": torch.cuda.is_available(),
-        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "cuda_version": torch.version.cuda,
+        "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
     }
     save_json(OUTPUT_DIR / "config_snapshot.json", config)
+    print_json("Run config snapshot", config)
 
     wandb_run = init_wandb(config)
-    start_time = time.perf_counter()
     try:
         print(f"Loading dataset: {DATASET_NAME}")
         raw = load_dataset(DATASET_NAME)
@@ -281,6 +355,12 @@ def main() -> None:
             id2label=ID_TO_LABEL,
             label2id=LABEL_TO_ID,
         )
+        parameter_metrics = count_parameters(model)
+        config.update(parameter_metrics)
+        save_json(OUTPUT_DIR / "config_snapshot.json", config)
+        if wandb_run is not None:
+            wandb_run.config.update(parameter_metrics, allow_val_change=True)
+        print_json("Model parameter counts", parameter_metrics)
 
         trainer = build_trainer(
             model,
@@ -291,7 +371,15 @@ def main() -> None:
         )
 
         print("Starting training")
-        trainer.train()
+        reset_peak_memory()
+        synchronize_cuda()
+        train_start_time = time.perf_counter()
+        train_result = trainer.train()
+        synchronize_cuda()
+        train_time_sec = time.perf_counter() - train_start_time
+        train_metrics = dict(getattr(train_result, "metrics", {}) or {})
+        train_metrics["gpu_synchronized_train_time_sec"] = train_time_sec
+        print_json("Training metrics", train_metrics)
 
         print("Evaluating validation split")
         validation_metrics = trainer.evaluate(
@@ -325,25 +413,70 @@ def main() -> None:
         trainer.save_model(str(final_model_dir))
         tokenizer.save_pretrained(str(final_model_dir))
 
+        selection = model_selection_summary(trainer)
+        memory_metrics = peak_memory_metrics()
         runtime = {
             "status": "completed",
-            "training_time_sec": time.perf_counter() - start_time,
+            "gpu_synchronized_train_time_sec": train_time_sec,
+            "total_runtime_sec": time.perf_counter() - script_start_time,
             "train_examples": len(train_records),
             "validation_examples": len(eval_records),
             "test_examples": len(test_records) if RUN_TEST else None,
+            **memory_metrics,
         }
         metrics = {
+            "train": train_metrics,
             "validation": validation_metrics,
             "test": test_metrics,
             "runtime": runtime,
+            "model_selection": selection,
+            "parameters": parameter_metrics,
         }
         save_json(OUTPUT_DIR / "metrics.json", metrics)
+        save_json(OUTPUT_DIR / "trainer_log_history.json", trainer.state.log_history)
+        save_json(
+            OUTPUT_DIR / "run_summary.json",
+            {
+                "config": config,
+                "metrics": metrics,
+                "final_model_dir": str(final_model_dir),
+            },
+        )
         if wandb_run is not None:
             wandb_run.log(runtime)
+            wandb_run.log(parameter_metrics)
+            wandb_run.log({"model_selection": selection})
             wandb_run.log({"final_eval": validation_metrics})
             if test_metrics is not None:
                 wandb_run.log({"final_test": test_metrics})
 
+        print_json("Model selection", selection)
+        print_json("Runtime and memory", runtime)
+        print_json(
+            "Manual record fields",
+            {
+                "method": METHOD,
+                "trial_id": TRIAL_ID,
+                "seed": SEED,
+                "hparams_json": {
+                    "learning_rate": LEARNING_RATE,
+                    "train_batch_size": TRAIN_BATCH_SIZE,
+                    "eval_batch_size": EVAL_BATCH_SIZE,
+                    "num_epochs": NUM_EPOCHS,
+                    "max_length": MAX_LENGTH,
+                    "weight_decay": WEIGHT_DECAY,
+                    "warmup_ratio": WARMUP_RATIO,
+                },
+                "best_epoch": selection["best_epoch"],
+                "val_macro_f1": validation_metrics.get("eval_f1_macro"),
+                "train_time_s": runtime["gpu_synchronized_train_time_sec"],
+                "peak_mem_allocated_mb": runtime["peak_mem_allocated_mb"],
+                "peak_mem_reserved_mb": runtime["peak_mem_reserved_mb"],
+                "trainable_params": parameter_metrics["trainable_params"],
+                "total_params": parameter_metrics["total_params"],
+                "status": runtime["status"],
+            },
+        )
         print(f"Done. Outputs saved to: {OUTPUT_DIR}")
 
     except Exception as exc:
@@ -351,7 +484,8 @@ def main() -> None:
             "status": "failed",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
-            "runtime_sec": time.perf_counter() - start_time,
+            "total_runtime_sec": time.perf_counter() - script_start_time,
+            **peak_memory_metrics(),
         }
         save_json(OUTPUT_DIR / "failure.json", failure)
         if wandb_run is not None:
