@@ -6,7 +6,7 @@ hyperparameters are defined. Hyperparameters live in
 
 Current status:
 - `src/run_experiment.py` is the preferred entry point for listed experiments.
-- `src/run_distilbert_hatexplain.py` still supports direct W&B usage through
+- `src/methods/distilbert_full/train.py` still supports direct W&B usage through
   Hugging Face Trainer.
 - Enable W&B with `--use_wandb`.
 - Colab uses `src/colab/experiment_launcher.py` to pick an experiment and
@@ -83,6 +83,25 @@ For hyperparameter search, every trial should have a distinct `trial_id`,
 auto-generated W&B run name, so repeated runs of the same method are easier to
 separate in the dashboard.
 
+Use the repo to generate trial commands instead of hand-writing them:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --use_wandb \
+  --wandb_entity your-team \
+  --wandb_project hate-speech-ft
+```
+
+Use a tuning experiment for real HPO. Smoke experiments keep tiny sample caps for
+setup checks, so the CLI blocks smoke-based HPO suggestions unless explicitly
+overridden.
+Do not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
+`config_hash` with `--set` in HPO mode. Use `--trial_output_root` for where
+trial directories are created.
+
 Use W&B groups for method-level grouping, for example:
 
 ```text
@@ -99,9 +118,25 @@ tuning,lora,peft
 final,seed42
 ```
 
+W&B is the dashboard, but the repo still writes local summaries. After a batch
+finishes, aggregate local files and compare them with W&B tables:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
 ## Model Artifacts
 
 The local model always belongs under the run's `output_dir`.
+The runner refuses to start if that directory already contains summaries,
+checkpoints, or saved model files. This protects local evidence from accidental
+reruns. Use a fresh output directory for a new run, or pass
+`--overwrite_output_dir` only when replacing the previous local files is
+intentional.
 
 For the current DistilBERT runner:
 
@@ -124,3 +159,22 @@ W&B model upload is controlled separately:
 
 Keep `false` for smoke and most tuning runs unless the team explicitly wants to
 store model artifacts in W&B.
+
+## What To Compare In W&B
+
+For HPO, filter or group by:
+
+```text
+method
+search_stage
+trial_id
+hpo_seed
+seed
+global_switches.mixed_precision
+global_switches.gradient_checkpointing
+global_switches.class_weighting
+checkpoint_policy.final_model_source
+```
+
+Use validation metrics for selection. Test metrics should appear only in final
+runs.

@@ -6,30 +6,56 @@
     "final_seeds": [42, 43, 44],
     "wandb_project": "hate-speech-ft"
   },
+  "command_defaults": {
+    "dataset_name": "Hate-speech-CNERG/hatexplain"
+  },
+  "family_command_defaults": {
+    "transformer": {
+      "max_length": 128,
+      "weight_decay": 0.01,
+      "warmup_ratio": 0.06,
+      "max_grad_norm": 1.0,
+      "optim": "adamw_torch",
+      "lr_scheduler_type": "linear",
+      "eval_strategy": "epoch",
+      "save_strategy": "epoch",
+      "save_total_limit": 2,
+      "load_best_model_at_end": true,
+      "metric_for_best_model": "eval_f1_macro",
+      "mixed_precision": "none",
+      "gradient_checkpointing": false,
+      "class_weighting": "none",
+      "early_stopping_patience": 2,
+      "early_stopping_threshold": 0.001
+    },
+    "transformer-peft": {
+      "inherits": "transformer"
+    },
+    "transformer-two-stage": {
+      "inherits": "transformer"
+    },
+    "neural-scratch": {
+      "class_weighting": "none",
+      "early_stopping_patience": 2,
+      "early_stopping_threshold": 0.001
+    },
+    "classical": {}
+  },
   "experiments": {
     "distilbert_full_smoke": {
       "status": "ready",
       "method": "full-ft",
       "family": "transformer",
       "stage": "smoke",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Fast smoke test for the current DistilBERT full fine-tuning path.",
       "tags": ["distilbert", "full-ft", "smoke"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "dataset_name": "Hate-speech-CNERG/hatexplain",
-        "max_length": 128,
         "learning_rate": 2e-5,
-        "weight_decay": 0.01,
-        "warmup_ratio": 0.0,
         "per_device_train_batch_size": 8,
         "per_device_eval_batch_size": 8,
         "num_train_epochs": 1,
-        "eval_strategy": "epoch",
-        "save_strategy": "epoch",
-        "save_total_limit": 2,
-        "load_best_model_at_end": true,
-        "metric_for_best_model": "eval_f1_macro",
         "seed": 42,
         "max_train_samples": 64,
         "max_eval_samples": 64,
@@ -41,28 +67,38 @@
       "method": "full-ft",
       "family": "transformer",
       "stage": "quick",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Quick DistilBERT full fine-tuning sanity run.",
       "tags": ["distilbert", "full-ft", "quick"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "dataset_name": "Hate-speech-CNERG/hatexplain",
-        "max_length": 128,
         "learning_rate": 2e-5,
-        "weight_decay": 0.01,
-        "warmup_ratio": 0.0,
         "per_device_train_batch_size": 8,
         "per_device_eval_batch_size": 8,
         "num_train_epochs": 1,
-        "eval_strategy": "epoch",
-        "save_strategy": "epoch",
-        "save_total_limit": 2,
-        "load_best_model_at_end": true,
-        "metric_for_best_model": "eval_f1_macro",
         "seed": 42,
         "max_train_samples": 512,
         "max_eval_samples": 256,
         "output_dir": "outputs/distilbert_full_quick"
+      }
+    },
+    "distilbert_full_tuning": {
+      "status": "ready",
+      "method": "full-ft",
+      "family": "transformer",
+      "stage": "tuning",
+      "script": "src/methods/distilbert_full/train.py",
+      "description": "Full-data DistilBERT base used for HPO trial command generation.",
+      "tags": ["distilbert", "full-ft", "tuning"],
+      "args": {
+        "model_name": "distilbert-base-uncased",
+        "learning_rate": 2e-5,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 3,
+        "seed": 42,
+        "data_fraction": 1.0,
+        "output_dir": "outputs/distilbert_full_tuning"
       }
     },
     "distilbert_full_final_seed42": {
@@ -70,24 +106,15 @@
       "method": "full-ft",
       "family": "transformer",
       "stage": "final",
-      "script": "src/run_distilbert_hatexplain.py",
+      "script": "src/methods/distilbert_full/train.py",
       "description": "Full-data DistilBERT baseline for one final seed.",
       "tags": ["distilbert", "full-ft", "final"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "dataset_name": "Hate-speech-CNERG/hatexplain",
-        "max_length": 128,
         "learning_rate": 2e-5,
-        "weight_decay": 0.01,
-        "warmup_ratio": 0.0,
         "per_device_train_batch_size": 8,
         "per_device_eval_batch_size": 8,
         "num_train_epochs": 3,
-        "eval_strategy": "epoch",
-        "save_strategy": "epoch",
-        "save_total_limit": 2,
-        "load_best_model_at_end": true,
-        "metric_for_best_model": "eval_f1_macro",
         "seed": 42,
         "data_fraction": 1.0,
         "run_test": true,
@@ -103,12 +130,10 @@
       "description": "Template for the TF-IDF + Logistic Regression baseline.",
       "tags": ["tfidf", "logreg", "baseline"],
       "args": {
-        "dataset_name": "Hate-speech-CNERG/hatexplain",
         "ngram_range": [1, 2],
         "min_df": 2,
         "max_features": 50000,
         "C": 1.0,
-        "class_weight": "balanced",
         "seed": 42,
         "output_dir": "outputs/tfidf_logreg_template"
       }
@@ -122,7 +147,6 @@
       "description": "Template for a Bi-LSTM trained from scratch.",
       "tags": ["bilstm", "scratch", "baseline"],
       "args": {
-        "dataset_name": "Hate-speech-CNERG/hatexplain",
         "embedding_size": 100,
         "hidden_size": 128,
         "dropout": 0.3,
@@ -131,6 +155,24 @@
         "epochs": 5,
         "seed": 42,
         "output_dir": "outputs/bilstm_template"
+      }
+    },
+    "random_init_distilbert_template": {
+      "status": "planned",
+      "method": "random-init-distilbert",
+      "family": "transformer",
+      "stage": "template",
+      "script": "src/methods/distilbert_random_init/train.py",
+      "description": "Template for DistilBERT architecture trained from random initialization.",
+      "tags": ["distilbert", "random-init", "scratch"],
+      "args": {
+        "model_name": "distilbert-base-uncased",
+        "learning_rate": 0.0001,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 5,
+        "seed": 42,
+        "output_dir": "outputs/random_init_distilbert_template"
       }
     },
     "frozen_distilbert_template": {
@@ -143,9 +185,7 @@
       "tags": ["distilbert", "frozen-backbone"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "max_length": 128,
         "head_learning_rate": 1e-4,
-        "weight_decay": 0.01,
         "batch_size": 8,
         "epochs": 3,
         "seed": 42,
@@ -162,10 +202,8 @@
       "tags": ["distilbert", "partial-ft"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "max_length": 128,
         "learning_rate": 2e-5,
-        "unfrozen_layers": 2,
-        "weight_decay": 0.01,
+        "top_k_unfrozen_layers": 2,
         "batch_size": 8,
         "epochs": 3,
         "seed": 42,
@@ -182,12 +220,12 @@
       "tags": ["distilbert", "lora", "peft"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "max_length": 128,
         "learning_rate": 3e-4,
         "lora_r": 8,
         "lora_alpha": 16,
         "lora_dropout": 0.1,
         "target_modules": ["q_lin", "v_lin"],
+        "modules_to_save": ["pre_classifier", "classifier"],
         "epochs": 3,
         "seed": 42,
         "output_dir": "outputs/lora_distilbert_template"
@@ -203,12 +241,10 @@
       "tags": ["distilbert", "lp-ft", "two-stage"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "max_length": 128,
         "stage1_head_learning_rate": 1e-4,
         "stage1_epochs": 2,
         "stage2_learning_rate": 2e-5,
         "stage2_epochs": 2,
-        "weight_decay": 0.01,
         "seed": 42,
         "output_dir": "outputs/lp_ft_template"
       }
@@ -223,7 +259,6 @@
       "tags": ["distilbert", "efficient-head-ft", "two-stage"],
       "args": {
         "model_name": "distilbert-base-uncased",
-        "max_length": 128,
         "stage1_learning_rate": 3e-4,
         "stage1_epochs": 2,
         "stage2_learning_rate": 2e-5,

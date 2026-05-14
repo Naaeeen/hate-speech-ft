@@ -30,6 +30,8 @@ class ExperimentSpec:
     tags: tuple[str, ...]
     args: dict[str, Any]
     defaults: dict[str, Any]
+    command_defaults: dict[str, Any]
+    family_command_defaults: dict[str, Any]
 
     @property
     def is_ready(self) -> bool:
@@ -43,9 +45,17 @@ class ExperimentSpec:
 
 
 class ExperimentRegistry:
-    def __init__(self, experiments: list[ExperimentSpec], defaults: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        experiments: list[ExperimentSpec],
+        defaults: dict[str, Any],
+        command_defaults: dict[str, Any],
+        family_command_defaults: dict[str, dict[str, Any]],
+    ) -> None:
         self.experiments = experiments
         self.defaults = defaults
+        self.command_defaults = command_defaults
+        self.family_command_defaults = family_command_defaults
         self._by_id = {experiment.experiment_id: experiment for experiment in experiments}
 
     def get(self, experiment_id: str) -> ExperimentSpec:
@@ -67,29 +77,72 @@ def load_experiment_registry(
     registry_path = Path(path)
     data = json.loads(registry_path.read_text(encoding="utf-8"))
     defaults = dict(data.get("defaults") or {})
-    command_defaults = {
-        key: value
-        for key, value in defaults.items()
-        if key not in METADATA_DEFAULT_KEYS
+    raw_command_defaults = data.get("command_defaults")
+    if raw_command_defaults is None:
+        command_defaults = {
+            key: value
+            for key, value in defaults.items()
+            if key not in METADATA_DEFAULT_KEYS
+        }
+    else:
+        command_defaults = dict(raw_command_defaults)
+    raw_family_command_defaults = {
+        str(family): dict(values or {})
+        for family, values in (data.get("family_command_defaults") or {}).items()
+    }
+    family_command_defaults = {
+        family: _resolve_family_command_defaults(raw_family_command_defaults, family)
+        for family in raw_family_command_defaults
     }
     experiments = []
     for experiment_id, raw in (data.get("experiments") or {}).items():
-        args = {**command_defaults, **dict(raw.get("args") or {})}
+        family = str(raw.get("family", ""))
+        per_family_defaults = family_command_defaults.get(family, {})
+        args = {**command_defaults, **per_family_defaults, **dict(raw.get("args") or {})}
         experiments.append(
             ExperimentSpec(
                 experiment_id=experiment_id,
                 status=str(raw.get("status", "planned")),
                 method=str(raw["method"]),
-                family=str(raw.get("family", "")),
+                family=family,
                 stage=str(raw.get("stage", "")),
                 script=str(raw["script"]),
                 description=str(raw.get("description", "")),
                 tags=tuple(str(tag) for tag in raw.get("tags", ())),
                 args=args,
                 defaults=defaults,
+                command_defaults={**command_defaults, **per_family_defaults},
+                family_command_defaults=per_family_defaults,
             )
         )
-    return ExperimentRegistry(experiments, defaults)
+    return ExperimentRegistry(
+        experiments,
+        defaults,
+        command_defaults,
+        family_command_defaults,
+    )
+
+
+def _resolve_family_command_defaults(
+    all_family_defaults: dict[str, dict[str, Any]],
+    family: str,
+    seen: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    if family in seen:
+        cycle = " -> ".join((*seen, family))
+        raise ValueError(f"Cycle in family_command_defaults inheritance: {cycle}")
+    values = dict(all_family_defaults.get(family, {}))
+    parent = values.pop("inherits", None)
+    if not parent:
+        return values
+    return {
+        **_resolve_family_command_defaults(
+            all_family_defaults,
+            str(parent),
+            (*seen, family),
+        ),
+        **values,
+    }
 
 
 def _parse_scalar(value: str) -> Any:

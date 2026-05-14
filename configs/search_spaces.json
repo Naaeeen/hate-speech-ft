@@ -1,0 +1,89 @@
+{
+  "shared_fixed": {
+    "selection_metric": "eval_f1_macro",
+    "optim": "adamw_torch",
+    "lr_scheduler_type": "linear",
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.06,
+    "max_grad_norm": 1.0,
+    "eval_strategy": "epoch",
+    "save_strategy": "epoch",
+    "load_best_model_at_end": true,
+    "early_stopping_patience": 2,
+    "early_stopping_threshold": 0.001,
+    "mixed_precision": "none",
+    "gradient_checkpointing": false,
+    "class_weighting": "none",
+    "seeds_search": [42],
+    "seeds_confirm": [42, 43],
+    "seeds_final": [42, 43, 44]
+  },
+  "trial_caps": {
+    "tfidf_lr": 12,
+    "tfidf_logreg": 12,
+    "bilstm": 8,
+    "random_init_distilbert": 4,
+    "frozen_backbone": 6,
+    "partial_ft": 6,
+    "full_ft": 6,
+    "lora": 6,
+    "lp_ft": 4,
+    "efficient_head_ft": 4
+  },
+  "search_spaces": {
+    "tfidf_lr": {
+      "ngram_range": [[1, 1], [1, 2], [1, 3]],
+      "C": [0.01, 0.1, 1.0, 10.0],
+      "min_df": [1, 2, 5]
+    },
+    "tfidf_logreg": {
+      "ngram_range": [[1, 1], [1, 2], [1, 3]],
+      "C": [0.01, 0.1, 1.0, 10.0],
+      "min_df": [1, 2, 5]
+    },
+    "bilstm": {
+      "hidden_size": [128, 256],
+      "dropout": [0.1, 0.3, 0.5],
+      "learning_rate": [0.0003, 0.001, 0.003]
+    },
+    "random_init_distilbert": {
+      "learning_rate": [0.0001, 0.0002],
+      "num_train_epochs": [5, 10]
+    },
+    "full_ft": {
+      "learning_rate": [0.00001, 0.00002, 0.00003]
+    },
+    "frozen_backbone": {
+      "head_learning_rate": [0.0001, 0.0003, 0.001],
+      "num_train_epochs": [5, 10]
+    },
+    "partial_ft": {
+      "top_k_unfrozen_layers": [1, 2, 3],
+      "learning_rate": [0.00001, 0.00002, 0.00003]
+    },
+    "lora": {
+      "target_modules": [["q_lin", "v_lin"], ["q_lin", "k_lin", "v_lin", "out_lin"]],
+      "modules_to_save": [["pre_classifier", "classifier"]],
+      "lora_r": [4, 8, 16],
+      "lora_alpha_rule": "alpha = 2 * r",
+      "lora_dropout": [0.0, 0.1],
+      "learning_rate": [0.00005, 0.0001, 0.0002]
+    },
+    "lp_ft": {
+      "stage1_head_learning_rate": [0.0001, 0.001],
+      "stage1_epochs": [5, 10],
+      "stage2_learning_rate": [0.00001, 0.00002],
+      "stage2_epochs": [2, 3]
+    },
+    "efficient_head_ft": {
+      "stage1_target_modules": [["q_lin", "v_lin"]],
+      "stage1_modules_to_save": [["pre_classifier", "classifier"]],
+      "stage1_learning_rate": [0.0001, 0.0002],
+      "stage1_lora_r": [4, 8],
+      "stage1_lora_alpha_rule": "alpha = 2 * r",
+      "stage1_lora_dropout": [0.0, 0.1],
+      "stage2_learning_rate": [0.00001, 0.00002],
+      "stage2_epochs": [2, 3]
+    }
+  }
+}
