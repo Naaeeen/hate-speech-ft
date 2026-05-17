@@ -121,16 +121,37 @@
         "output_dir": "outputs/distilbert_full_final_seed42"
       }
     },
-    "tfidf_logreg_template": {
-      "status": "planned",
+    "tfidf_logreg_tuning": {
+      "status": "ready",
       "method": "tfidf-logreg",
       "family": "classical",
-      "stage": "template",
+      "stage": "tuning",
+      "script": "src/methods/tfidf_logreg/train.py",
+      "description": "Template for the TF-IDF + Logistic Regression baseline.",
+      "tags": [
+        "tfidf",
+        "logreg",
+        "baseline"
+      ],
+      "args": {
+        "ngram_range": "1,2",
+        "min_df": 2,
+        "max_features": 50000,
+        "C": 1.0,
+        "seed": 42,
+        "output_dir": "outputs/tfidf_logreg_template"
+      }
+    },
+    "tfidf_logreg_full_final_seed42": {
+      "status": "ready",
+      "method": "tfidf-logreg",
+      "family": "classical",
+      "stage": "final",
       "script": "src/methods/tfidf_logreg/train.py",
       "description": "Template for the TF-IDF + Logistic Regression baseline.",
       "tags": ["tfidf", "logreg", "baseline"],
       "args": {
-        "ngram_range": [1, 2],
+        "ngram_range": "1,2",
         "min_df": 2,
         "max_features": 50000,
         "C": 1.0,
@@ -231,11 +252,11 @@
         "output_dir": "outputs/lora_distilbert_template"
       }
     },
-    "lp_ft_template": {
-      "status": "planned",
+    "lp_ft_smoke": {
+      "status": "ready",
       "method": "lp-ft",
       "family": "transformer-two-stage",
-      "stage": "template",
+      "stage": "smoke",
       "script": "src/methods/distilbert_lp_ft/train.py",
       "description": "Template for linear probing followed by full fine-tuning.",
       "tags": ["distilbert", "lp-ft", "two-stage"],
@@ -246,7 +267,7 @@
         "stage2_learning_rate": 2e-5,
         "stage2_epochs": 2,
         "seed": 42,
-        "output_dir": "outputs/lp_ft_template"
+        "output_dir": "outputs/lp_ft_smoke"
       }
     },
     "efficient_head_ft_template": {
