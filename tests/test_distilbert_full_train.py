@@ -275,12 +275,14 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
             (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
             (output_dir / "checkpoint-1").mkdir()
+            (output_dir / "stage1_linear_probe").mkdir()
 
             artifacts = find_existing_run_artifacts(output_dir)
 
             self.assertIn(output_dir / "result_summary.json", artifacts)
             self.assertIn(output_dir / "test_predictions.json", artifacts)
             self.assertIn(output_dir / "checkpoint-1", artifacts)
+            self.assertIn(output_dir / "stage1_linear_probe", artifacts)
             with self.assertRaisesRegex(ValueError, "already contains run artifacts"):
                 validate_output_dir_for_run(output_dir, overwrite=False)
             validate_output_dir_for_run(output_dir, overwrite=True)
@@ -303,6 +305,9 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             checkpoint = output_dir / "checkpoint-1"
             checkpoint.mkdir()
             (checkpoint / "trainer_state.json").write_text("{}", encoding="utf-8")
+            stage_dir = output_dir / "stage2_full_ft"
+            stage_dir.mkdir()
+            (stage_dir / "trainer_state.json").write_text("{}", encoding="utf-8")
             note = output_dir / "notes.txt"
             note.write_text("keep", encoding="utf-8")
 
@@ -314,10 +319,12 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
                     "checkpoint-1",
                     "model.safetensors",
                     "result_summary.json",
+                    "stage2_full_ft",
                     "test_predictions.json",
                 },
             )
             self.assertFalse(checkpoint.exists())
+            self.assertFalse(stage_dir.exists())
             self.assertFalse((output_dir / "model.safetensors").exists())
             self.assertTrue(note.exists())
 

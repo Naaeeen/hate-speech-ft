@@ -74,16 +74,20 @@ Ready now:
 - `distilbert_full_quick`
 - `distilbert_full_tuning`
 - `distilbert_full_final_seed42`
+- `distilbert_lp_ft_smoke`
+- `distilbert_lp_ft_quick`
+- `distilbert_lp_ft_tuning`
+- `distilbert_lp_ft_final_seed42`
+- `tfidf_logreg_tuning`
+- `tfidf_logreg_full_final_seed42`
 
 Planned templates exist for:
 
-- `tfidf_logreg_template`
 - `bilstm_template`
 - `random_init_distilbert_template`
 - `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
-- `lp_ft_template`
 - `efficient_head_ft_template`
 
 `planned` means the experiment is documented in the catalog, but the method
@@ -115,7 +119,8 @@ src/
   experiments/                  # catalog loading and command building
   methods/                      # method packages and shared method helpers
     _template/                  # copyable starter for new methods
-    distilbert_full/            # current ready DistilBERT full-FT method
+    distilbert_full/            # ready DistilBERT full-FT method
+    distilbert_lp_ft/           # ready DistilBERT linear-probe + full-FT method
   utils/                        # W&B and environment helpers
 
 tests/
@@ -222,6 +227,16 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+For DistilBERT LP+FT HPO, use the LP+FT tuning base and `lp_ft` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_trials 4 \
+  --search_space lp_ft \
+  --hpo_seed 42
+```
+
 This prints deterministic trial commands with unique `trial_id` and `output_dir`.
 Preview them before running expensive training.
 `configs/search_spaces.json` also records allocated HPO trial caps and optional
@@ -257,6 +272,18 @@ python src/run_experiment.py \
   --set learning_rate=2e-5
 ```
 
+LP+FT uses method-specific selected hyperparameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_seed_runs final \
+  --set stage1_head_learning_rate=1e-4 \
+  --set stage1_epochs=5 \
+  --set stage2_learning_rate=2e-5 \
+  --set stage2_epochs=2
+```
+
 `confirm` uses seeds `42,43` and validation only. `final` uses seeds
 `42,43,44` and adds `--run_test`. Final-stage runs are required to run the
 test split; smoke, quick, tuning, and confirm runs are required not to. All
@@ -287,13 +314,14 @@ mean/range.
 ## Direct DistilBERT Runner
 
 The generic runner dispatches to method-specific scripts. The current ready
-method script is:
+DistilBERT method scripts are:
 
 ```text
 src/methods/distilbert_full/train.py
+src/methods/distilbert_lp_ft/train.py
 ```
 
-You can still run it directly:
+You can still run full FT directly:
 
 ```bash
 python src/methods/distilbert_full/train.py \
@@ -304,6 +332,20 @@ python src/methods/distilbert_full/train.py \
   --max_eval_samples 64 \
   --num_train_epochs 1 \
   --output_dir outputs/manual_distilbert_smoke
+```
+
+LP+FT can also be run directly, though the catalog launcher is preferred:
+
+```bash
+python src/methods/distilbert_lp_ft/train.py \
+  --method lp-ft \
+  --search_stage smoke \
+  --trial_id manual_lp_ft_smoke \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --stage1_epochs 1 \
+  --stage2_epochs 1 \
+  --output_dir outputs/manual_lp_ft_smoke
 ```
 
 Prefer `src/run_experiment.py` for team experiments because it keeps names,
@@ -496,6 +538,7 @@ Compile key modules:
 ```bash
 python -m py_compile \
   src/methods/distilbert_full/train.py \
+  src/methods/distilbert_lp_ft/train.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/colab/experiment_launcher.py \

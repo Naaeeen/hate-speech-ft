@@ -22,11 +22,11 @@ from src.methods.distilbert_full.data import (
     resolve_eval_split_name,
 )
 from src.experiments.results import (
-    write_json,
     write_failure_file,
     write_resolved_config,
     write_result_files,
 )
+from src.methods.predictions import save_prediction_file
 from src.methods.common import (
     clear_existing_run_artifacts,
     find_existing_run_artifacts,
@@ -56,58 +56,6 @@ from src.utils.wandb_config import (
     init_wandb_run,
     parse_wandb_tags,
 )
-
-
-def _as_list(value):
-    if hasattr(value, "tolist"):
-        return value.tolist()
-    return list(value)
-
-
-def _argmax(values: list[float]) -> int:
-    return max(range(len(values)), key=lambda index: values[index])
-
-
-def save_prediction_file(
-    path: str | Path,
-    *,
-    records: list[dict],
-    prediction_output,
-    id2label: dict[int, str],
-):
-    logits = _as_list(prediction_output.predictions)
-    labels = _as_list(prediction_output.label_ids)
-    if len(records) != len(logits) or len(records) != len(labels):
-        raise ValueError(
-            "Prediction output length does not match source records: "
-            f"records={len(records)}, logits={len(logits)}, labels={len(labels)}"
-        )
-
-    predictions = []
-    for record, logit_values, label_id in zip(records, logits, labels):
-        logit_list = [float(value) for value in _as_list(logit_values)]
-        predicted_label = int(_argmax(logit_list))
-        gold_label = int(label_id)
-        predictions.append(
-            {
-                "id": record.get("id"),
-                "text": record.get("text"),
-                "label": gold_label,
-                "label_name": id2label.get(gold_label),
-                "predicted_label": predicted_label,
-                "predicted_label_name": id2label.get(predicted_label),
-                "logits": logit_list,
-            }
-        )
-
-    return write_json(
-        path,
-        {
-            "count": len(predictions),
-            "predictions": predictions,
-        },
-    )
-
 
 def resolve_wandb_settings(args) -> WandbSettings:
     run_name = args.wandb_run_name or build_wandb_run_name(

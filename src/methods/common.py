@@ -23,6 +23,10 @@ RUN_ARTIFACT_NAMES = {
     "tokenizer.json",
     "tokenizer_config.json",
     "special_tokens_map.json",
+    "stage1_linear_probe",
+    "stage2_full_ft",
+    "lp_checkpoints",
+    "ft_checkpoints",
 }
 CHECKPOINT_PREFIX = "checkpoint-"
 COMMON_DEFAULTS = {

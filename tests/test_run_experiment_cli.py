@@ -264,6 +264,41 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--search_stage smoke", completed.stdout)
         self.assertNotIn("--search_stage tuning", completed.stdout)
 
+    def test_lp_ft_smoke_preview_uses_two_stage_method_script(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_lp_ft_smoke",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("src/methods/distilbert_lp_ft/train.py", completed.stdout)
+        self.assertIn("--method lp-ft", completed.stdout)
+        self.assertIn("--stage1_head_learning_rate 0.0001", completed.stdout)
+        self.assertIn("--stage2_learning_rate 2e-05", completed.stdout)
+        self.assertIn("--max_train_samples 64", completed.stdout)
+
+    def test_lp_ft_hpo_uses_tuning_base_and_search_space(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_lp_ft_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "lp_ft",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_stage tuning", completed.stdout)
+        self.assertIn("--hpo_trial_cap 4", completed.stdout)
+        self.assertIn("--stage1_head_learning_rate", completed.stdout)
+        self.assertIn("--stage2_learning_rate", completed.stdout)
+        self.assertIn("distilbert_lp_ft_tuning__lp_ft__trial001", completed.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

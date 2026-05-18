@@ -6,7 +6,8 @@ hyperparameters are defined. Hyperparameters live in
 
 Current status:
 - `src/run_experiment.py` is the preferred entry point for listed experiments.
-- `src/methods/distilbert_full/train.py` still supports direct W&B usage through
+- `src/methods/distilbert_full/train.py` and
+  `src/methods/distilbert_lp_ft/train.py` support direct W&B usage through
   Hugging Face Trainer.
 - Enable W&B with `--use_wandb`.
 - Colab uses `src/colab/experiment_launcher.py` to pick an experiment and
@@ -23,7 +24,8 @@ Colab workflow:
 2. Open `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb`.
 3. Run setup cells.
 4. In the experiment launcher widget, choose:
-   - Experiment: for example `distilbert_full_smoke`
+  - Experiment: for example `distilbert_full_smoke`
+    or `distilbert_lp_ft_smoke`
    - Mode: `online`, `offline`, or `disabled`
    - Entity: your team or username
    - Project: `hate-speech-ft`
@@ -38,6 +40,16 @@ CLI smoke example:
 ```bash
 python src/run_experiment.py \
   --experiment distilbert_full_smoke \
+  --use_wandb \
+  --wandb_entity hate-speech-ft-team \
+  --wandb_project hate-speech-ft
+```
+
+LP+FT uses the same W&B switches:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_smoke \
   --use_wandb \
   --wandb_entity hate-speech-ft-team \
   --wandb_project hate-speech-ft
@@ -157,9 +169,20 @@ output_dir/                 final saved model, tokenizer, metrics, config, and
                             final-stage prediction files when produced
 ```
 
+For DistilBERT LP+FT:
+
+```text
+output_dir/stage1_linear_probe/    stage-1 head-only checkpoints
+output_dir/stage2_full_ft/         stage-2 full-finetuning checkpoints
+output_dir/                        final saved stage-2 model/tokenizer,
+                                   metrics, config, and final-stage
+                                   prediction files when produced
+```
+
 If `load_best_model_at_end=true`, the final saved model is the best validation
-checkpoint according to `metric_for_best_model`. If it is false, the final saved
-model is the last training state.
+checkpoint according to `metric_for_best_model`. For LP+FT, that final model is
+selected from the stage-2 full-finetuning checkpoints. If it is false, the final
+saved model is the last training state.
 
 W&B model upload is controlled separately:
 

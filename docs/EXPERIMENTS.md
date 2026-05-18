@@ -126,6 +126,16 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+LP+FT uses the same launcher path with its own two-stage search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_trials 4 \
+  --search_space lp_ft \
+  --hpo_seed 42
+```
+
 Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
 `output_dir`. This prevents HPO runs from overwriting each other.
 If `configs/search_spaces.json` defines `time_caps_gpu_hours` for the search
@@ -163,6 +173,18 @@ python src/run_experiment.py \
   --experiment distilbert_full_tuning \
   --suggest_seed_runs final \
   --set learning_rate=2e-5
+```
+
+For LP+FT, pass the selected stage-1 and stage-2 hyperparameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_seed_runs final \
+  --set stage1_head_learning_rate=1e-4 \
+  --set stage1_epochs=5 \
+  --set stage2_learning_rate=2e-5 \
+  --set stage2_epochs=2
 ```
 
 Final runs use `shared_fixed.seeds_final`, set `search_stage=final`, and add
@@ -219,12 +241,12 @@ type, message, partial runtime, and config. A failed run clears stale managed
 success artifacts first, so old metrics and predictions are not mistaken for
 the failed attempt.
 
-The DistilBERT runner protects existing local run artifacts by default. If
+The DistilBERT method runners protect existing local run artifacts by default. If
 `output_dir` already contains summaries, checkpoints, or saved model files, the
 run exits before writing anything. Use a new output directory for a new run, or
 pass `--overwrite_output_dir` only for an intentional replacement.
 
-The current DistilBERT runner writes these files through
+The current DistilBERT runners write these files through
 `src/experiments/results.py`. New method scripts should reuse that helper or
 write the same file names with the same meaning.
 For final-stage DistilBERT runs, `eval_predictions.json` and
@@ -308,16 +330,20 @@ Ready now:
 - `distilbert_full_quick`
 - `distilbert_full_tuning`
 - `distilbert_full_final_seed42`
+- `distilbert_lp_ft_smoke`
+- `distilbert_lp_ft_quick`
+- `distilbert_lp_ft_tuning`
+- `distilbert_lp_ft_final_seed42`
+- `tfidf_logreg_tuning`
+- `tfidf_logreg_full_final_seed42`
 
 Templates for later scripts:
 
-- `tfidf_logreg_template`
 - `bilstm_template`
 - `random_init_distilbert_template`
 - `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
-- `lp_ft_template`
 - `efficient_head_ft_template`
 
 ## Capability Contract

@@ -7,9 +7,12 @@ helpers.
 
 ```text
 _template/          copyable starter for a new method
-distilbert_full/    current ready DistilBERT full fine-tuning method
+distilbert_full/    ready DistilBERT full fine-tuning method
+distilbert_lp_ft/   ready DistilBERT linear probing + full fine-tuning method
 common.py           method-agnostic CLI/config/output policy helpers
 hf_common.py        Hugging Face Trainer helpers shared by Transformer methods
+transformer_data.py shared HateXplain tokenization/split helpers for Transformer methods
+predictions.py      shared per-sample prediction JSON writer
 ```
 
 New methods should use their own package:
@@ -71,3 +74,7 @@ per-sample outputs should also write `eval_predictions.json`; final runs with
 Keep method-specific model code in the method package. That includes PEFT
 adapter choices, TF-IDF vectorizers, Bi-LSTM modules, freezing policy, and
 two-stage training logic.
+
+For example, LP+FT keeps its stage-1 head-only freezing and stage-2 full
+unfreeze helpers in `src/methods/distilbert_lp_ft/training.py`; shared code only
+provides the comparable data, logging, W&B, checkpoint, and output contracts.

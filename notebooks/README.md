@@ -29,6 +29,7 @@ The notebook should not contain method implementation logic. Put method code in:
 
 ```text
 src/methods/distilbert_full/train.py
+src/methods/distilbert_lp_ft/train.py
 src/methods/<method>/train.py
 ```
 

@@ -28,14 +28,14 @@ class ProtocolValidationReport:
 
 
 EXPECTED_METHODS = (
-    ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, search_space_aliases=("tfidf_lr",)),
+    ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, catalog_stage="tuning"),
     ExpectedMethod("bilstm", "bilstm", 8),
     ExpectedMethod("random-init-distilbert", "random_init_distilbert", 4),
     ExpectedMethod("frozen-backbone", "frozen_backbone", 6),
     ExpectedMethod("partial-ft", "partial_ft", 6),
     ExpectedMethod("full-ft", "full_ft", 6, catalog_stage="tuning"),
     ExpectedMethod("lora", "lora", 6),
-    ExpectedMethod("lp-ft", "lp_ft", 4),
+    ExpectedMethod("lp-ft", "lp_ft", 4, catalog_stage="tuning"),
     ExpectedMethod("efficient-head-ft", "efficient_head_ft", 4),
 )
 

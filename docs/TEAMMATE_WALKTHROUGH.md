@@ -27,8 +27,10 @@ distilbert_full_smoke            ready
 distilbert_full_quick            ready
 distilbert_full_tuning           ready
 distilbert_full_final_seed42     ready
+distilbert_lp_ft_smoke           ready
+distilbert_lp_ft_tuning          ready
+tfidf_logreg_tuning              ready
 lora_distilbert_template         planned
-tfidf_logreg_template            planned
 ...
 ```
 
@@ -139,6 +141,17 @@ python src/run_experiment.py \
   --experiment distilbert_full_tuning \
   --suggest_trials 3 \
   --search_space full_ft \
+  --hpo_seed 42
+```
+
+For the two-stage LP+FT method, Sam uses the LP+FT tuning base and search
+space:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_trials 4 \
+  --search_space lp_ft \
   --hpo_seed 42
 ```
 

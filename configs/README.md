@@ -120,6 +120,15 @@ python src/run_experiment.py \
   --search_space full_ft
 ```
 
+For DistilBERT LP+FT, use:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_trials 4 \
+  --search_space lp_ft
+```
+
 Use a tuning experiment for real HPO. Smoke experiments keep sample caps for
 setup checks and are blocked for HPO unless `--allow_smoke_hpo` is passed.
 HPO trial identity fields are launcher-managed: do not set `output_dir`,
@@ -182,8 +191,11 @@ distilbert_full_smoke
 distilbert_full_quick
 distilbert_full_tuning
 distilbert_full_final_seed42
+distilbert_lp_ft_smoke
+distilbert_lp_ft_tuning
+distilbert_lp_ft_final_seed42
 lora_distilbert_template
-tfidf_logreg_template
+tfidf_logreg_tuning
 random_init_distilbert_template
 ```
 

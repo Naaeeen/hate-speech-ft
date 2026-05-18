@@ -22,7 +22,7 @@ class ExperimentRegistryTests(unittest.TestCase):
 
         self.assertIn("distilbert_full_smoke", ready_ids)
         self.assertIn("distilbert_full_tuning", ready_ids)
-        self.assertIn("tfidf_logreg_template", all_ids)
+        self.assertIn("tfidf_logreg_tuning", ready_ids)
         self.assertIn("lora_distilbert_template", all_ids)
 
     def test_build_ready_experiment_command_includes_common_and_wandb_args(self):
@@ -94,7 +94,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("class_weighting", spec.command_defaults)
         self.assertNotIn("wandb_project", spec.command_defaults)
 
-        tfidf_spec = self.registry.get("tfidf_logreg_template")
+        tfidf_spec = self.registry.get("tfidf_logreg_tuning")
         self.assertNotIn("mixed_precision", tfidf_spec.args)
         self.assertNotIn("gradient_checkpointing", tfidf_spec.args)
 
@@ -109,7 +109,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("--run_test", command)
 
     def test_missing_planned_script_is_not_runnable(self):
-        spec = self.registry.get("tfidf_logreg_template")
+        spec = self.registry.get("bilstm_template")
 
         with self.assertRaises(FileNotFoundError):
             build_experiment_command(spec, repo_root=self.repo_root)

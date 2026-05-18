@@ -14,6 +14,10 @@ contracts.
   local result files.
 - [TEAMMATE_WALKTHROUGH.md](TEAMMATE_WALKTHROUGH.md): a fictional teammate
   workflow showing the expected day-to-day usage.
+- [DISTILBERT_LP_FT_INTEGRATION_EN.md](DISTILBERT_LP_FT_INTEGRATION_EN.md):
+  English explanation of the DistilBERT LP+FT pipeline integration.
+- [DISTILBERT_LP_FT_INTEGRATION_ZH.md](DISTILBERT_LP_FT_INTEGRATION_ZH.md):
+  中文版 DistilBERT LP+FT pipeline 集成说明。
 
 ## What Belongs Here
 
