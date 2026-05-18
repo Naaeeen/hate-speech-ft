@@ -17,14 +17,18 @@ from src.methods.distilbert_full.data import (
     build_fixed_label_maps,
     build_tokenized_dataset,
     build_tokenized_dataset_with_count,
+    build_tokenized_dataset_with_stats,
     find_split_name,
+    resolve_eval_split_name,
 )
 from src.experiments.results import (
+    write_json,
     write_failure_file,
     write_resolved_config,
     write_result_files,
 )
 from src.methods.common import (
+    clear_existing_run_artifacts,
     find_existing_run_artifacts,
     validate_output_dir_for_run,
     validate_test_evaluation_policy,
@@ -52,6 +56,57 @@ from src.utils.wandb_config import (
     init_wandb_run,
     parse_wandb_tags,
 )
+
+
+def _as_list(value):
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    return list(value)
+
+
+def _argmax(values: list[float]) -> int:
+    return max(range(len(values)), key=lambda index: values[index])
+
+
+def save_prediction_file(
+    path: str | Path,
+    *,
+    records: list[dict],
+    prediction_output,
+    id2label: dict[int, str],
+):
+    logits = _as_list(prediction_output.predictions)
+    labels = _as_list(prediction_output.label_ids)
+    if len(records) != len(logits) or len(records) != len(labels):
+        raise ValueError(
+            "Prediction output length does not match source records: "
+            f"records={len(records)}, logits={len(logits)}, labels={len(labels)}"
+        )
+
+    predictions = []
+    for record, logit_values, label_id in zip(records, logits, labels):
+        logit_list = [float(value) for value in _as_list(logit_values)]
+        predicted_label = int(_argmax(logit_list))
+        gold_label = int(label_id)
+        predictions.append(
+            {
+                "id": record.get("id"),
+                "text": record.get("text"),
+                "label": gold_label,
+                "label_name": id2label.get(gold_label),
+                "predicted_label": predicted_label,
+                "predicted_label_name": id2label.get(predicted_label),
+                "logits": logit_list,
+            }
+        )
+
+    return write_json(
+        path,
+        {
+            "count": len(predictions),
+            "predictions": predictions,
+        },
+    )
 
 
 def resolve_wandb_settings(args) -> WandbSettings:
@@ -87,6 +142,12 @@ def main():
         print(f"Cannot start run: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
 
+    if args.overwrite_output_dir:
+        removed_artifacts = clear_existing_run_artifacts(args.output_dir)
+        if removed_artifacts:
+            preview = ", ".join(path.name for path in removed_artifacts[:8])
+            print(f"Cleared existing run artifacts from {args.output_dir}: {preview}")
+
     os.makedirs(args.output_dir, exist_ok=True)
     wandb_run = None
     gpu_type = get_gpu_type()
@@ -100,6 +161,7 @@ def main():
         precision_policy=precision_policy,
         gpu_type=gpu_type,
     )
+    wandb_settings = resolve_wandb_settings(args)
     try:
         precision_policy = resolve_precision_policy(args)
         experiment_config = build_setup_failure_config(
@@ -112,6 +174,7 @@ def main():
             run_test=args.run_test,
         )
         validate_checkpoint_policy(args)
+        wandb_run = init_wandb_run(wandb_settings, config=experiment_config)
 
         from datasets import load_dataset
         from transformers import (
@@ -134,22 +197,22 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
         train_split = find_split_name(ds, ["train"])
-        eval_split = find_split_name(ds, ["validation", "valid", "test"])
+        eval_split = resolve_eval_split_name(ds, test_split_name=args.test_split_name)
         test_split = find_split_name(ds, [args.test_split_name])
 
         if train_split is None:
             raise ValueError(f"No train split found. Available splits: {list(ds.keys())}")
-        if eval_split is None:
-            raise ValueError(
-                f"No validation/valid/test split found. Available splits: {list(ds.keys())}"
-            )
         if args.run_test and test_split is None:
             raise ValueError(
                 f"No test split named '{args.test_split_name}' found. "
                 f"Available splits: {list(ds.keys())}"
             )
+        if args.run_test and eval_split == test_split:
+            raise ValueError(
+                f"Evaluation split '{eval_split}' and test split '{test_split}' must be distinct."
+            )
 
-        train_dataset, full_train_size = build_tokenized_dataset_with_count(
+        train_split_data = build_tokenized_dataset_with_stats(
             ds[train_split],
             tokenizer=tokenizer,
             max_length=args.max_length,
@@ -157,21 +220,28 @@ def main():
             fraction_seed=args.data_fraction_seed,
             max_samples=args.max_train_samples,
         )
-        eval_dataset, full_eval_size = build_tokenized_dataset_with_count(
+        eval_split_data = build_tokenized_dataset_with_stats(
             ds[eval_split],
             tokenizer=tokenizer,
             max_length=args.max_length,
             max_samples=args.max_eval_samples,
         )
+        train_dataset = train_split_data.dataset
+        eval_dataset = eval_split_data.dataset
+        full_train_size = train_split_data.preprocessed_size
+        full_eval_size = eval_split_data.preprocessed_size
         test_dataset = None
+        test_split_data = None
         full_test_size = None
         if args.run_test:
-            test_dataset, full_test_size = build_tokenized_dataset_with_count(
+            test_split_data = build_tokenized_dataset_with_stats(
                 ds[test_split],
                 tokenizer=tokenizer,
                 max_length=args.max_length,
                 max_samples=args.max_test_samples,
             )
+            test_dataset = test_split_data.dataset
+            full_test_size = test_split_data.preprocessed_size
 
         id2label, label2id, num_labels = build_fixed_label_maps()
 
@@ -183,12 +253,21 @@ def main():
             f"Eval split: {eval_split}, size={len(eval_dataset)} "
             f"(preprocessed full={full_eval_size})"
         )
+        print(
+            "Strict-majority dropped: "
+            f"train={train_split_data.dropped_no_majority_count}, "
+            f"eval={eval_split_data.dropped_no_majority_count}"
+        )
         print(f"Using num_labels: {num_labels}")
         print(f"id2label: {id2label}")
         if args.run_test:
             print(
                 f"Test split: {test_split}, size={len(test_dataset)} "
                 f"(preprocessed full={full_test_size})"
+            )
+            print(
+                "Strict-majority dropped: "
+                f"test={test_split_data.dropped_no_majority_count}"
             )
 
         model = AutoModelForSequenceClassification.from_pretrained(
@@ -212,7 +291,6 @@ def main():
             print(f"Class weights ({args.class_weighting}): {class_weights}")
 
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-        wandb_settings = resolve_wandb_settings(args)
         gpu_type = get_gpu_type()
         experiment_config = build_experiment_config(
             args,
@@ -222,8 +300,18 @@ def main():
             eval_size=len(eval_dataset),
             full_train_size=full_train_size,
             full_eval_size=full_eval_size,
+            raw_train_size=train_split_data.raw_size,
+            raw_eval_size=eval_split_data.raw_size,
+            dropped_no_majority_train=train_split_data.dropped_no_majority_count,
+            dropped_no_majority_eval=eval_split_data.dropped_no_majority_count,
             test_size=len(test_dataset) if test_dataset is not None else None,
             full_test_size=full_test_size,
+            raw_test_size=test_split_data.raw_size if test_split_data is not None else None,
+            dropped_no_majority_test=(
+                test_split_data.dropped_no_majority_count
+                if test_split_data is not None
+                else None
+            ),
             trainable_params=trainable_params,
             total_params=total_params,
             gpu_type=gpu_type,
@@ -232,7 +320,8 @@ def main():
         )
         resolved_config_path = write_resolved_config(args.output_dir, experiment_config)
         print(f"Resolved config: {resolved_config_path}")
-        wandb_run = init_wandb_run(wandb_settings, config=experiment_config)
+        if wandb_run is not None:
+            wandb_run.config.update(experiment_config, allow_val_change=True)
 
         training_args = build_training_arguments(
             TrainingArguments,
@@ -361,6 +450,32 @@ def main():
             trainer.save_model(args.output_dir)
             tokenizer.save_pretrained(args.output_dir)
 
+        prediction_paths = {}
+        if args.search_stage == "final":
+            print("\nSaving evaluation predictions...")
+            eval_prediction_output = trainer.predict(
+                eval_dataset,
+                metric_key_prefix="eval_predictions",
+            )
+            prediction_paths["eval"] = save_prediction_file(
+                Path(args.output_dir) / "eval_predictions.json",
+                records=eval_split_data.records,
+                prediction_output=eval_prediction_output,
+                id2label=id2label,
+            )
+            if args.run_test:
+                print("Saving test predictions...")
+                test_prediction_output = trainer.predict(
+                    test_dataset,
+                    metric_key_prefix="test_predictions",
+                )
+                prediction_paths["test"] = save_prediction_file(
+                    Path(args.output_dir) / "test_predictions.json",
+                    records=test_split_data.records,
+                    prediction_output=test_prediction_output,
+                    id2label=id2label,
+                )
+
         runtime_metrics = {
             "training_time_sec": training_time_sec,
             "peak_memory_mb": get_peak_memory_mb(),
@@ -381,6 +496,7 @@ def main():
             test_metrics=test_metrics,
             runtime_metrics=runtime_metrics,
             model_selection=model_selection,
+            prediction_paths=prediction_paths,
         )
 
         print("\nFinal evaluation metrics:")
@@ -399,6 +515,10 @@ def main():
         print("\nResult files:")
         for k, v in result_paths.items():
             print(f"{k}: {v}")
+        if prediction_paths:
+            print("\nPrediction files:")
+            for k, v in prediction_paths.items():
+                print(f"{k}: {v}")
 
         print(f"\nDone. Saved to: {args.output_dir}")
     except Exception as exc:

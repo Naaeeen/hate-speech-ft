@@ -133,7 +133,7 @@ class ExperimentLauncher:
         )
         self.aggregate_input = widgets.Text(
             value="",
-            placeholder="blank follows Trial root",
+            placeholder="blank follows active run root",
             description="Agg input",
             layout=widgets.Layout(width="520px"),
         )
@@ -149,7 +149,7 @@ class ExperimentLauncher:
             layout=widgets.Layout(width="520px"),
         )
         self.aggregate_metrics = widgets.Text(
-            value="eval_f1_macro,training_time_sec",
+            value="eval_f1_macro,training_time_sec,best_epoch",
             description="Metrics",
             layout=widgets.Layout(width="520px"),
         )
@@ -200,7 +200,18 @@ class ExperimentLauncher:
             for item in (self.aggregate_metrics.value or "").replace("\n", ",").split(",")
             if item.strip()
         ]
-        aggregate_input = (self.aggregate_input.value or self.trial_output_root.value).rstrip("/")
+        explicit_input = self.aggregate_input.value
+        seed_stage = getattr(getattr(self, "seed_run_stage", None), "value", "none")
+        seed_output_root = getattr(getattr(self, "seed_output_root", None), "value", "")
+        if explicit_input:
+            aggregate_input = explicit_input.rstrip("/")
+        elif seed_stage != "none":
+            aggregate_input = (
+                seed_output_root
+                or f"/content/drive/MyDrive/hate_speech_ft/outputs/{seed_stage}"
+            ).rstrip("/")
+        else:
+            aggregate_input = self.trial_output_root.value.rstrip("/")
         return {
             "input": aggregate_input,
             "output": self.aggregate_output.value

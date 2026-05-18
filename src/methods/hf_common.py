@@ -222,13 +222,16 @@ def compute_metrics_fn(
                 predictions=preds,
                 references=labels,
                 average="macro",
+                zero_division=0,
             )["precision"],
             "recall_macro": recall_metric.compute(
                 predictions=preds,
                 references=labels,
                 average="macro",
+                zero_division=0,
             )["recall"],
         }
+        labels_array = np.asarray(labels)
         per_class_f1 = f1_metric.compute(
             predictions=preds,
             references=labels,
@@ -254,6 +257,7 @@ def compute_metrics_fn(
             results[f"f1_{label_name}"] = float(per_class_f1[index])
             results[f"precision_{label_name}"] = float(per_class_precision[index])
             results[f"recall_{label_name}"] = float(per_class_recall[index])
+            results[f"support_{label_name}"] = int(np.sum(labels_array == label_id))
         return results
 
     return compute_metrics

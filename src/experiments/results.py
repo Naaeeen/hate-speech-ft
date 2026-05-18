@@ -5,6 +5,8 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
+from src.methods.common import clear_existing_run_artifacts
+
 
 def _json_safe(value: Any) -> Any:
     if isinstance(value, dict):
@@ -52,6 +54,7 @@ def write_result_files(
     runtime_metrics: dict[str, Any],
     test_metrics: dict[str, Any] | None = None,
     model_selection: dict[str, Any] | None = None,
+    prediction_paths: dict[str, str | Path] | None = None,
     status: str = "completed",
 ) -> dict[str, Path]:
     output_path = Path(output_dir)
@@ -66,6 +69,9 @@ def write_result_files(
         "metrics": metrics_payload,
         "runtime": runtime_metrics,
         "model_selection": model_selection or {},
+        "artifacts": {
+            "predictions": prediction_paths or {},
+        },
     }
 
     return {
@@ -83,9 +89,7 @@ def write_failure_file(
     runtime_metrics: dict[str, Any] | None = None,
 ) -> Path:
     output_path = Path(output_dir)
-    remove_if_exists(output_path / "result_summary.json")
-    remove_if_exists(output_path / "metrics.json")
-    remove_if_exists(output_path / "runtime.json")
+    clear_existing_run_artifacts(output_path)
     return write_json(
         output_path / "failure_summary.json",
         {

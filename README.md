@@ -123,7 +123,7 @@ tests/
 ```
 
 `src/methods/common.py` contains method-agnostic helpers for shared CLI
-arguments, common tracking config, output-dir protection, and final-test policy
+arguments, common tracking config, output-dir protection, and final/test policy
 validation. New methods should reuse it instead of duplicating those contracts.
 
 ## Setup
@@ -224,6 +224,11 @@ python src/run_experiment.py \
 
 This prints deterministic trial commands with unique `trial_id` and `output_dir`.
 Preview them before running expensive training.
+`configs/search_spaces.json` also records allocated HPO trial caps and optional
+GPU-hour caps. The Full FT search space currently records
+`time_caps_gpu_hours.full_ft=2.0`; this is logged into generated trial commands
+as `hpo_time_cap_gpu_hours` for reporting, but it is not an automatic Colab
+stopwatch.
 In HPO mode, do not override identity fields such as `output_dir`, `trial_id`,
 `search_stage`, `hpo_seed`, or `config_hash` with `--set`; use
 `--trial_output_root`, `--hpo_seed`, or a named catalog experiment instead.
@@ -253,9 +258,11 @@ python src/run_experiment.py \
 ```
 
 `confirm` uses seeds `42,43` and validation only. `final` uses seeds
-`42,43,44` and adds `--run_test`. All generated seed runs share one
-`config_hash` for the selected fixed hyperparameter config, so HPO,
-confirmation, and final aggregation can be traced by `method config_hash`.
+`42,43,44` and adds `--run_test`. Final-stage runs are required to run the
+test split; smoke, quick, tuning, and confirm runs are required not to. All
+generated seed runs share one `config_hash` for the selected fixed
+hyperparameter config, so HPO, confirmation, and final aggregation can be
+traced by `method config_hash`.
 
 After running several trials or final seeds, aggregate local summaries:
 
@@ -265,11 +272,17 @@ python src/aggregate_results.py outputs/hpo \
   --group_by method search_stage \
   --metric eval_f1_macro \
   --metric training_time_sec \
+  --metric best_epoch \
   --metric trainable_pct
 ```
 
 For final test reporting, include `--metric test_f1_macro` and group by the
 fields that define the fixed config, usually `method config_hash`.
+Aggregate reports also include `total_training_time_sec`,
+`total_training_time_hours`, `hpo_total_training_time_sec`, and
+`hpo_total_training_time_hours`. The default aggregation metrics include
+`best_epoch`, which reports mean/std/min/max and can be used as the best-epoch
+mean/range.
 
 ## Direct DistilBERT Runner
 
@@ -314,6 +327,12 @@ Fixed rules:
 - Model selection metric: validation macro-F1
 - Test set: final evaluation only
 
+The DistilBERT runner records raw split sizes, post-policy split sizes, and
+`dropped_no_majority_*` counts in `resolved_config.json`. Those drop counts are
+measured after the Hugging Face dataset builder exposes the split; if the
+builder has already excluded undecided posts, the recorded drop count can be
+zero even though the policy is still strict-majority only.
+
 ## W&B
 
 W&B is optional but recommended for all serious runs.
@@ -343,6 +362,8 @@ method
 search_stage
 trial_id
 hpo_seed
+hpo_trial_cap
+hpo_time_cap_gpu_hours
 seed
 dataset
 data_fraction
@@ -356,22 +377,34 @@ total_params
 training_time_sec
 peak_memory_mb
 gpu_type
+raw_train_size / raw_eval_size / raw_test_size
+dropped_no_majority_train / dropped_no_majority_eval / dropped_no_majority_test
+split_accounting_policy
 ```
 
-Every completed run should also write local files in its `output_dir`:
+Every completed run should write these local files in its `output_dir`:
 
 ```text
 resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
-failure_summary.json        # only when a run fails after setup
+eval_predictions.json       # final-stage runs
+test_predictions.json       # final-stage runs with --run_test
 ```
+
+`result_summary.json` records model-selection details and prediction artifact
+paths when prediction files are produced. The prediction files include sample
+ids, text, gold labels, predicted labels, and logits for inspection.
+Failed runs write `failure_summary.json` with the error type, message, partial
+runtime, and config.
 
 By default, the DistilBERT runner refuses to start if `output_dir` already
 contains result, checkpoint, or model artifacts. Use a new `output_dir` for each
 real experiment run. Pass `--overwrite_output_dir` only when you intentionally
-want to replace the previous local files in that directory.
+want to replace the previous local run artifacts in that directory. In overwrite
+mode the runner clears managed summaries, prediction files, checkpoints, and
+saved model/tokenizer files before the replacement run starts.
 
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
 `hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.

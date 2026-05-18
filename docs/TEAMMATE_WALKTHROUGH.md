@@ -102,6 +102,9 @@ outputs/distilbert_full_smoke/result_summary.json
 ```
 
 These files record what actually ran and the metrics produced locally.
+Smoke runs do not touch the test split and do not write prediction files.
+Final-stage DistilBERT runs write `eval_predictions.json`, and final runs with
+`--run_test` also write `test_predictions.json`.
 
 ## 4. Sam Tries One Temporary Override
 
@@ -154,11 +157,14 @@ python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
-  --metric training_time_sec
+  --metric training_time_sec \
+  --metric best_epoch
 ```
 
 Sam checks `aggregate_summary.json` for completed/failed trial counts and the
-mean validation macro-F1 per config.
+mean validation macro-F1 per config. Aggregation also keeps model-selection
+fields, total training time, best-epoch summaries, and prediction artifact paths
+when final-stage runs produce them.
 
 ## 5. Sam Promotes A Useful Config
 
@@ -222,7 +228,7 @@ src/methods/distilbert_lora/train.py
 ```
 
 The copied `train.py` should keep the `src.methods.common` helpers for shared
-arguments, tracking config, output safety, and final-test policy checks. Sam
+arguments, tracking config, output safety, and final/test policy checks. Sam
 then implements only the LoRA-specific model setup and training logic.
 
 Sam reads:
@@ -264,6 +270,9 @@ If the dry-run works, Sam runs a smoke test.
 Sam does not add final seed 43 and 44 runs yet. The default seed policy is
 documented, but the team should instantiate final seed entries only after the
 final method list and budget are settled.
+
+When Sam eventually adds final seed entries, each final-stage experiment must
+enable `--run_test`. Smoke, quick, tuning, and confirm entries must not.
 
 ## 7. Sam's Rules
 

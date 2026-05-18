@@ -6,6 +6,7 @@ from src.experiments.hpo import (
     build_trial_overrides,
     default_search_space_name,
     enumerate_search_space,
+    get_time_cap_gpu_hours,
     get_trial_cap,
     get_search_space,
     load_hpo_config,
@@ -84,9 +85,12 @@ class HpoTests(unittest.TestCase):
             hpo_seed=123,
             output_root="outputs/hpo",
             trial_cap=2,
+            time_cap_gpu_hours=1.5,
             allow_over_cap=True,
         )
         self.assertEqual(len(trials), 3)
+        self.assertEqual(trials[0]["hpo_trial_cap"], 2)
+        self.assertEqual(trials[0]["hpo_time_cap_gpu_hours"], 1.5)
 
     def test_build_seed_run_overrides_forces_full_data_without_sample_caps(self):
         runs = build_seed_run_overrides(
@@ -193,6 +197,12 @@ class HpoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             merge_trial_overrides(
                 base_args={},
+                user_overrides={"hpo_time_cap_gpu_hours": 9.0},
+                trial_overrides={"trial_id": "trial001"},
+            )
+        with self.assertRaises(ValueError):
+            merge_trial_overrides(
+                base_args={},
                 user_overrides={"data_fraction": 0.2},
                 trial_overrides={"trial_id": "trial001"},
                 protected_user_override_keys={
@@ -242,6 +252,7 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(config["shared_fixed"]["class_weighting"], "none")
         self.assertEqual(config["shared_fixed"]["optim"], "adamw_torch")
         self.assertEqual(get_trial_cap(config, "full_ft"), 6)
+        self.assertEqual(get_time_cap_gpu_hours(config, "full_ft"), 2.0)
         self.assertEqual(
             shared_fixed_command_overrides(config)["mixed_precision"],
             "none",

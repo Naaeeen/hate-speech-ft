@@ -59,7 +59,10 @@ python src/run_experiment.py --experiment distilbert_full_smoke --set key=value
 
 For manual reruns, prefer a new `output_dir`. The ready DistilBERT runner
 protects directories that already contain summaries, checkpoints, or saved model
-files unless `--overwrite_output_dir` is set intentionally.
+files unless `--overwrite_output_dir` is set intentionally. In overwrite mode,
+the runner clears managed run artifacts such as summaries, prediction files,
+checkpoints, and saved model/tokenizer files before starting the replacement
+run.
 
 ## Entry Fields
 
@@ -101,6 +104,7 @@ Edit `search_spaces.json` when the team changes the HPO protocol:
 
 - `shared_fixed`: global protocol decisions from the research report
 - `trial_caps`: maximum trials per method, enforced by `run_experiment.py`
+- `time_caps_gpu_hours`: optional allocated HPO GPU-hour caps for reporting
 - `search_spaces`: method-specific knobs to sample
 
 `tfidf_logreg` is the CLI-default search-space name for method
@@ -119,8 +123,11 @@ python src/run_experiment.py \
 Use a tuning experiment for real HPO. Smoke experiments keep sample caps for
 setup checks and are blocked for HPO unless `--allow_smoke_hpo` is passed.
 HPO trial identity fields are launcher-managed: do not set `output_dir`,
-`trial_id`, `search_stage`, `hpo_seed`, or `config_hash` through `--set`.
+`trial_id`, `search_stage`, `hpo_seed`, `hpo_trial_cap`,
+`hpo_time_cap_gpu_hours`, or `config_hash` through `--set`.
 Use `--trial_output_root` or edit the catalog/search-space config instead.
+The time cap is recorded in generated commands and run configs; it is not
+currently enforced as an automatic kill switch.
 
 Generate confirmation and final seed commands from `shared_fixed.seeds_confirm`
 and `shared_fixed.seeds_final`:
@@ -136,6 +143,11 @@ python src/run_experiment.py \
   --suggest_seed_runs final \
   --set learning_rate=2e-5
 ```
+
+Confirmation runs use validation only. Final seed commands set
+`search_stage=final` and add `--run_test`; direct final-stage catalog runs are
+rejected if `run_test` is disabled, and non-final stages are rejected if they try
+to evaluate the test split.
 
 ## Status
 

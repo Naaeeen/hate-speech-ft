@@ -151,6 +151,13 @@ For main classification experiments, no-majority samples are excluded by default
 
 Reason: a sample with three different labels does not have a stable gold label. Keeping it as a normal training example would add label noise and make method comparisons less clear.
 
+Experiment runners should record raw split sizes, post-policy split sizes, and
+the number of no-majority examples dropped from each split when those counts are
+available. In the current Hugging Face HateXplain loader, some undecided posts
+may already be absent from the exposed splits, so recorded drop counts are
+post-loader accounting rather than a complete statement about the original
+corpus.
+
 #### How To Use `label_policy.py` Directly
 
 Most experiment scripts should use `preprocess_hatexplain_split(...)`, which
@@ -565,6 +572,8 @@ splits = official Hugging Face train/validation/test
 text_policy = join post_tokens with one space; no extra dataset-level cleaning
 label_policy = strict majority vote; drop no-majority samples
 label_mapping = 0:hatespeech, 1:normal, 2:offensive
+raw_train_size / raw_eval_size / raw_test_size
+dropped_no_majority_train / dropped_no_majority_eval / dropped_no_majority_test
 data_fraction = 1.0 or the selected fraction
 data_fraction_seed = 42 if fraction < 1.0
 max_length = 128 for Transformer methods, unless the team changes this globally

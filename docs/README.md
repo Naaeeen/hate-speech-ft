@@ -22,6 +22,7 @@ multiple teammates:
 
 - experiment protocol
 - result reporting rules
+- local artifact/output conventions
 - method onboarding instructions
 - W&B conventions
 - HPO budget rules

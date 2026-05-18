@@ -30,6 +30,9 @@
     "lp_ft": 4,
     "efficient_head_ft": 4
   },
+  "time_caps_gpu_hours": {
+    "full_ft": 2.0
+  },
   "search_spaces": {
     "tfidf_lr": {
       "ngram_range": [[1, 1], [1, 2], [1, 3]],

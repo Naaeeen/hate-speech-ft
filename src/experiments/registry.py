@@ -16,6 +16,7 @@ METADATA_DEFAULT_KEYS = {
     "test_policy",
     "wandb_project",
 }
+STAGE_TAGS = {"smoke", "quick", "tuning", "confirm", "final"}
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,41 @@ def _append_cli_arg(command: list[str], key: str, value: Any) -> None:
     command.extend([flag, _format_cli_value(value)])
 
 
+def _effective_search_stage(spec: ExperimentSpec, args: dict[str, Any]) -> str:
+    return str(args.get("search_stage") or spec.stage)
+
+
+def _default_wandb_group(spec: ExperimentSpec, args: dict[str, Any]) -> str:
+    return f"{spec.method}-{_effective_search_stage(spec, args)}"
+
+
+def _default_wandb_tags(spec: ExperimentSpec, args: dict[str, Any]) -> str:
+    effective_stage = _effective_search_stage(spec, args)
+    tags: list[str] = []
+    replaced_stage = False
+    for tag in spec.tags:
+        next_tag = effective_stage if tag in STAGE_TAGS else tag
+        if tag in STAGE_TAGS:
+            replaced_stage = True
+        if next_tag not in tags:
+            tags.append(next_tag)
+    if not replaced_stage and effective_stage not in tags:
+        tags.append(effective_stage)
+    return ",".join(tags)
+
+
+def _validate_command_policy(args: dict[str, Any]) -> None:
+    search_stage = args.get("search_stage")
+    run_test = bool(args.get("run_test", False))
+    if run_test and search_stage != "final":
+        raise ValueError(
+            "--run_test is only allowed for final-stage experiments. "
+            f"Received search_stage={search_stage!r}."
+        )
+    if search_stage == "final" and not run_test:
+        raise ValueError("Final-stage experiments must enable --run_test.")
+
+
 def build_experiment_command(
     spec: ExperimentSpec,
     *,
@@ -235,6 +271,7 @@ def build_experiment_command(
         **spec.args,
         **(overrides or {}),
     }
+    _validate_command_policy(args)
     command = [python_executable or sys.executable, spec.script]
     for key, value in args.items():
         _append_cli_arg(command, key, value)
@@ -243,8 +280,12 @@ def build_experiment_command(
         command.append("--use_wandb")
         _append_cli_arg(command, "wandb_entity", wandb_entity)
         _append_cli_arg(command, "wandb_project", wandb_project)
-        _append_cli_arg(command, "wandb_group", wandb_group or spec.method)
-        combined_tags = wandb_tags or ",".join(spec.tags)
+        _append_cli_arg(
+            command,
+            "wandb_group",
+            wandb_group or _default_wandb_group(spec, args),
+        )
+        combined_tags = wandb_tags or _default_wandb_tags(spec, args)
         _append_cli_arg(command, "wandb_tags", combined_tags)
         _append_cli_arg(command, "wandb_mode", wandb_mode)
         _append_cli_arg(command, "wandb_log_model", wandb_log_model)

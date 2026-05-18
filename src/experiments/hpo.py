@@ -14,6 +14,8 @@ TRIAL_METADATA_KEYS = {
     "search_stage",
     "trial_id",
     "hpo_seed",
+    "hpo_trial_cap",
+    "hpo_time_cap_gpu_hours",
     "seed",
     "run_test",
     "output_dir",
@@ -24,6 +26,8 @@ PROTECTED_USER_OVERRIDE_KEYS = {
     "search_stage",
     "trial_id",
     "hpo_seed",
+    "hpo_trial_cap",
+    "hpo_time_cap_gpu_hours",
     "seed",
     "output_dir",
     "config_hash",
@@ -113,6 +117,12 @@ def get_trial_cap(config: dict[str, Any], search_space_name: str) -> int | None:
     caps = config.get("trial_caps") or {}
     cap = caps.get(search_space_name)
     return int(cap) if cap is not None else None
+
+
+def get_time_cap_gpu_hours(config: dict[str, Any], search_space_name: str) -> float | None:
+    caps = config.get("time_caps_gpu_hours") or {}
+    cap = caps.get(search_space_name)
+    return float(cap) if cap is not None else None
 
 
 def get_seed_policy(config: dict[str, Any], stage: str) -> list[int]:
@@ -216,6 +226,7 @@ def build_trial_overrides(
     output_root: str,
     search_stage: str = "tuning",
     trial_cap: int | None = None,
+    time_cap_gpu_hours: float | None = None,
     allow_over_cap: bool = False,
     fixed_overrides: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
@@ -247,6 +258,8 @@ def build_trial_overrides(
                 "search_stage": search_stage,
                 "trial_id": trial_id,
                 "hpo_seed": hpo_seed,
+                "hpo_trial_cap": trial_cap,
+                "hpo_time_cap_gpu_hours": time_cap_gpu_hours,
                 "config_hash": build_config_hash(build_config_hash_payload(overrides)),
                 "output_dir": f"{output_root.rstrip('/')}/{trial_id}",
             }

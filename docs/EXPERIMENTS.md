@@ -38,7 +38,7 @@ python src/run_experiment.py --validate_protocol
 ```
 
 This checks the catalog, method templates, search spaces, trial caps, shared
-fixed settings, ready script paths, and the final-only test policy against the
+fixed settings, ready script paths, and the final/test policy against the
 final experiment protocol.
 
 ## Preview Before Running
@@ -128,9 +128,14 @@ python src/run_experiment.py \
 
 Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
 `output_dir`. This prevents HPO runs from overwriting each other.
+If `configs/search_spaces.json` defines `time_caps_gpu_hours` for the search
+space, generated trial commands also include `hpo_time_cap_gpu_hours` so the
+allocated time budget is recorded with each run. The current code records this
+cap for reporting; it does not automatically stop Colab jobs at that time.
 Do not set HPO identity fields (`output_dir`, `trial_id`, `search_stage`,
-`hpo_seed`, or `config_hash`) through `--set`; use `--trial_output_root`,
-`--hpo_seed`, or a catalog experiment edit instead.
+`hpo_seed`, `hpo_trial_cap`, `hpo_time_cap_gpu_hours`, or `config_hash`) through
+`--set`; use `--trial_output_root`, `--hpo_seed`, or a catalog/search-space edit
+instead.
 Trial caps from `configs/search_spaces.json` are enforced by default. Use
 `--allow_over_cap` only for exploratory runs that intentionally exceed the
 research protocol. The CLI also refuses HPO suggestions from smoke experiments
@@ -161,9 +166,10 @@ python src/run_experiment.py \
 ```
 
 Final runs use `shared_fixed.seeds_final`, set `search_stage=final`, and add
-`--run_test`. The generated commands keep the same `config_hash` for the fixed
-hyperparameter config across HPO, confirmation, and final seeds; aggregate final
-results by `method config_hash`.
+`--run_test`. Final-stage runs must evaluate the test split, and non-final
+stages must not. The generated commands keep the same `config_hash` for the
+fixed hyperparameter config across HPO, confirmation, and final seeds;
+aggregate final results by `method config_hash`.
 
 ## Colab
 
@@ -186,10 +192,13 @@ Use `output_dir` in the override box only for a single manual run. When
 `Trials > 0`, trial identity and output directories are managed by the launcher;
 change the `Trial root` widget instead.
 Leave the Colab `Overwrite output` checkbox off unless the goal is to replace a
-previous local run in the same directory.
-The Colab aggregation fields default to the `Trial root`; fill `Agg input` or
-`Agg output` only when aggregating a different folder or writing the report to a
-custom path.
+previous local run in the same directory. When enabled, overwrite mode clears
+managed summaries, prediction files, checkpoints, and saved model/tokenizer
+files before the replacement run starts.
+The Colab aggregation fields default to the active run root: `Trial root` for
+HPO trials, `Seed root` for confirmation/final seed runs, or the stage-specific
+Drive seed root when `Seed root` is blank. Fill `Agg input` or `Agg output` only
+when aggregating a different folder or writing the report to a custom path.
 
 ## Local Result Files
 
@@ -200,11 +209,15 @@ resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
+eval_predictions.json       # final-stage runs
+test_predictions.json       # final-stage runs with --run_test
 ```
 
 This is required even when W&B is disabled or unavailable.
 Failed runs that reach the runner write `failure_summary.json` with the error
-type, message, partial runtime, and config.
+type, message, partial runtime, and config. A failed run clears stale managed
+success artifacts first, so old metrics and predictions are not mistaken for
+the failed attempt.
 
 The DistilBERT runner protects existing local run artifacts by default. If
 `output_dir` already contains summaries, checkpoints, or saved model files, the
@@ -214,6 +227,10 @@ pass `--overwrite_output_dir` only for an intentional replacement.
 The current DistilBERT runner writes these files through
 `src/experiments/results.py`. New method scripts should reuse that helper or
 write the same file names with the same meaning.
+For final-stage DistilBERT runs, `eval_predictions.json` and
+`test_predictions.json` include sample ids, text, gold labels, predicted labels,
+and logits. Their paths are recorded in `result_summary.json` under
+`artifacts.predictions`.
 
 ## Aggregating Runs
 
@@ -229,7 +246,8 @@ python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
-  --metric training_time_sec
+  --metric training_time_sec \
+  --metric best_epoch
 ```
 
 Example for final seed reporting:
@@ -241,6 +259,7 @@ python src/aggregate_results.py outputs/final \
   --metric eval_f1_macro \
   --metric test_f1_macro \
   --metric training_time_sec \
+  --metric best_epoch \
   --metric trainable_pct
 ```
 
@@ -248,7 +267,16 @@ The `std` field is sample standard deviation when at least two completed runs
 exist in the group. Failed runs are counted in the group but excluded from
 metric means. Aggregation also reports `failed_oom` per group and
 `failed_oom_runs` at the top level when failure messages indicate out-of-memory
-errors.
+errors. Flattened records also carry model-selection fields such as
+`best_metric_key`, `best_epoch`, `best_step`, and prediction artifact paths
+when they are present.
+Aggregate reports also write `total_training_time_sec`,
+`total_training_time_hours`, `hpo_total_training_time_sec`, and
+`hpo_total_training_time_hours`. The HPO total includes tuning and confirmation
+runs, so selection cost can be reported without silently dropping failed runs
+that recorded partial runtime. Group records include `total_training_time_sec`
+and `total_training_time_hours`. `best_epoch` is included in the default metric
+list, so mean/std/min/max gives the best-epoch mean/range.
 
 ## Adding A New Method
 
@@ -265,8 +293,8 @@ run protocol validation and a smoke dry-run
 mark the catalog entry ready only after a smoke run works
 ```
 
-Only final runs should use `--run_test`. Smoke, quick, and tuning runs must
-select models with validation metrics only.
+Final runs must use `--run_test`. Smoke, quick, tuning, and confirm runs must
+not use `--run_test`; they select models with validation metrics only.
 
 Checkpoint, W&B, mixed precision, gradient checkpointing, class weighting, and
 early-stopping decisions must be visible in the resolved config. Do not hide
@@ -303,6 +331,12 @@ Fixed across methods:
 - Main selection metric: validation macro-F1
 - Test set: final evaluation only
 - Final seed policy: 42, 43, 44
+
+Runs should record both the raw split sizes exposed by the dataset loader and
+the post-policy split sizes used for training/evaluation. The DistilBERT runner
+also logs `dropped_no_majority_*` fields; these are post-loader accounting
+fields and may be zero if the Hugging Face builder already filtered undecided
+posts before exposing the split.
 
 The default seed policy is recorded in `configs/experiments.json`, but the
 catalog currently only includes `distilbert_full_final_seed42` as a ready final

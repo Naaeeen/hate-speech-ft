@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -13,6 +14,8 @@ RUN_ARTIFACT_NAMES = {
     "metrics.json",
     "runtime.json",
     "resolved_config.json",
+    "eval_predictions.json",
+    "test_predictions.json",
     "trainer_state.json",
     "config.json",
     "model.safetensors",
@@ -28,6 +31,8 @@ COMMON_DEFAULTS = {
     "trial_id": "method_template_manual",
     "config_hash": None,
     "hpo_seed": None,
+    "hpo_trial_cap": None,
+    "hpo_time_cap_gpu_hours": None,
     "dataset_name": "Hate-speech-CNERG/hatexplain",
     "seed": 42,
     "data_fraction_seed": 42,
@@ -105,6 +110,18 @@ def add_common_method_arguments(
     _add_argument_if_missing(parser, "--trial_id", type=str, default=values["trial_id"])
     _add_argument_if_missing(parser, "--config_hash", type=str, default=values["config_hash"])
     _add_argument_if_missing(parser, "--hpo_seed", type=int, default=values["hpo_seed"])
+    _add_argument_if_missing(
+        parser,
+        "--hpo_trial_cap",
+        type=int,
+        default=values["hpo_trial_cap"],
+    )
+    _add_argument_if_missing(
+        parser,
+        "--hpo_time_cap_gpu_hours",
+        type=float,
+        default=values["hpo_time_cap_gpu_hours"],
+    )
     _add_argument_if_missing(
         parser,
         "--dataset_name",
@@ -409,6 +426,8 @@ def build_common_experiment_config(
         "trial_id": getattr(args, "trial_id", None),
         "config_hash": getattr(args, "config_hash", None),
         "hpo_seed": getattr(args, "hpo_seed", None),
+        "hpo_trial_cap": getattr(args, "hpo_trial_cap", None),
+        "hpo_time_cap_gpu_hours": getattr(args, "hpo_time_cap_gpu_hours", None),
         "dataset": getattr(args, "dataset_name", None),
         "model_name": resolved_model_name,
         "tokenizer_name": resolved_tokenizer_name,
@@ -443,6 +462,17 @@ def find_existing_run_artifacts(output_dir: str | Path) -> list[Path]:
     return artifacts
 
 
+def clear_existing_run_artifacts(output_dir: str | Path) -> list[Path]:
+    removed = []
+    for artifact in find_existing_run_artifacts(output_dir):
+        if artifact.is_dir():
+            shutil.rmtree(artifact)
+        else:
+            artifact.unlink()
+        removed.append(artifact)
+    return removed
+
+
 def validate_output_dir_for_run(output_dir: str | Path, *, overwrite: bool) -> None:
     output_path = Path(output_dir)
     if output_path.exists() and not output_path.is_dir():
@@ -464,3 +494,5 @@ def validate_test_evaluation_policy(*, search_stage: str, run_test: bool) -> Non
             "--run_test is only allowed for final-stage experiments. "
             f"Received search_stage={search_stage!r}."
         )
+    if search_stage == "final" and not run_test:
+        raise ValueError("Final-stage experiments must enable --run_test.")

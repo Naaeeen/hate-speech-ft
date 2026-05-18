@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ DEFAULT_METRICS = (
     "trainable_params",
     "total_params",
     "trainable_pct",
+    "best_epoch",
 )
 
 
@@ -98,6 +100,7 @@ def flatten_summary_record(
     config = payload.get("config") or {}
     runtime = payload.get("runtime") or {}
     model_selection = payload.get("model_selection") or {}
+    prediction_artifacts = (payload.get("artifacts") or {}).get("predictions") or {}
     error = payload.get("error") or {}
     trainable_params = config.get("trainable_params")
     total_params = config.get("total_params")
@@ -111,6 +114,8 @@ def flatten_summary_record(
         "config_hash": config.get("config_hash"),
         "seed": config.get("seed"),
         "hpo_seed": config.get("hpo_seed"),
+        "hpo_trial_cap": config.get("hpo_trial_cap"),
+        "hpo_time_cap_gpu_hours": config.get("hpo_time_cap_gpu_hours"),
         "dataset": config.get("dataset"),
         "model_name": config.get("model_name"),
         "output_dir": config.get("output_dir"),
@@ -119,8 +124,15 @@ def flatten_summary_record(
         "error_type": error.get("type"),
         "error_message": error.get("message"),
         "is_oom": is_oom_failure(error.get("message"), error.get("type")),
+        "metric_for_best_model": model_selection.get("metric_for_best_model"),
+        "best_metric_key": model_selection.get("best_metric_key"),
         "best_model_checkpoint": model_selection.get("best_model_checkpoint"),
         "best_metric": model_selection.get("best_metric"),
+        "best_epoch": model_selection.get("best_epoch"),
+        "best_step": model_selection.get("best_step"),
+        "eval_predictions_path": prediction_artifacts.get("eval"),
+        "test_predictions_path": prediction_artifacts.get("test"),
+        "training_time_sec": _metric_value(payload, "training_time_sec"),
         "trainable_params": trainable_params,
         "total_params": total_params,
         "trainable_pct": _metric_value(payload, "trainable_pct"),
@@ -158,6 +170,20 @@ def _metric_summary(values: list[float]) -> dict[str, float | int | None]:
     }
 
 
+def _sum_metric(records: list[dict[str, Any]], metric: str) -> float | None:
+    values = [
+        value
+        for record in records
+        for value in [_as_float(record.get(metric))]
+        if value is not None
+    ]
+    return math.fsum(values) if values else None
+
+
+def _hours(seconds: float | None) -> float | None:
+    return seconds / 3600 if seconds is not None else None
+
+
 def aggregate_records(
     records: list[dict[str, Any]],
     *,
@@ -186,6 +212,7 @@ def aggregate_records(
             ]
             if values:
                 metric_summaries[metric] = _metric_summary(values)
+        total_training_time_sec = _sum_metric(group_records, "training_time_sec")
         groups.append(
             {
                 "group": dict(zip(group_keys, key)),
@@ -193,6 +220,8 @@ def aggregate_records(
                 "completed": len(completed),
                 "failed": len(failed),
                 "failed_oom": len(failed_oom),
+                "total_training_time_sec": total_training_time_sec,
+                "total_training_time_hours": _hours(total_training_time_sec),
                 "metrics": metric_summaries,
             }
         )
@@ -211,6 +240,13 @@ def build_aggregate_report(
         flatten_summary_record(load_summary(path), path, metrics=metric_names)
         for path in summary_files
     ]
+    hpo_records = [
+        record
+        for record in records
+        if record.get("search_stage") in {"tuning", "confirm"}
+    ]
+    total_training_time_sec = _sum_metric(records, "training_time_sec")
+    hpo_total_training_time_sec = _sum_metric(hpo_records, "training_time_sec")
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "inputs": [Path(path).as_posix() for path in paths],
@@ -224,6 +260,10 @@ def build_aggregate_report(
             for record in records
             if record.get("status") == "failed" and record.get("is_oom")
         ),
+        "total_training_time_sec": total_training_time_sec,
+        "total_training_time_hours": _hours(total_training_time_sec),
+        "hpo_total_training_time_sec": hpo_total_training_time_sec,
+        "hpo_total_training_time_hours": _hours(hpo_total_training_time_sec),
         "runs": records,
         "groups": aggregate_records(records, group_by=group_by, metrics=metric_names),
     }
