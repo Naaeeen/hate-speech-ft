@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -8,9 +9,13 @@ from src.methods.distilbert_full.train import (
     build_training_arguments,
     build_trainer,
     build_tokenized_dataset,
+    build_tokenized_dataset_with_stats,
+    clear_existing_run_artifacts,
     compute_balanced_class_weights,
     find_existing_run_artifacts,
+    resolve_eval_split_name,
     resolve_class_weights,
+    save_prediction_file,
     validate_output_dir_for_run,
 )
 
@@ -22,6 +27,11 @@ class RecordingTokenizer:
     def __call__(self, text, **kwargs):
         self.calls.append((text, kwargs))
         return {"input_ids": [101, 102], "attention_mask": [1, 1]}
+
+
+class FakePredictionOutput:
+    predictions = [[0.1, 0.8, 0.1], [2.0, 0.5, 0.1]]
+    label_ids = [1, 0]
 
 
 class RunDistilbertHatexplainTests(unittest.TestCase):
@@ -88,6 +98,68 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
 
         self.assertEqual(len(tokenized), 1)
         self.assertEqual(tokenized[0]["labels"], 0)
+
+    def test_build_tokenized_dataset_with_stats_tracks_raw_and_dropped_counts(self):
+        tokenizer = RecordingTokenizer()
+        examples = [
+            {
+                "id": "keep",
+                "post_tokens": ["keep"],
+                "annotators": {"label": [2, 2, 0]},
+            },
+            {
+                "id": "drop",
+                "post_tokens": ["drop"],
+                "annotators": {"label": [0, 1, 2]},
+            },
+        ]
+
+        split = build_tokenized_dataset_with_stats(
+            examples,
+            tokenizer=tokenizer,
+            max_length=128,
+        )
+
+        self.assertEqual(split.raw_size, 2)
+        self.assertEqual(split.preprocessed_size, 1)
+        self.assertEqual(split.dropped_no_majority_count, 1)
+        self.assertEqual(len(split.dataset), 1)
+        self.assertEqual(split.records[0]["id"], "keep")
+
+    def test_eval_split_resolution_never_falls_back_to_test(self):
+        with self.assertRaisesRegex(ValueError, "validation"):
+            resolve_eval_split_name({"train": [], "test": []}, test_split_name="test")
+
+        self.assertEqual(
+            resolve_eval_split_name(
+                {"train": [], "validation": [], "test": []},
+                test_split_name="test",
+            ),
+            "validation",
+        )
+
+    def test_save_prediction_file_preserves_sample_identity_and_logits(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "test_predictions.json"
+            records = [
+                {"id": "a", "text": "first", "label": 1, "label_name": "normal"},
+                {"id": "b", "text": "second", "label": 0, "label_name": "hatespeech"},
+            ]
+
+            saved = save_prediction_file(
+                path,
+                records=records,
+                prediction_output=FakePredictionOutput(),
+                id2label={0: "hatespeech", 1: "normal", 2: "offensive"},
+            )
+
+            payload = json.loads(saved.read_text(encoding="utf-8"))
+            self.assertEqual(payload["count"], 2)
+            self.assertEqual(payload["predictions"][0]["id"], "a")
+            self.assertEqual(payload["predictions"][0]["predicted_label"], 1)
+            self.assertEqual(payload["predictions"][0]["predicted_label_name"], "normal")
+            self.assertEqual(payload["predictions"][1]["predicted_label"], 0)
+            self.assertEqual(payload["predictions"][1]["logits"], [2.0, 0.5, 0.1])
 
     def test_build_trainer_uses_processing_class_instead_of_removed_tokenizer_arg(self):
         captured_kwargs = {}
@@ -201,11 +273,13 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             output_dir = Path(tmp)
             (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
+            (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
             (output_dir / "checkpoint-1").mkdir()
 
             artifacts = find_existing_run_artifacts(output_dir)
 
             self.assertIn(output_dir / "result_summary.json", artifacts)
+            self.assertIn(output_dir / "test_predictions.json", artifacts)
             self.assertIn(output_dir / "checkpoint-1", artifacts)
             with self.assertRaisesRegex(ValueError, "already contains run artifacts"):
                 validate_output_dir_for_run(output_dir, overwrite=False)
@@ -219,6 +293,33 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
 
             validate_output_dir_for_run(empty_dir, overwrite=False)
             validate_output_dir_for_run(missing_dir, overwrite=False)
+
+    def test_clear_existing_run_artifacts_removes_only_managed_outputs(self):
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
+            (output_dir / "model.safetensors").write_text("model", encoding="utf-8")
+            (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
+            checkpoint = output_dir / "checkpoint-1"
+            checkpoint.mkdir()
+            (checkpoint / "trainer_state.json").write_text("{}", encoding="utf-8")
+            note = output_dir / "notes.txt"
+            note.write_text("keep", encoding="utf-8")
+
+            removed = clear_existing_run_artifacts(output_dir)
+
+            self.assertEqual(
+                {path.name for path in removed},
+                {
+                    "checkpoint-1",
+                    "model.safetensors",
+                    "result_summary.json",
+                    "test_predictions.json",
+                },
+            )
+            self.assertFalse(checkpoint.exists())
+            self.assertFalse((output_dir / "model.safetensors").exists())
+            self.assertTrue(note.exists())
 
 
 if __name__ == "__main__":

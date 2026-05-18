@@ -18,12 +18,14 @@ Current tests cover:
 - experiment catalog loading
 - command generation and CLI overrides
 - local result file recording
-- final-only test evaluation policy
+- final/test evaluation policy
 - Colab launcher working-directory behavior
 - global training switches
 - HPO search-space sampling
 - structured failure summaries
 - result aggregation over completed and failed run summaries
+- final/test policy enforcement and final-stage prediction artifact paths
+- HPO time-cap metadata and aggregate total-time / best-epoch summaries
 
 ## When To Add Tests
 

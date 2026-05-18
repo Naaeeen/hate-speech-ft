@@ -197,6 +197,8 @@ class ColabExperimentLauncherTests(unittest.TestCase):
     def test_aggregate_defaults_follow_trial_output_root(self):
         launcher = object.__new__(ExperimentLauncher)
         launcher.trial_output_root = ValueBox("outputs/custom_hpo")
+        launcher.seed_run_stage = ValueBox("none")
+        launcher.seed_output_root = ValueBox("")
         launcher.aggregate_input = ValueBox("")
         launcher.aggregate_output = ValueBox("")
         launcher.aggregate_group_by = ValueBox("method search_stage config_hash")
@@ -209,6 +211,21 @@ class ColabExperimentLauncherTests(unittest.TestCase):
             config["output"],
             "outputs/custom_hpo/aggregate_summary.json",
         )
+
+    def test_aggregate_defaults_follow_active_seed_output_root(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.trial_output_root = ValueBox("outputs/hpo")
+        launcher.seed_run_stage = ValueBox("final")
+        launcher.seed_output_root = ValueBox("outputs/final")
+        launcher.aggregate_input = ValueBox("")
+        launcher.aggregate_output = ValueBox("")
+        launcher.aggregate_group_by = ValueBox("method search_stage config_hash")
+        launcher.aggregate_metrics = ValueBox("eval_f1_macro,test_f1_macro")
+
+        config = launcher.get_aggregate_config()
+
+        self.assertEqual(config["input"], "outputs/final")
+        self.assertEqual(config["output"], "outputs/final/aggregate_summary.json")
 
     def test_aggregate_results_writes_report_from_widget_settings(self):
         with TemporaryDirectory() as tmp:

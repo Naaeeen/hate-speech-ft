@@ -27,6 +27,7 @@ from src.experiments.hpo import (
     build_trial_overrides,
     default_search_space_name,
     get_seed_policy,
+    get_time_cap_gpu_hours,
     get_trial_cap,
     get_search_space,
     load_hpo_config,
@@ -215,6 +216,10 @@ def main() -> int:
                 output_root=args.trial_output_root,
                 search_stage="smoke" if spec.stage == "smoke" else "tuning",
                 trial_cap=get_trial_cap(search_config, search_space_name),
+                time_cap_gpu_hours=get_time_cap_gpu_hours(
+                    search_config,
+                    search_space_name,
+                ),
                 allow_over_cap=args.allow_over_cap,
                 fixed_overrides=shared_fixed_command_overrides(search_config),
             )

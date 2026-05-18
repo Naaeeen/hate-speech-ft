@@ -64,17 +64,20 @@ Do not commit:
 - API keys or tokens
 - checkpoints, logs, Hugging Face cache, or model outputs
 
-Every serious run should still write local files in `output_dir`:
+Every serious completed run should still write local files in `output_dir`:
 
 ```text
 resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
+eval_predictions.json       # final-stage runs
+test_predictions.json       # final-stage runs with --run_test
 ```
 
 These files make the run understandable even if W&B is disabled, offline, or
 someone looks at the output directory later.
+Failed runs write `failure_summary.json` locally so errors are still auditable.
 
 ## Many Runs Per Method
 
@@ -99,8 +102,10 @@ Use a tuning experiment for real HPO. Smoke experiments keep tiny sample caps fo
 setup checks, so the CLI blocks smoke-based HPO suggestions unless explicitly
 overridden.
 Do not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
-`config_hash` with `--set` in HPO mode. Use `--trial_output_root` for where
-trial directories are created.
+`config_hash` with `--set` in HPO mode. The generated command records
+`hpo_trial_cap` and, when configured, `hpo_time_cap_gpu_hours`; do not override
+those by hand. Use `--trial_output_root` for where trial directories are
+created.
 
 Use W&B groups for method-level grouping, for example:
 
@@ -126,8 +131,13 @@ python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
-  --metric training_time_sec
+  --metric training_time_sec \
+  --metric best_epoch
 ```
+
+For seed-run suggestions, the launcher uses the effective stage in W&B metadata:
+confirmation commands use confirm tags/groups, and final commands use final
+tags/groups even when they are generated from the tuning base experiment.
 
 ## Model Artifacts
 
@@ -136,13 +146,15 @@ The runner refuses to start if that directory already contains summaries,
 checkpoints, or saved model files. This protects local evidence from accidental
 reruns. Use a fresh output directory for a new run, or pass
 `--overwrite_output_dir` only when replacing the previous local files is
-intentional.
+intentional. Overwrite mode clears managed summaries, prediction files,
+checkpoints, and saved model/tokenizer files before the replacement run starts.
 
 For the current DistilBERT runner:
 
 ```text
 output_dir/checkpoint-*     intermediate Hugging Face checkpoints
-output_dir/                 final saved model, tokenizer, metrics, and config
+output_dir/                 final saved model, tokenizer, metrics, config, and
+                            final-stage prediction files when produced
 ```
 
 If `load_best_model_at_end=true`, the final saved model is the best validation
@@ -169,6 +181,8 @@ method
 search_stage
 trial_id
 hpo_seed
+hpo_trial_cap
+hpo_time_cap_gpu_hours
 seed
 global_switches.mixed_precision
 global_switches.gradient_checkpointing
@@ -177,4 +191,8 @@ checkpoint_policy.final_model_source
 ```
 
 Use validation metrics for selection. Test metrics should appear only in final
-runs.
+runs, and final runs should include them. Local `result_summary.json` records
+prediction file paths when `eval_predictions.json` or `test_predictions.json`
+exist.
+Use local aggregate reports for HPO cost accounting: they include total training
+time in seconds/hours and summarize `best_epoch` by mean/std/min/max.

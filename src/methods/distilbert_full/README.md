@@ -34,6 +34,17 @@ Direct execution is still supported for debugging:
 python src/methods/distilbert_full/train.py --method full-ft --search_stage smoke --trial_id manual_smoke
 ```
 
+Final-stage runs must include `--run_test`; non-final stages are blocked from
+using it. The runner writes the standard local files (`resolved_config.json`,
+`metrics.json`, `runtime.json`, `result_summary.json`) and, for final-stage
+runs, per-sample prediction files. `eval_predictions.json` is written for final
+runs, and `test_predictions.json` is written when `--run_test` evaluates the
+test split. These prediction paths are also stored in `result_summary.json`.
+
+The runner records raw split sizes, post-policy split sizes, strict-majority
+drop counts, model-selection details, runtime, GPU type, and memory metrics in
+local JSON files and W&B when enabled.
+
 Do not add other methods to this package. New methods should use their own
 package under `src/methods/<method_name>/train.py` and then be registered in
 `configs/experiments.json`.

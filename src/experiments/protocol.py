@@ -227,6 +227,18 @@ def _validate_trial_cap(
 
 def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> None:
     spaces = hpo_config.get("search_spaces") or {}
+    time_caps = hpo_config.get("time_caps_gpu_hours") or {}
+    for name, cap in time_caps.items():
+        if cap is None:
+            continue
+        try:
+            cap_value = float(cap)
+        except (TypeError, ValueError):
+            errors.append(f"time_caps_gpu_hours.{name} must be numeric; found {cap!r}.")
+            continue
+        if cap_value <= 0:
+            errors.append(f"time_caps_gpu_hours.{name} must be positive; found {cap!r}.")
+
     for name, required_keys in REQUIRED_SEARCH_SPACE_KEYS.items():
         if name not in spaces:
             errors.append(f"Missing search space '{name}'.")
@@ -311,7 +323,7 @@ def _validate_experiment_entries(
                         f"but sets {cap_key}; use smoke/quick for capped setup runs."
                     )
         if spec.stage == "final" and not spec.args.get("run_test"):
-            warnings.append(
+            errors.append(
                 f"Final experiment '{spec.experiment_id}' does not enable run_test."
             )
 

@@ -76,10 +76,15 @@ from src.methods.common import add_common_method_arguments
 
 Keep these shared behaviors:
 
-- validate `--run_test` is final-only
+- validate `--run_test`: final-stage runs must use it, and non-final stages
+  must not use it
 - protect existing `output_dir` artifacts unless `--overwrite_output_dir` is set
+- when overwrite is intentional, clear only managed run artifacts before the new
+  run starts
 - write local result files even when W&B is disabled
 - record shared switches in `global_switches` and `training_policy`
+- preserve HPO metadata such as `hpo_seed`, `hpo_trial_cap`, and
+  `hpo_time_cap_gpu_hours` when those arguments are supplied
 
 Use `src.methods.common` for method-agnostic behavior only. Do not put model
 architecture, PEFT choices, TF-IDF vectorizers, or Bi-LSTM modules there.
@@ -103,7 +108,12 @@ All main-comparison methods must use `src/data` preprocessing:
 - strict majority label policy
 - no-majority samples dropped for main experiments
 - validation macro-F1 for model selection
-- test split only for final runs
+- test split only for final runs, and final runs must evaluate it
+
+Also record split accounting in the run config: raw split sizes, post-policy
+train/eval/test sizes, and dropped no-majority counts when your method can
+measure them. For HateXplain, those drop counts are post-loader counts; the
+dataset builder may already have removed some undecided examples.
 
 Classical baselines can vectorize the shared text differently, but they should
 not silently clean or rewrite the dataset text before comparison.
@@ -117,6 +127,8 @@ resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
+eval_predictions.json       # final-stage runs when per-sample predictions are available
+test_predictions.json       # final-stage runs with --run_test
 ```
 
 Failed runs should write:
@@ -127,6 +139,9 @@ failure_summary.json
 
 Use `src/experiments/results.py` unless the method has a documented reason not
 to. W&B is useful, but local JSON files are the source of truth for aggregation.
+If the method writes prediction files, store their paths in
+`result_summary.json` under `artifacts.predictions` so aggregation can surface
+them.
 
 ## Step 6: Register The Experiment
 
@@ -190,7 +205,8 @@ catalog entry `ready`.
 - Do not edit the main Colab notebook to implement training logic.
 - Do not add new methods inside `src/methods/distilbert_full/`.
 - Do not add method-specific model code to `src/methods/common.py`.
-- Do not use the test split during smoke, quick, or tuning runs.
+- Do not use the test split during smoke, quick, tuning, or confirm runs.
+- Do not mark a final-stage experiment ready unless it enables `--run_test`.
 - Do not overwrite an existing output directory unless replacing that run is
   intentional.
 - Do not store secrets, model checkpoints, or run outputs in Git.

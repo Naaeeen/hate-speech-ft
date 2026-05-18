@@ -14,6 +14,8 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             trial_id="trial-003",
             config_hash="abc123",
             hpo_seed=2026,
+            hpo_trial_cap=6,
+            hpo_time_cap_gpu_hours=2.0,
             test_split_name="test",
             run_test=False,
             dataset_name="Hate-speech-CNERG/hatexplain",
@@ -64,8 +66,14 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             eval_size=50,
             full_train_size=500,
             full_eval_size=50,
+            raw_train_size=600,
+            raw_eval_size=60,
+            dropped_no_majority_train=100,
+            dropped_no_majority_eval=10,
             test_size=None,
             full_test_size=None,
+            raw_test_size=None,
+            dropped_no_majority_test=None,
             trainable_params=1000,
             total_params=2000,
             class_weights=[1.0, 2.0, 0.5],
@@ -76,8 +84,16 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertEqual(config["trial_id"], "trial-003")
         self.assertEqual(config["config_hash"], "abc123")
         self.assertEqual(config["hpo_seed"], 2026)
+        self.assertEqual(config["hpo_trial_cap"], 6)
+        self.assertEqual(config["hpo_time_cap_gpu_hours"], 2.0)
         self.assertEqual(config["data_fraction"], 0.2)
         self.assertEqual(config["effective_train_fraction"], 0.2)
+        self.assertEqual(config["raw_train_size"], 600)
+        self.assertEqual(config["full_train_size"], 500)
+        self.assertEqual(config["dropped_no_majority_train"], 100)
+        self.assertIn("post-load", config["split_accounting_policy"])
+        self.assertEqual(config["raw_eval_size"], 60)
+        self.assertEqual(config["dropped_no_majority_eval"], 10)
         self.assertEqual(config["selection_metric"], "f1_macro")
         self.assertEqual(config["test_policy"], "final_only")
         self.assertEqual(config["warmup_ratio"], 0.06)
@@ -170,6 +186,8 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             trial_id="trial-setup",
             config_hash="abc123",
             hpo_seed=42,
+            hpo_trial_cap=6,
+            hpo_time_cap_gpu_hours=2.0,
             dataset_name="missing-dataset",
             model_name="distilbert-base-uncased",
             output_dir="outputs/setup-failure",
@@ -195,6 +213,7 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         )
 
         self.assertIs(config["setup_complete"], False)
+        self.assertEqual(config["hpo_time_cap_gpu_hours"], 2.0)
         self.assertEqual(config["runtime_context"]["gpu_type"], "A100")
         self.assertEqual(config["global_switches"]["mixed_precision"], "bf16")
         self.assertIs(config["global_switches"]["weighted_ce"], True)
@@ -206,6 +225,8 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             validate_test_evaluation_policy(search_stage="tuning", run_test=True)
+        with self.assertRaises(ValueError):
+            validate_test_evaluation_policy(search_stage="final", run_test=False)
 
         validate_test_evaluation_policy(search_stage="final", run_test=True)
 
@@ -236,6 +257,12 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
 
         self.assertLess(source.index("trainer.save_model"), source.index('"status": "completed"'))
         self.assertLess(source.index("trainer.save_model"), source.index("write_result_files("))
+
+    def test_wandb_run_starts_before_remote_setup_can_fail(self):
+        source = inspect.getsource(run_distilbert.main)
+
+        self.assertLess(source.index("init_wandb_run"), source.index("load_dataset"))
+        self.assertLess(source.index("init_wandb_run"), source.index("write_resolved_config"))
 
     def test_early_stopping_requires_best_model_selection(self):
         from src.methods.distilbert_full.train import validate_checkpoint_policy

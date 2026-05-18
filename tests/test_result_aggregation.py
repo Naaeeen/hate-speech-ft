@@ -36,6 +36,8 @@ def completed_summary(
             "config_hash": "abc123",
             "seed": seed,
             "hpo_seed": 42,
+            "hpo_trial_cap": 6,
+            "hpo_time_cap_gpu_hours": 2.0,
             "output_dir": f"outputs/{trial_id}",
             "trainable_params": trainable_params,
             "total_params": total_params,
@@ -47,6 +49,17 @@ def completed_summary(
         "runtime": {"training_time_sec": 10.0 + seed, "gpu_type": "T4"},
         "model_selection": {
             "best_model_checkpoint": f"outputs/{trial_id}/checkpoint-1",
+            "metric_for_best_model": "eval_f1_macro",
+            "best_metric_key": "eval_f1_macro",
+            "best_metric": eval_f1,
+            "best_epoch": 2.0,
+            "best_step": 100,
+        },
+        "artifacts": {
+            "predictions": {
+                "eval": f"outputs/{trial_id}/eval_predictions.json",
+                "test": f"outputs/{trial_id}/test_predictions.json",
+            }
         },
     }
 
@@ -119,12 +132,27 @@ class ResultAggregationTests(unittest.TestCase):
         self.assertEqual(record["search_stage"], "final")
         self.assertEqual(record["trial_id"], "seed42")
         self.assertEqual(record["seed"], 42)
+        self.assertEqual(record["hpo_trial_cap"], 6)
+        self.assertEqual(record["hpo_time_cap_gpu_hours"], 2.0)
         self.assertEqual(record["eval_f1_macro"], 0.61)
         self.assertEqual(record["test_f1_macro"], 0.58)
         self.assertEqual(record["trainable_params"], 10)
         self.assertEqual(record["total_params"], 100)
         self.assertEqual(record["trainable_pct"], 10.0)
         self.assertEqual(record["best_model_checkpoint"], "outputs/seed42/checkpoint-1")
+        self.assertEqual(record["metric_for_best_model"], "eval_f1_macro")
+        self.assertEqual(record["best_metric_key"], "eval_f1_macro")
+        self.assertEqual(record["best_metric"], 0.61)
+        self.assertEqual(record["best_epoch"], 2.0)
+        self.assertEqual(record["best_step"], 100)
+        self.assertEqual(
+            record["eval_predictions_path"],
+            "outputs/seed42/eval_predictions.json",
+        )
+        self.assertEqual(
+            record["test_predictions_path"],
+            "outputs/seed42/test_predictions.json",
+        )
         self.assertEqual(record["summary_path"], "outputs/seed42/result_summary.json")
 
     def test_aggregate_records_computes_mean_std_and_failure_counts(self):
@@ -172,6 +200,48 @@ class ResultAggregationTests(unittest.TestCase):
         self.assertAlmostEqual(group["metrics"]["eval_f1_macro"]["mean"], 0.65)
         self.assertAlmostEqual(group["metrics"]["eval_f1_macro"]["std"], 0.0707106781)
         self.assertAlmostEqual(group["metrics"]["test_f1_macro"]["mean"], 0.60)
+
+    def test_aggregate_report_sums_hpo_time_and_summarizes_best_epoch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_json(root / "trial1" / "result_summary.json", completed_summary(
+                trial_id="trial1",
+                seed=42,
+                eval_f1=0.60,
+            ))
+            write_json(root / "trial2" / "result_summary.json", completed_summary(
+                trial_id="trial2",
+                seed=43,
+                eval_f1=0.70,
+            ))
+            write_json(
+                root / "trial3" / "failure_summary.json",
+                {
+                    "status": "failed",
+                    "config": {
+                        "method": "full-ft",
+                        "search_stage": "tuning",
+                        "trial_id": "trial3",
+                        "seed": 42,
+                    },
+                    "runtime": {"training_time_sec": 5.0},
+                    "error": {"type": "RuntimeError", "message": "boom"},
+                },
+            )
+
+            report = build_aggregate_report([root], group_by=["method", "search_stage"])
+
+            self.assertEqual(report["hpo_total_training_time_sec"], 110.0)
+            self.assertAlmostEqual(
+                report["hpo_total_training_time_hours"],
+                110.0 / 3600,
+            )
+            group = report["groups"][0]
+            self.assertEqual(group["total_training_time_sec"], 110.0)
+            self.assertEqual(group["metrics"]["best_epoch"]["count"], 2)
+            self.assertEqual(group["metrics"]["best_epoch"]["mean"], 2.0)
+            self.assertEqual(group["metrics"]["best_epoch"]["min"], 2.0)
+            self.assertEqual(group["metrics"]["best_epoch"]["max"], 2.0)
 
     def test_aggregate_records_summarizes_parameter_efficiency_fields(self):
         records = [

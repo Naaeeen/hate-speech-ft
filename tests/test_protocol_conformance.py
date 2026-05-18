@@ -55,6 +55,24 @@ class ProtocolConformanceTests(unittest.TestCase):
             any("run_test" in message and "final" in message for message in report.errors)
         )
 
+    def test_validation_catches_final_without_test_evaluation(self):
+        bad_registry = load_experiment_registry(
+            self.repo_root / "configs" / "experiments.json"
+        )
+        target = bad_registry.get("distilbert_full_final_seed42")
+        target.args["run_test"] = False
+
+        report = validate_experiment_protocol(
+            bad_registry,
+            self.hpo_config,
+            repo_root=self.repo_root,
+        )
+
+        self.assertFalse(report.is_valid)
+        self.assertTrue(
+            any("Final experiment" in message and "run_test" in message for message in report.errors)
+        )
+
     def test_validation_catches_missing_expected_method_stage(self):
         bad_registry = load_experiment_registry(
             self.repo_root / "configs" / "experiments.json"
@@ -90,6 +108,21 @@ class ProtocolConformanceTests(unittest.TestCase):
         self.assertTrue(
             any("max_train_samples" in message and "tuning" in message for message in report.errors)
         )
+
+    def test_validation_catches_invalid_time_caps(self):
+        bad_config = {
+            **self.hpo_config,
+            "time_caps_gpu_hours": {"full_ft": 0},
+        }
+
+        report = validate_experiment_protocol(
+            self.registry,
+            bad_config,
+            repo_root=self.repo_root,
+        )
+
+        self.assertFalse(report.is_valid)
+        self.assertTrue(any("time_caps_gpu_hours.full_ft" in message for message in report.errors))
 
 
 if __name__ == "__main__":

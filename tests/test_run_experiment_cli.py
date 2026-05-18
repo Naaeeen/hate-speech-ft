@@ -36,6 +36,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--mixed_precision bf16", completed.stdout)
         self.assertNotIn("--mixed_precision none", completed.stdout)
+        self.assertIn("--hpo_time_cap_gpu_hours 2", completed.stdout)
 
     def test_hpo_rejects_output_dir_override_with_clear_error(self):
         completed = self.run_cli(
@@ -124,6 +125,40 @@ class RunExperimentCliTests(unittest.TestCase):
         hashes = re.findall(r"--config_hash ([0-9a-f]+)", completed.stdout)
         self.assertEqual(len(hashes), 3)
         self.assertEqual(len(set(hashes)), 1)
+
+    def test_suggest_final_seed_runs_use_effective_wandb_stage_tags(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "learning_rate=2e-5",
+            "--use_wandb",
+            "--wandb_project",
+            "hate-speech-ft",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.count("--wandb_tags distilbert,full-ft,final"), 3)
+        self.assertNotIn("--wandb_tags distilbert,full-ft,tuning", completed.stdout)
+        self.assertEqual(completed.stdout.count("--wandb_group full-ft-final"), 3)
+
+    def test_direct_final_experiment_rejects_disabling_test_evaluation(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_final_seed42",
+            "--dry_run",
+            "--set",
+            "run_test=false",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("Final-stage experiments must enable --run_test", completed.stderr)
 
     def test_seed_run_hash_matches_hpo_hash_for_same_fixed_config(self):
         hpo = self.run_cli(

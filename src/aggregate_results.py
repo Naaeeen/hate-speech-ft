@@ -40,7 +40,10 @@ def parse_args():
         "--metric",
         action="append",
         default=None,
-        help="Metric to aggregate. Repeatable. Defaults to common eval/test metrics.",
+        help=(
+            "Metric to aggregate. Repeatable. Defaults to common eval/test, "
+            "runtime, parameter, and best_epoch metrics."
+        ),
     )
     return parser.parse_args()
 
@@ -60,6 +63,11 @@ def main() -> int:
         f"completed={report['completed_runs']} failed={report['failed_runs']} "
         f"failed_oom={report['failed_oom_runs']}"
     )
+    print(
+        "Training time: "
+        f"total={report.get('total_training_time_sec')} sec "
+        f"hpo={report.get('hpo_total_training_time_sec')} sec"
+    )
     for group in report["groups"]:
         group_label = ", ".join(
             f"{key}={value}" for key, value in group["group"].items()
@@ -67,7 +75,8 @@ def main() -> int:
         print(
             f"{group_label}: runs={group['runs']} "
             f"completed={group['completed']} failed={group['failed']} "
-            f"failed_oom={group['failed_oom']}"
+            f"failed_oom={group['failed_oom']} "
+            f"total_time_sec={group.get('total_training_time_sec')}"
         )
         for metric, summary in group["metrics"].items():
             mean = summary["mean"]

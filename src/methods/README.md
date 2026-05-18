@@ -48,7 +48,10 @@ Use `common.py` for behavior every method should share:
 - common CLI flags
 - comparable config metadata
 - output directory protection
-- final-only test policy
+- final/test policy: final-stage runs must use `--run_test`, and non-final
+  stages must not
+- managed-artifact cleanup for intentional overwrite or failed attempts
+- HPO accounting fields such as `hpo_trial_cap` and `hpo_time_cap_gpu_hours`
 
 Use `hf_common.py` for Hugging Face Trainer behavior:
 
@@ -58,6 +61,12 @@ Use `hf_common.py` for Hugging Face Trainer behavior:
 - TrainingArguments compatibility
 - model-selection summaries
 - GPU and memory metadata
+
+Every completed method run should write `resolved_config.json`, `metrics.json`,
+`runtime.json`, and `result_summary.json`. Final-stage runs that can produce
+per-sample outputs should also write `eval_predictions.json`; final runs with
+`--run_test` should write `test_predictions.json` and store those paths in
+`result_summary.json`.
 
 Keep method-specific model code in the method package. That includes PEFT
 adapter choices, TF-IDF vectorizers, Bi-LSTM modules, freezing policy, and

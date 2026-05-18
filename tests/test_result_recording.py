@@ -27,6 +27,7 @@ class ResultRecordingTests(unittest.TestCase):
                 eval_metrics=eval_metrics,
                 test_metrics=test_metrics,
                 runtime_metrics=runtime_metrics,
+                prediction_paths={"test": output_dir / "test_predictions.json"},
             )
 
             self.assertTrue(config_path.exists())
@@ -41,6 +42,10 @@ class ResultRecordingTests(unittest.TestCase):
             self.assertEqual(summary["status"], "completed")
             self.assertEqual(summary["config"]["method"], "full-ft")
             self.assertEqual(summary["model_selection"], {})
+            self.assertEqual(
+                summary["artifacts"]["predictions"]["test"],
+                (output_dir / "test_predictions.json").as_posix(),
+            )
 
     def test_success_clears_stale_failure_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -85,6 +90,17 @@ class ResultRecordingTests(unittest.TestCase):
             stale_metrics.write_text("{}", encoding="utf-8")
             stale_runtime = output_dir / "runtime.json"
             stale_runtime.write_text("{}", encoding="utf-8")
+            stale_config = output_dir / "resolved_config.json"
+            stale_config.write_text("{}", encoding="utf-8")
+            stale_model = output_dir / "model.safetensors"
+            stale_model.write_text("model", encoding="utf-8")
+            stale_checkpoint = output_dir / "checkpoint-1"
+            stale_checkpoint.mkdir()
+            (stale_checkpoint / "trainer_state.json").write_text("{}", encoding="utf-8")
+            stale_eval_predictions = output_dir / "eval_predictions.json"
+            stale_eval_predictions.write_text("[]", encoding="utf-8")
+            stale_test_predictions = output_dir / "test_predictions.json"
+            stale_test_predictions.write_text("[]", encoding="utf-8")
 
             write_failure_file(
                 output_dir,
@@ -95,6 +111,11 @@ class ResultRecordingTests(unittest.TestCase):
             self.assertFalse(stale_summary.exists())
             self.assertFalse(stale_metrics.exists())
             self.assertFalse(stale_runtime.exists())
+            self.assertFalse(stale_config.exists())
+            self.assertFalse(stale_model.exists())
+            self.assertFalse(stale_checkpoint.exists())
+            self.assertFalse(stale_eval_predictions.exists())
+            self.assertFalse(stale_test_predictions.exists())
             self.assertTrue((output_dir / "failure_summary.json").exists())
 
     def test_json_writer_serializes_paths_and_dataclasses(self):

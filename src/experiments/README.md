@@ -10,6 +10,8 @@ TF-IDF, Bi-LSTM, or any other method.
   script paths, and builds method-specific commands.
 - `hpo.py`: loads `configs/search_spaces.json` and builds deterministic HPO
   trial overrides.
+- `results.py`: writes standard local result, failure, and artifact summary
+  files for method runners.
 - `aggregate_results.py`: reads local run summaries and builds grouped
   mean/std reports.
 - `../run_experiment.py`: CLI entry point for listing, dry-running, and running
@@ -84,6 +86,17 @@ python src/aggregate_results.py outputs/hpo \
 
 The aggregator includes failed runs in counts and excludes them from metric
 means. This keeps HPO accounting honest without breaking final mean/std tables.
+Flattened records also carry model-selection fields and prediction artifact
+paths when the method writes them, so aggregate reports can point back to
+`eval_predictions.json` and `test_predictions.json` for final-stage inspection.
+Aggregate reports include total training time in seconds/hours at the top level
+and per group. The top-level `hpo_total_training_time_*` fields sum tuning and
+confirmation runs, including failed runs that recorded partial runtime.
+`best_epoch` is a default metric, so groups report best-epoch mean/std/min/max.
+
+The registry enforces the test policy before commands are launched:
+final-stage experiments must include `--run_test`, and non-final stages must not
+include it.
 
 ## Adding More Shared Behavior
 
