@@ -299,6 +299,80 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--stage2_learning_rate", completed.stdout)
         self.assertIn("distilbert_lp_ft_tuning__lp_ft__trial001", completed.stdout)
 
+    def test_tfidf_smoke_preview_uses_method_script(self):
+        completed = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_smoke",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("src/methods/tfidf_logreg/train.py", completed.stdout)
+        self.assertIn("--method tfidf-logreg", completed.stdout)
+        self.assertIn("--search_stage smoke", completed.stdout)
+        self.assertIn("--max_train_samples 64", completed.stdout)
+
+    def test_tfidf_hpo_uses_tuning_base_and_parseable_ngram_range(self):
+        completed = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "tfidf_logreg",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_stage tuning", completed.stdout)
+        self.assertIn("--hpo_trial_cap 12", completed.stdout)
+        self.assertRegex(completed.stdout, r"--ngram_range \[[0-9],[0-9]\]")
+        self.assertIn("tfidf_logreg_tuning__tfidf_logreg__trial001", completed.stdout)
+
+    def test_tfidf_final_seed_hash_matches_hpo_hash_for_same_fixed_config(self):
+        hpo = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "tfidf_logreg",
+            "--python",
+            "python",
+        )
+        self.assertEqual(hpo.returncode, 0, hpo.stderr)
+        ngram = re.search(r"--ngram_range (\[[0-9],[0-9]\])", hpo.stdout)
+        min_df = re.search(r"--min_df ([0-9]+)", hpo.stdout)
+        c_value = re.search(r"--C ([0-9.eE+-]+)", hpo.stdout)
+        hpo_hash = re.search(r"--config_hash ([0-9a-f]+)", hpo.stdout)
+        self.assertIsNotNone(ngram)
+        self.assertIsNotNone(min_df)
+        self.assertIsNotNone(c_value)
+        self.assertIsNotNone(hpo_hash)
+
+        final = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            f"ngram_range={ngram.group(1)}",
+            "--set",
+            f"min_df={min_df.group(1)}",
+            "--set",
+            f"C={c_value.group(1)}",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(final.returncode, 0, final.stderr)
+        final_hash = re.search(r"--config_hash ([0-9a-f]+)", final.stdout)
+        self.assertIsNotNone(final_hash)
+        self.assertEqual(hpo_hash.group(1), final_hash.group(1))
+
 
 if __name__ == "__main__":
     unittest.main()

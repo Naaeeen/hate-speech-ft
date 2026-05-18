@@ -262,8 +262,8 @@ class ExperimentLauncher:
         if spec.stage == "smoke":
             raise ValueError(
                 "HPO trial generation should use a tuning experiment, not a smoke "
-                "experiment with sample caps. Select distilbert_full_tuning for real "
-                "trial suggestions."
+                "experiment with sample caps. Select the matching tuning experiment "
+                "for real trial suggestions."
             )
         search_space_name = config["search_space"] or default_search_space_name(spec.method)
         search_space = get_search_space(self.search_config, search_space_name)

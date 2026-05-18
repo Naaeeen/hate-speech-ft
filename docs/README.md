@@ -18,6 +18,10 @@ contracts.
   English explanation of the DistilBERT LP+FT pipeline integration.
 - [DISTILBERT_LP_FT_INTEGRATION_ZH.md](DISTILBERT_LP_FT_INTEGRATION_ZH.md):
   中文版 DistilBERT LP+FT pipeline 集成说明。
+- [TFIDF_LOGREG_INTEGRATION_EN.md](TFIDF_LOGREG_INTEGRATION_EN.md): English
+  explanation of the TF-IDF + Logistic Regression pipeline integration.
+- [TFIDF_LOGREG_INTEGRATION_ZH.md](TFIDF_LOGREG_INTEGRATION_ZH.md): 中文版
+  TF-IDF + Logistic Regression pipeline 集成说明。
 
 ## What Belongs Here
 

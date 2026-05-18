@@ -14,6 +14,22 @@ catalog. The goal is flexibility without losing comparability across methods.
 Do not put every method into one huge training script. Add a method-specific
 script, then register it in `configs/experiments.json`.
 
+For Hugging Face sequence-classification fine-tuning methods, the recommended
+shape is:
+
+```text
+src/methods/<method_name>/
+  args.py       method CLI args
+  config.py     resolved config and failure config
+  training.py   method-specific stages, freezing, adapters, or trainability
+  train.py      thin orchestration around the shared HF workflow
+```
+
+The repeated HF lifecycle lives in `src/methods/hf_sequence_classification.py`.
+Use it for W&B setup, shared HateXplain loading/tokenization, Trainer
+construction, final eval/test handling, prediction files, runtime metrics, and
+result JSONs. Keep method-specific logic out of the shared helper.
+
 ## List Experiments
 
 Ready experiments only:
@@ -136,6 +152,17 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+TF-IDF + Logistic Regression uses the classical baseline tuning entry and the
+`tfidf_logreg` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_trials 4 \
+  --search_space tfidf_logreg \
+  --hpo_seed 42
+```
+
 Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
 `output_dir`. This prevents HPO runs from overwriting each other.
 If `configs/search_spaces.json` defines `time_caps_gpu_hours` for the search
@@ -185,6 +212,20 @@ python src/run_experiment.py \
   --set stage1_epochs=5 \
   --set stage2_learning_rate=2e-5 \
   --set stage2_epochs=2
+```
+
+For TF-IDF, pass the selected classical hyperparameters. JSON-style
+`ngram_range` (`[1,2]`) matches HPO trial suggestions; the launcher normalizes
+`1,2` and `[1,2]` to the same `config_hash`:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_seed_runs final \
+  --set ngram_range=[1,2] \
+  --set min_df=2 \
+  --set C=1.0 \
+  --set max_features=50000
 ```
 
 Final runs use `shared_fixed.seeds_final`, set `search_stage=final`, and add
@@ -249,10 +290,10 @@ pass `--overwrite_output_dir` only for an intentional replacement.
 The current DistilBERT runners write these files through
 `src/experiments/results.py`. New method scripts should reuse that helper or
 write the same file names with the same meaning.
-For final-stage DistilBERT runs, `eval_predictions.json` and
-`test_predictions.json` include sample ids, text, gold labels, predicted labels,
-and logits. Their paths are recorded in `result_summary.json` under
-`artifacts.predictions`.
+For final-stage runs, `eval_predictions.json` and `test_predictions.json`
+include sample ids, text, gold labels, predicted labels, and model scores.
+Transformer methods write logits; TF-IDF writes class probabilities. Their paths
+are recorded in `result_summary.json` under `artifacts.predictions`.
 
 ## Aggregating Runs
 
@@ -334,8 +375,10 @@ Ready now:
 - `distilbert_lp_ft_quick`
 - `distilbert_lp_ft_tuning`
 - `distilbert_lp_ft_final_seed42`
+- `tfidf_logreg_smoke`
+- `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
-- `tfidf_logreg_full_final_seed42`
+- `tfidf_logreg_final_seed42`
 
 Templates for later scripts:
 

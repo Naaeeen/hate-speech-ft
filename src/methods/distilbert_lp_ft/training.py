@@ -4,7 +4,10 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from src.methods.hf_common import build_training_arguments
+from src.methods.hf_sequence_classification import (
+    build_early_stopping_callbacks,
+    build_hf_training_arguments_from_args,
+)
 from src.utils.wandb_config import (
     WandbSettings,
     build_wandb_run_name,
@@ -39,14 +42,7 @@ def set_full_finetune_trainability(model) -> None:
 
 
 def build_callbacks(early_stopping_callback_cls, args: argparse.Namespace) -> list[Any]:
-    if args.early_stopping_patience <= 0:
-        return []
-    return [
-        early_stopping_callback_cls(
-            early_stopping_patience=args.early_stopping_patience,
-            early_stopping_threshold=args.early_stopping_threshold,
-        )
-    ]
+    return build_early_stopping_callbacks(early_stopping_callback_cls, args)
 
 
 def resolve_wandb_settings(args: argparse.Namespace) -> WandbSettings:
@@ -81,34 +77,14 @@ def build_stage_training_arguments(
     precision_policy: dict[str, Any],
     wandb_settings: WandbSettings,
 ):
-    return build_training_arguments(
+    return build_hf_training_arguments_from_args(
         training_args_cls,
+        args=args,
         output_dir=str(output_dir),
         learning_rate=learning_rate,
+        num_train_epochs=num_train_epochs,
+        precision_policy=precision_policy,
+        wandb_settings=wandb_settings,
         per_device_train_batch_size=resolve_train_batch_size(args),
         per_device_eval_batch_size=resolve_eval_batch_size(args),
-        num_train_epochs=num_train_epochs,
-        optim=args.optim,
-        lr_scheduler_type=args.lr_scheduler_type,
-        weight_decay=args.weight_decay,
-        warmup_ratio=args.warmup_ratio,
-        max_grad_norm=args.max_grad_norm,
-        seed=args.seed,
-        data_seed=args.seed,
-        eval_strategy=args.eval_strategy,
-        save_strategy=args.save_strategy,
-        logging_strategy=args.logging_strategy,
-        logging_steps=args.logging_steps,
-        eval_steps=args.eval_steps,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
-        overwrite_output_dir=args.overwrite_output_dir,
-        report_to=wandb_settings.report_to,
-        run_name=wandb_settings.run_name if wandb_settings.enabled else None,
-        load_best_model_at_end=args.load_best_model_at_end,
-        metric_for_best_model=args.metric_for_best_model,
-        greater_is_better=not args.lower_is_better,
-        fp16=precision_policy["fp16"],
-        bf16=precision_policy["bf16"],
-        gradient_checkpointing=args.gradient_checkpointing,
     )

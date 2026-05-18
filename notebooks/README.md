@@ -60,8 +60,9 @@ or set it explicitly for a custom batch folder.
 When `Agg input` is blank, `launcher.aggregate_results()` follows the active
 run root. HPO uses `Trial root`; confirmation and final seed batches use
 `Seed root` or the stage-specific Drive seed folder. Final-stage DistilBERT
-runs save `eval_predictions.json`, and final runs with `--run_test` also save
-`test_predictions.json`; both paths are recorded in `result_summary.json`.
+runs and final-stage TF-IDF runs save `eval_predictions.json`; final runs with
+`--run_test` also save `test_predictions.json`; both paths are recorded in
+`result_summary.json`.
 Aggregate reports include total training time in seconds/hours and summarize
 `best_epoch` by default. HPO trial previews include `hpo_time_cap_gpu_hours`
 when the selected search space has an allocated GPU-hour cap.

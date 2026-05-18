@@ -121,43 +121,79 @@
         "output_dir": "outputs/distilbert_full_final_seed42"
       }
     },
+    "tfidf_logreg_smoke": {
+      "status": "ready",
+      "method": "tfidf-logreg",
+      "family": "classical",
+      "stage": "smoke",
+      "script": "src/methods/tfidf_logreg/train.py",
+      "description": "Fast smoke test for the TF-IDF + Logistic Regression baseline.",
+      "tags": ["tfidf", "logreg", "baseline", "smoke"],
+      "args": {
+        "ngram_range": "1,2",
+        "min_df": 1,
+        "max_features": 5000,
+        "C": 1.0,
+        "seed": 42,
+        "max_train_samples": 64,
+        "max_eval_samples": 64,
+        "output_dir": "outputs/tfidf_logreg_smoke"
+      }
+    },
+    "tfidf_logreg_quick": {
+      "status": "ready",
+      "method": "tfidf-logreg",
+      "family": "classical",
+      "stage": "quick",
+      "script": "src/methods/tfidf_logreg/train.py",
+      "description": "Quick TF-IDF + Logistic Regression sanity run on capped data.",
+      "tags": ["tfidf", "logreg", "baseline", "quick"],
+      "args": {
+        "ngram_range": "1,2",
+        "min_df": 2,
+        "max_features": 50000,
+        "C": 1.0,
+        "seed": 42,
+        "max_train_samples": 512,
+        "max_eval_samples": 256,
+        "output_dir": "outputs/tfidf_logreg_quick"
+      }
+    },
     "tfidf_logreg_tuning": {
       "status": "ready",
       "method": "tfidf-logreg",
       "family": "classical",
       "stage": "tuning",
       "script": "src/methods/tfidf_logreg/train.py",
-      "description": "Template for the TF-IDF + Logistic Regression baseline.",
-      "tags": [
-        "tfidf",
-        "logreg",
-        "baseline"
-      ],
+      "description": "Full-data TF-IDF + Logistic Regression base used for HPO trial command generation.",
+      "tags": ["tfidf", "logreg", "baseline", "tuning"],
       "args": {
         "ngram_range": "1,2",
         "min_df": 2,
         "max_features": 50000,
         "C": 1.0,
         "seed": 42,
-        "output_dir": "outputs/tfidf_logreg_template"
+        "data_fraction": 1.0,
+        "output_dir": "outputs/tfidf_logreg_tuning"
       }
     },
-    "tfidf_logreg_full_final_seed42": {
+    "tfidf_logreg_final_seed42": {
       "status": "ready",
       "method": "tfidf-logreg",
       "family": "classical",
       "stage": "final",
       "script": "src/methods/tfidf_logreg/train.py",
-      "description": "Template for the TF-IDF + Logistic Regression baseline.",
-      "tags": ["tfidf", "logreg", "baseline"],
+      "description": "Full-data TF-IDF + Logistic Regression baseline for one final seed.",
+      "tags": ["tfidf", "logreg", "baseline", "final"],
       "args": {
         "ngram_range": "1,2",
         "min_df": 2,
         "max_features": 50000,
         "C": 1.0,
         "seed": 42,
+        "data_fraction": 1.0,
         "run_test": true,
-        "output_dir": "outputs/tfidf_logreg_template"
+        "output_dir": "outputs/tfidf_logreg_final_seed42"
       }
     },
     "bilstm_template": {

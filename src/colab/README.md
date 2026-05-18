@@ -58,9 +58,10 @@ model/tokenizer files before the replacement run starts.
 ## HPO Trial Suggestions
 
 Set `Trials` to a positive number and optionally set `Search` to a search-space
-name such as `full_ft`, `lp_ft`, or `lora`. Use a tuning experiment such as
-`distilbert_full_tuning` or `distilbert_lp_ft_tuning`; smoke experiments are
-intentionally blocked for HPO because they use tiny sample caps.
+name such as `full_ft`, `lp_ft`, `tfidf_logreg`, or `lora`. Use a tuning
+experiment such as `distilbert_full_tuning`, `distilbert_lp_ft_tuning`, or
+`tfidf_logreg_tuning`; smoke experiments are intentionally blocked for HPO
+because they use tiny sample caps.
 
 The notebook's normal preview and run cells dispatch to trial mode when
 `Trials > 0`. You can also call:
@@ -99,6 +100,17 @@ stage1_head_learning_rate=1e-4
 stage1_epochs=5
 stage2_learning_rate=2e-5
 stage2_epochs=2
+```
+
+For TF-IDF, include the selected classical hyperparameters. JSON-style
+`ngram_range` values match the HPO command format, and the launcher normalizes
+`1,2` and `[1,2]` to the same `config_hash`:
+
+```text
+ngram_range=[1,2]
+min_df=2
+C=1.0
+max_features=50000
 ```
 
 The launcher owns seed-run `trial_id`, `output_dir`, `search_stage`, and

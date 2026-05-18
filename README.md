@@ -48,6 +48,10 @@ Run the setup cells, then use the experiment launcher widget.
   method onboarding contract.
 - [Adding a method](docs/ADDING_METHOD.md): the shortest path for teammates who
   need to implement a new model or training method.
+- [TF-IDF + LogReg integration](docs/TFIDF_LOGREG_INTEGRATION_EN.md): what was
+  changed for Chris's TF-IDF baseline and how to run it.
+- [TF-IDF + LogReg 中文说明](docs/TFIDF_LOGREG_INTEGRATION_ZH.md): same guide in
+  Chinese.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
@@ -78,8 +82,10 @@ Ready now:
 - `distilbert_lp_ft_quick`
 - `distilbert_lp_ft_tuning`
 - `distilbert_lp_ft_final_seed42`
+- `tfidf_logreg_smoke`
+- `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
-- `tfidf_logreg_full_final_seed42`
+- `tfidf_logreg_final_seed42`
 
 Planned templates exist for:
 
@@ -94,9 +100,9 @@ Planned templates exist for:
 script is not implemented yet. The generic runner will not silently run a
 missing method script.
 
-The catalog default records the intended final seed policy as `42, 43, 44`, but
-only `distilbert_full_final_seed42` is currently instantiated. Add the remaining
-seed entries after the final experiment set is agreed by the team.
+The catalog default records the intended final seed policy as `42, 43, 44`. The
+static final entries are one-seed examples; use `--suggest_seed_runs final` from
+the tuning entry to generate all final seed commands for a selected config.
 
 ## Repo Layout
 
@@ -121,6 +127,8 @@ src/
     _template/                  # copyable starter for new methods
     distilbert_full/            # ready DistilBERT full-FT method
     distilbert_lp_ft/           # ready DistilBERT linear-probe + full-FT method
+    tfidf_logreg/               # ready TF-IDF + Logistic Regression baseline
+    hf_sequence_classification.py # shared HF fine-tuning workflow helper
   utils/                        # W&B and environment helpers
 
 tests/
@@ -130,6 +138,15 @@ tests/
 `src/methods/common.py` contains method-agnostic helpers for shared CLI
 arguments, common tracking config, output-dir protection, and final/test policy
 validation. New methods should reuse it instead of duplicating those contracts.
+
+Transformer fine-tuning methods should also reuse
+`src/methods/hf_sequence_classification.py` for the repeated Hugging Face
+sequence-classification lifecycle: W&B setup, HateXplain split loading,
+tokenization, model/tokenizer setup, Trainer construction, failure summaries,
+final evaluation, prediction files, runtime metrics, and local result JSONs.
+The method package should still own method-specific training decisions such as
+full-FT vs LP+FT stages, freeze/unfreeze policy, PEFT adapters, and
+method-specific hyperparameters.
 
 ## Setup
 
@@ -237,6 +254,17 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+For TF-IDF + Logistic Regression HPO, use the TF-IDF tuning base and
+`tfidf_logreg` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_trials 4 \
+  --search_space tfidf_logreg \
+  --hpo_seed 42
+```
+
 This prints deterministic trial commands with unique `trial_id` and `output_dir`.
 Preview them before running expensive training.
 `configs/search_spaces.json` also records allocated HPO trial caps and optional
@@ -284,6 +312,20 @@ python src/run_experiment.py \
   --set stage2_epochs=2
 ```
 
+TF-IDF uses method-specific selected hyperparameters. JSON-style `ngram_range`
+matches the format printed by HPO trial commands; the launcher also normalizes
+`1,2` and `[1,2]` to the same `config_hash`:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_seed_runs final \
+  --set ngram_range=[1,2] \
+  --set min_df=2 \
+  --set C=1.0 \
+  --set max_features=50000
+```
+
 `confirm` uses seeds `42,43` and validation only. `final` uses seeds
 `42,43,44` and adds `--run_test`. Final-stage runs are required to run the
 test split; smoke, quick, tuning, and confirm runs are required not to. All
@@ -311,14 +353,15 @@ Aggregate reports also include `total_training_time_sec`,
 `best_epoch`, which reports mean/std/min/max and can be used as the best-epoch
 mean/range.
 
-## Direct DistilBERT Runner
+## Direct Method Runners
 
 The generic runner dispatches to method-specific scripts. The current ready
-DistilBERT method scripts are:
+method scripts are:
 
 ```text
 src/methods/distilbert_full/train.py
 src/methods/distilbert_lp_ft/train.py
+src/methods/tfidf_logreg/train.py
 ```
 
 You can still run full FT directly:
@@ -346,6 +389,20 @@ python src/methods/distilbert_lp_ft/train.py \
   --stage1_epochs 1 \
   --stage2_epochs 1 \
   --output_dir outputs/manual_lp_ft_smoke
+```
+
+TF-IDF + Logistic Regression can be run directly for local smoke checks:
+
+```bash
+python src/methods/tfidf_logreg/train.py \
+  --method tfidf-logreg \
+  --search_stage smoke \
+  --trial_id manual_tfidf_smoke \
+  --ngram_range 1,2 \
+  --min_df 1 \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --output_dir outputs/manual_tfidf_smoke
 ```
 
 Prefer `src/run_experiment.py` for team experiments because it keeps names,
@@ -437,7 +494,8 @@ test_predictions.json       # final-stage runs with --run_test
 
 `result_summary.json` records model-selection details and prediction artifact
 paths when prediction files are produced. The prediction files include sample
-ids, text, gold labels, predicted labels, and logits for inspection.
+ids, text, gold labels, predicted labels, and model scores for inspection
+(`logits` for Transformer methods, class probabilities for TF-IDF).
 Failed runs write `failure_summary.json` with the error type, message, partial
 runtime, and config.
 

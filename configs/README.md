@@ -129,6 +129,15 @@ python src/run_experiment.py \
   --search_space lp_ft
 ```
 
+For TF-IDF + Logistic Regression, use:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_trials 4 \
+  --search_space tfidf_logreg
+```
+
 Use a tuning experiment for real HPO. Smoke experiments keep sample caps for
 setup checks and are blocked for HPO unless `--allow_smoke_hpo` is passed.
 HPO trial identity fields are launcher-managed: do not set `output_dir`,
@@ -194,14 +203,16 @@ distilbert_full_final_seed42
 distilbert_lp_ft_smoke
 distilbert_lp_ft_tuning
 distilbert_lp_ft_final_seed42
-lora_distilbert_template
+tfidf_logreg_smoke
 tfidf_logreg_tuning
+tfidf_logreg_final_seed42
+lora_distilbert_template
 random_init_distilbert_template
 ```
 
 The default final seed policy is `42, 43, 44`, but the catalog currently only
-defines `distilbert_full_final_seed42` as a ready final run. Add seed 43 and 44
-entries only after the team agrees on the final experiment set.
+defines one-seed final examples. Use `--suggest_seed_runs final` from a tuning
+experiment to generate seed 42, 43, and 44 commands for a selected config.
 
 ## Validation
 

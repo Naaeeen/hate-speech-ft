@@ -8,7 +8,7 @@ File responsibilities:
 args.py     CLI arguments for this method.
 config.py   DistilBERT full-FT resolved config and setup-failure config.
 data.py     HateXplain split lookup, filtering, and tokenization glue.
-train.py    Runtime orchestration only.
+train.py    Full-FT one-stage orchestration only.
 ```
 
 Shared method-agnostic behavior lives outside this package:
@@ -16,10 +16,23 @@ Shared method-agnostic behavior lives outside this package:
 ```text
 src/methods/common.py     shared method contract and output/test policy
 src/methods/hf_common.py  Hugging Face Trainer utilities
+src/methods/hf_sequence_classification.py
+                          shared HF classifier setup/eval/save workflow
 ```
 
 This keeps `train.py` readable and prevents future methods from copying a
 single large runner.
+
+The full-FT entrypoint now does only the method-specific sequence:
+
+1. prepare the shared HF text-classification run context
+2. count all trainable parameters
+3. build the full-FT resolved config
+4. build one Trainer
+5. train, evaluate, save the selected model, and write standard artifacts
+
+The shared helper handles the repeated W&B, dataset, tokenizer/model setup,
+failure summary, runtime, prediction, and result-file logic.
 
 Run through the shared experiment catalog whenever possible:
 

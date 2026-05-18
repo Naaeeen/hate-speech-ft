@@ -19,6 +19,7 @@ RUN_ARTIFACT_NAMES = {
     "trainer_state.json",
     "config.json",
     "model.safetensors",
+    "model.joblib",
     "pytorch_model.bin",
     "tokenizer.json",
     "tokenizer_config.json",

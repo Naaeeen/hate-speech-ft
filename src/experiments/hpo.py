@@ -67,9 +67,40 @@ def build_config_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha1(encoded).hexdigest()[:12]
 
 
+def _canonical_ngram_range(value: Any) -> Any:
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            parsed = json.loads(text) if text.startswith("[") else text.split(",")
+        except json.JSONDecodeError:
+            return value
+    elif isinstance(value, (list, tuple)):
+        parsed = value
+    else:
+        return value
+
+    if len(parsed) != 2:
+        return value
+    try:
+        return [int(parsed[0]), int(parsed[1])]
+    except (TypeError, ValueError):
+        return value
+
+
+def _canonical_hash_value(key: str, value: Any) -> Any:
+    if key == "ngram_range":
+        return _canonical_ngram_range(value)
+    if key == "C":
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+    return value
+
+
 def build_config_hash_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {
-        key: value
+        key: _canonical_hash_value(key, value)
         for key, value in payload.items()
         if key not in TRIAL_METADATA_KEYS and value is not None
     }

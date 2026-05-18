@@ -152,6 +152,22 @@ class HpoTests(unittest.TestCase):
 
         self.assertEqual(payload, {"learning_rate": 2e-5})
 
+    def test_config_hash_payload_canonicalizes_ngram_range(self):
+        from src.experiments.hpo import build_config_hash_payload
+
+        self.assertEqual(
+            build_config_hash_payload({"ngram_range": "1,2"}),
+            {"ngram_range": [1, 2]},
+        )
+        self.assertEqual(
+            build_config_hash_payload({"ngram_range": "[1,2]"}),
+            {"ngram_range": [1, 2]},
+        )
+        self.assertEqual(
+            build_config_hash_payload({"C": 10}),
+            {"C": 10.0},
+        )
+
     def test_merge_trial_overrides_lets_user_override_global_switches_and_rehashes(self):
         trial = {
             "learning_rate": 2e-5,

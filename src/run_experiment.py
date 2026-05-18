@@ -203,7 +203,7 @@ def main() -> int:
                 raise SystemExit(
                     "Refusing to generate HPO trials from a smoke experiment because "
                     "its sample caps are for setup checks, not model selection. Use a "
-                    "tuning experiment such as distilbert_full_tuning, or pass "
+                    "matching tuning experiment for real HPO, or pass "
                     "--allow_smoke_hpo for a smoke-only command test."
                 )
             search_space = get_search_space(search_config, search_space_name)

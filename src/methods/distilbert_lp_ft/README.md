@@ -48,7 +48,7 @@ Package layout:
 args.py       LP+FT CLI args layered on top of shared method args
 config.py     resolved config and failure config builders
 training.py   freeze/unfreeze, W&B settings, and TrainingArguments helpers
-train.py      end-to-end train/evaluate/save orchestration
+train.py      two-stage LP+FT orchestration only
 ```
 
 This method reuses the project-level policies:
@@ -69,6 +69,9 @@ runtime.json
 result_summary.json
 ```
 
+`metrics.json` and `result_summary.json` include final validation/test metrics
+plus a `stage1` metrics block for the linear-probe validation pass.
+
 Final-stage runs also write:
 
 ```text
@@ -84,3 +87,23 @@ output_dir/stage2_full_ft/
 ```
 
 The final saved model/tokenizer are written directly under `output_dir`.
+
+## Shared HF Workflow
+
+`train.py` intentionally stays small. It delegates repeated Hugging Face
+sequence-classification work to:
+
+```text
+src/methods/hf_sequence_classification.py
+```
+
+That shared helper handles W&B setup, HateXplain loading/tokenization, model and
+Trainer construction, failure summaries, final validation/test evaluation,
+prediction files, runtime metrics, and result JSON files.
+
+LP+FT still owns only the method-specific behavior:
+
+- stage 1 freezes the backbone and trains the classification head
+- stage 2 unfreezes all parameters
+- stage-specific learning rates and epochs
+- stage checkpoint directories and stage model-selection metadata
