@@ -49,9 +49,7 @@ Run the setup cells, then use the experiment launcher widget.
 - [Adding a method](docs/ADDING_METHOD.md): the shortest path for teammates who
   need to implement a new model or training method.
 - [TF-IDF + LogReg integration](docs/TFIDF_LOGREG_INTEGRATION_EN.md): what was
-  changed for Chris's TF-IDF baseline and how to run it.
-- [TF-IDF + LogReg 中文说明](docs/TFIDF_LOGREG_INTEGRATION_ZH.md): same guide in
-  Chinese.
+  changed for Chris's TF-IDF baseline and how to run it.=
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
