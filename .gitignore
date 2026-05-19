@@ -32,6 +32,8 @@ Abstract.txt
 deep-research-report-setup.md
 hyperparameter_policy.md
 hyperparameter_policy.txt
+docs/DISTILBERT_LP_FT_INTEGRATION_ZH.md
+docs/TFIDF_LOGREG_INTEGRATION_ZH.md
 
 # OS
 .DS_Store
