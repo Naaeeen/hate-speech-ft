@@ -24,6 +24,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("distilbert_full_smoke", ready_ids)
         self.assertIn("distilbert_full_tuning", ready_ids)
         self.assertIn("tfidf_logreg_tuning", ready_ids)
+        self.assertIn("frozen_distilbert_tuning", ready_ids)
         self.assertIn("lora_distilbert_template", all_ids)
 
     def test_build_ready_experiment_command_includes_common_and_wandb_args(self):
@@ -106,7 +107,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertNotIn("--use_wandb", command)
 
     def test_registry_applies_safe_command_defaults(self):
-        spec = self.registry.get("frozen_distilbert_template")
+        spec = self.registry.get("frozen_distilbert_tuning")
 
         self.assertEqual(spec.args["dataset_name"], "Hate-speech-CNERG/hatexplain")
         self.assertEqual(spec.args["class_weighting"], "none")

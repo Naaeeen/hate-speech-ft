@@ -36,7 +36,7 @@ EXPECTED_METHODS = (
     ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, catalog_stage="tuning"),
     ExpectedMethod("bilstm", "bilstm", 8, catalog_stage="tuning"),
     ExpectedMethod("random-init-distilbert", "random_init_distilbert", 4),
-    ExpectedMethod("frozen-backbone", "frozen_backbone", 6),
+    ExpectedMethod("frozen-backbone", "frozen_backbone", 6, catalog_stage="tuning"),
     ExpectedMethod("partial-ft", "partial_ft", 6),
     ExpectedMethod("full-ft", "full_ft", 3, catalog_stage="tuning"),
     ExpectedMethod("lora", "lora", 6),

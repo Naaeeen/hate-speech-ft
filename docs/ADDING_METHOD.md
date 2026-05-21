@@ -25,7 +25,7 @@ Use a stable, descriptive directory:
 src/methods/tfidf_logreg/
 src/methods/bilstm/
 src/methods/distilbert_lora/
-src/methods/distilbert_frozen/
+src/methods/frozen_distilbert/
 src/methods/distilbert_lp_ft/
 src/methods/distilbert_partial/
 src/methods/distilbert_random_init/

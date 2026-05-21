@@ -178,6 +178,17 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+Frozen DistilBERT uses the same launcher path as other Hugging Face Trainer
+methods, with only the classification head trainable:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_trials 4 \
+  --search_space frozen_backbone \
+  --hpo_seed 42
+```
+
 Each suggested command gets a `trial_id` and `output_dir` that include the HPO
 seed, trial index, and final `config_hash`. This prevents separate HPO batches
 and selected configs from sharing the same default output paths.
@@ -269,6 +280,16 @@ python src/run_experiment.py \
   --set hidden_size=128 \
   --set dropout=0.3 \
   --set learning_rate=0.001
+```
+
+For frozen DistilBERT, pass the selected frozen-head hyperparameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_seed_runs final \
+  --set head_learning_rate=1e-4 \
+  --set num_train_epochs=5
 ```
 
 Final runs use `shared_fixed.seeds_final`, set `search_stage=final`, and add
@@ -426,6 +447,10 @@ Ready now:
 - `distilbert_lp_ft_quick`
 - `distilbert_lp_ft_tuning`
 - `distilbert_lp_ft_final_seed42`
+- `frozen_distilbert_smoke`
+- `frozen_distilbert_quick`
+- `frozen_distilbert_tuning`
+- `frozen_distilbert_final_seed42`
 - `tfidf_logreg_smoke`
 - `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
@@ -438,7 +463,6 @@ Ready now:
 Templates for later scripts:
 
 - `random_init_distilbert_template`
-- `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
 - `efficient_head_ft_template`
@@ -461,10 +485,10 @@ also log `dropped_no_majority_*` fields; these are post-loader accounting
 fields and may be zero if the upstream builder already filtered undecided posts
 before exposing the split.
 
-The default seed policy is recorded in `configs/experiments.json`, but the
-catalog currently only includes `distilbert_full_final_seed42` as a ready final
-run. Add seed 43 and 44 entries after the final method list and budget are
-settled.
+The default seed policy is recorded in `configs/experiments.json`. Static
+`*_final_seed42` catalog entries are one-seed examples for direct checks; use
+`--suggest_seed_runs final` from each method's tuning entry to generate the
+full seed 42, 43, and 44 final commands for a selected config.
 
 Flexible per method:
 

@@ -351,49 +351,84 @@
         "output_dir": "outputs/bilstm_final_seed42"
       }
     },
-    "frozen_distilbert_template": {
-      "status": "planned",
+    "frozen_distilbert_smoke": {
+      "status": "ready",
       "method": "frozen-backbone",
       "family": "transformer",
-      "stage": "template",
-      "script": "src/methods/distilbert_frozen/train.py",
-      "description": "Template for frozen DistilBERT backbone plus classifier head.",
-      "tags": ["distilbert", "frozen-backbone"],
-      "args": {
-        "model_name": "distilbert-base-uncased",
-        "head_learning_rate": 1e-4,
-        "batch_size": 8,
-        "epochs": 3,
-        "seed": 42,
-        "output_dir": "outputs/frozen_distilbert_template"
-      }
-    },
-    "frozen_distilbert_smoke": {
-      "status": "planned",
-      "method": "frozen_distilbert",
-      "family": "frozen-backbone",
       "stage": "smoke",
       "script": "src/methods/frozen_distilbert/train.py",
       "description": "Small smoke test for a frozen DistilBERT backbone with a trainable classifier head.",
       "tags": ["distilbert", "frozen-backbone", "smoke"],
       "args": {
-        "device": "auto",
+        "model_name": "distilbert-base-uncased",
         "max_length": 128,
-        "dropout": 0.2,
-        "learning_rate": 0.001,
-        "weight_decay": 0.01,
-        "batch_size": 32,
-        "eval_batch_size": 32,
-        "epochs": 1,
-        "eval_strategy": "epoch",
-        "save_strategy": "epoch",
-        "save_total_limit": 2,
-        "load_best_model_at_end": true,
-        "metric_for_best_model": "eval_f1_macro",
+        "head_learning_rate": 1e-4,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 1,
         "seed": 42,
         "max_train_samples": 64,
         "max_eval_samples": 64,
         "output_dir": "outputs/frozen_distilbert_smoke"
+      }
+    },
+    "frozen_distilbert_quick": {
+      "status": "ready",
+      "method": "frozen-backbone",
+      "family": "transformer",
+      "stage": "quick",
+      "script": "src/methods/frozen_distilbert/train.py",
+      "description": "Quick frozen DistilBERT sanity run on capped data.",
+      "tags": ["distilbert", "frozen-backbone", "quick"],
+      "args": {
+        "model_name": "distilbert-base-uncased",
+        "head_learning_rate": 1e-4,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 1,
+        "seed": 42,
+        "max_train_samples": 512,
+        "max_eval_samples": 256,
+        "output_dir": "outputs/frozen_distilbert_quick"
+      }
+    },
+    "frozen_distilbert_tuning": {
+      "status": "ready",
+      "method": "frozen-backbone",
+      "family": "transformer",
+      "stage": "tuning",
+      "script": "src/methods/frozen_distilbert/train.py",
+      "description": "Full-data frozen DistilBERT base used for HPO trial command generation.",
+      "tags": ["distilbert", "frozen-backbone", "tuning"],
+      "args": {
+        "model_name": "distilbert-base-uncased",
+        "head_learning_rate": 1e-4,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 5,
+        "seed": 42,
+        "data_fraction": 1.0,
+        "output_dir": "outputs/frozen_distilbert_tuning"
+      }
+    },
+    "frozen_distilbert_final_seed42": {
+      "status": "ready",
+      "method": "frozen-backbone",
+      "family": "transformer",
+      "stage": "final",
+      "script": "src/methods/frozen_distilbert/train.py",
+      "description": "Full-data frozen DistilBERT run for one final seed.",
+      "tags": ["distilbert", "frozen-backbone", "final"],
+      "args": {
+        "model_name": "distilbert-base-uncased",
+        "head_learning_rate": 1e-4,
+        "per_device_train_batch_size": 8,
+        "per_device_eval_batch_size": 8,
+        "num_train_epochs": 5,
+        "seed": 42,
+        "data_fraction": 1.0,
+        "run_test": true,
+        "output_dir": "outputs/frozen_distilbert_final_seed42"
       }
     },
     "partial_distilbert_template": {

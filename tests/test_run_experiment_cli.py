@@ -684,6 +684,79 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--learning_rate", completed.stdout)
         self.assertIn("bilstm_tuning__bilstm__hpo42__trial001", completed.stdout)
 
+    def test_frozen_distilbert_smoke_preview_uses_method_script(self):
+        completed = self.run_cli(
+            "--experiment",
+            "frozen_distilbert_smoke",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("src/methods/frozen_distilbert/train.py", completed.stdout)
+        self.assertIn("--method frozen-backbone", completed.stdout)
+        self.assertIn("--search_stage smoke", completed.stdout)
+        self.assertIn("--head_learning_rate 0.0001", completed.stdout)
+        self.assertIn("--per_device_train_batch_size 8", completed.stdout)
+        self.assertIn("--max_train_samples 64", completed.stdout)
+
+    def test_frozen_distilbert_hpo_uses_tuning_base_and_search_space(self):
+        completed = self.run_cli(
+            "--experiment",
+            "frozen_distilbert_tuning",
+            "--suggest_trials",
+            "2",
+            "--search_space",
+            "frozen_backbone",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_stage tuning", completed.stdout)
+        self.assertIn("--hpo_trial_cap 6", completed.stdout)
+        self.assertIn("--head_learning_rate", completed.stdout)
+        self.assertIn("--num_train_epochs", completed.stdout)
+        self.assertIn(
+            "frozen_distilbert_tuning__frozen_backbone__hpo42__trial001",
+            completed.stdout,
+        )
+
+    def test_frozen_distilbert_final_seed_hash_matches_hpo_hash(self):
+        hpo = self.run_cli(
+            "--experiment",
+            "frozen_distilbert_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "frozen_backbone",
+            "--python",
+            "python",
+        )
+        final = self.run_cli(
+            "--experiment",
+            "frozen_distilbert_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "head_learning_rate=0.0003",
+            "--set",
+            "num_train_epochs=10",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(hpo.returncode, 0, hpo.stderr)
+        self.assertEqual(final.returncode, 0, final.stderr)
+        self.assertEqual(final.stdout.count("--search_stage final"), 3)
+        self.assertEqual(final.stdout.count("--run_test"), 3)
+        hpo_hash = re.search(r"--config_hash ([0-9a-f]+)", hpo.stdout)
+        final_hash = re.search(r"--config_hash ([0-9a-f]+)", final.stdout)
+        self.assertIsNotNone(hpo_hash)
+        self.assertIsNotNone(final_hash)
+        self.assertEqual(hpo_hash.group(1), final_hash.group(1))
+
     def test_bilstm_hpo_output_paths_are_isolated_by_hpo_seed(self):
         first = self.run_cli(
             "--experiment",

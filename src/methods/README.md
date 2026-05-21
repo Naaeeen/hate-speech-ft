@@ -8,6 +8,7 @@ helpers.
 ```text
 _template/          copyable starter for a new method
 distilbert_full/    ready DistilBERT full fine-tuning method
+frozen_distilbert/  ready frozen-backbone DistilBERT method
 distilbert_lp_ft/   ready DistilBERT linear probing + full fine-tuning method
 tfidf_logreg/       ready TF-IDF + Logistic Regression baseline
 bilstm/             ready Bi-LSTM from-scratch baseline
@@ -25,7 +26,7 @@ New methods should use their own package:
 src/methods/tfidf_logreg/
 src/methods/bilstm/
 src/methods/distilbert_lora/
-src/methods/distilbert_frozen/
+src/methods/frozen_distilbert/
 ```
 
 Do not put new methods inside `distilbert_full/`.
@@ -102,6 +103,12 @@ For example, LP+FT keeps its stage-1 head-only freezing and stage-2 full
 unfreeze helpers in `src/methods/distilbert_lp_ft/training.py`; the shared HF
 workflow only provides the comparable data, logging, W&B, checkpoint, and
 output contracts.
+
+Frozen DistilBERT follows the same HF workflow as full FT, but keeps its
+method-owned trainability helper in `src/methods/frozen_distilbert/training.py`.
+That helper freezes the DistilBERT backbone and leaves only the classification
+head trainable; the shared HF workflow still owns tokenization, Trainer setup,
+W&B, checkpoints, predictions, and result JSON files.
 
 TF-IDF + Logistic Regression keeps its vectorizer, sklearn estimator, classical
 metrics, and prediction writer inside `src/methods/tfidf_logreg/`. It still uses

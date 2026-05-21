@@ -52,6 +52,9 @@ Run the setup cells, then use the experiment launcher widget.
   changed for Chris's TF-IDF baseline and how to run it.
 - [Bi-LSTM integration](docs/BILSTM_INTEGRATION_EN.md): how Minh's Bi-LSTM was
   wired into the shared launcher/result contract.
+- [Frozen DistilBERT integration](docs/FROZEN_DISTILBERT_INTEGRATION_EN.md):
+  how Ming's frozen-backbone DistilBERT was refactored onto the shared HF
+  pipeline.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
@@ -82,6 +85,10 @@ Ready now:
 - `distilbert_lp_ft_quick`
 - `distilbert_lp_ft_tuning`
 - `distilbert_lp_ft_final_seed42`
+- `frozen_distilbert_smoke`
+- `frozen_distilbert_quick`
+- `frozen_distilbert_tuning`
+- `frozen_distilbert_final_seed42`
 - `tfidf_logreg_smoke`
 - `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
@@ -94,7 +101,6 @@ Ready now:
 Planned templates exist for:
 
 - `random_init_distilbert_template`
-- `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
 - `efficient_head_ft_template`
@@ -129,6 +135,7 @@ src/
   methods/                      # method packages and shared method helpers
     _template/                  # copyable starter for new methods
     distilbert_full/            # ready DistilBERT full-FT method
+    frozen_distilbert/          # ready frozen-backbone DistilBERT method
     distilbert_lp_ft/           # ready DistilBERT linear-probe + full-FT method
     tfidf_logreg/               # ready TF-IDF + Logistic Regression baseline
     bilstm/                     # ready Bi-LSTM from-scratch baseline
@@ -290,6 +297,17 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+For frozen-backbone DistilBERT HPO, use the frozen DistilBERT tuning base and
+`frozen_backbone` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_trials 4 \
+  --search_space frozen_backbone \
+  --hpo_seed 42
+```
+
 This prints deterministic trial commands with `trial_id` and `output_dir`
 values that include the HPO seed, trial index, and final `config_hash`. Preview
 them before running expensive training.
@@ -377,6 +395,17 @@ python src/run_experiment.py \
   --set learning_rate=0.001
 ```
 
+Frozen DistilBERT uses the selected classification-head learning rate and
+epoch count:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_seed_runs final \
+  --set head_learning_rate=1e-4 \
+  --set num_train_epochs=5
+```
+
 `confirm` uses seeds `42,43` and validation only. `final` uses seeds
 `42,43,44` and adds `--run_test`. Final-stage runs are required to run the
 test split; smoke, quick, tuning, and confirm runs are required not to. All
@@ -415,6 +444,7 @@ method scripts are:
 
 ```text
 src/methods/distilbert_full/train.py
+src/methods/frozen_distilbert/train.py
 src/methods/distilbert_lp_ft/train.py
 src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
@@ -450,6 +480,20 @@ python src/methods/distilbert_lp_ft/train.py \
   --stage1_epochs 1 \
   --stage2_epochs 1 \
   --output_dir outputs/manual_lp_ft_smoke
+```
+
+Frozen-backbone DistilBERT can be run directly for smoke checks:
+
+```bash
+python src/methods/frozen_distilbert/train.py \
+  --method frozen-backbone \
+  --search_stage smoke \
+  --trial_id manual_frozen_distilbert_smoke \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --num_train_epochs 1 \
+  --head_learning_rate 1e-4 \
+  --output_dir outputs/manual_frozen_distilbert_smoke
 ```
 
 TF-IDF + Logistic Regression can be run directly for local smoke checks:
@@ -682,6 +726,7 @@ Compile key modules:
 ```bash
 python -m py_compile \
   src/methods/distilbert_full/train.py \
+  src/methods/frozen_distilbert/train.py \
   src/methods/distilbert_lp_ft/train.py \
   src/methods/tfidf_logreg/train.py \
   src/methods/bilstm/train.py \

@@ -165,6 +165,15 @@ python src/run_experiment.py \
   --search_space bilstm
 ```
 
+For frozen-backbone DistilBERT, use:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_trials 4 \
+  --search_space frozen_backbone
+```
+
 Do not add method-local HPO files such as `src/methods/<method>/hpo.py`.
 The shared source of truth for trial spaces, caps, and seed policies is
 `configs/search_spaces.json`, so Colab, CLI runs, and result aggregation all see
@@ -251,6 +260,10 @@ distilbert_full_final_seed42
 distilbert_lp_ft_smoke
 distilbert_lp_ft_tuning
 distilbert_lp_ft_final_seed42
+frozen_distilbert_smoke
+frozen_distilbert_quick
+frozen_distilbert_tuning
+frozen_distilbert_final_seed42
 tfidf_logreg_smoke
 tfidf_logreg_tuning
 tfidf_logreg_final_seed42

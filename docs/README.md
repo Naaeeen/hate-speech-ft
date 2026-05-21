@@ -26,6 +26,10 @@ contracts.
   Minh's Bi-LSTM integration into the shared pipeline.
 - [BILSTM_INTEGRATION_ZH.md](BILSTM_INTEGRATION_ZH.md): 中文版 Minh Bi-LSTM
   pipeline 集成说明。
+- [FROZEN_DISTILBERT_INTEGRATION_EN.md](FROZEN_DISTILBERT_INTEGRATION_EN.md):
+  English explanation of Ming's frozen-backbone DistilBERT integration.
+- [FROZEN_DISTILBERT_INTEGRATION_ZH.md](FROZEN_DISTILBERT_INTEGRATION_ZH.md):
+  中文版 frozen-backbone DistilBERT pipeline 集成说明。
 
 ## What Belongs Here
 

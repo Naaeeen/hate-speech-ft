@@ -1,7 +1,0 @@
-datasets
-torch
-scikit-learn
-numpy
-tqdm
-transformers
-ipykernel
