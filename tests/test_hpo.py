@@ -14,6 +14,7 @@ from src.experiments.hpo import (
     merge_trial_overrides,
     sample_search_space,
     shared_fixed_command_overrides,
+    validate_hpo_base_stage,
 )
 
 
@@ -82,7 +83,7 @@ class HpoTests(unittest.TestCase):
         trials = build_trial_overrides(
             base_experiment_id="distilbert_full_tuning",
             method="full-ft",
-            search_space={"learning_rate": [1e-5, 2e-5]},
+            search_space={"learning_rate": [1e-5, 2e-5, 3e-5]},
             n_trials=3,
             hpo_seed=123,
             output_root="outputs/hpo",
@@ -93,6 +94,28 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(len(trials), 3)
         self.assertEqual(trials[0]["hpo_trial_cap"], 2)
         self.assertEqual(trials[0]["hpo_time_cap_gpu_hours"], 1.5)
+
+    def test_build_trial_overrides_rejects_duplicate_config_requests(self):
+        with self.assertRaisesRegex(ValueError, "unique configuration"):
+            build_trial_overrides(
+                base_experiment_id="distilbert_full_tuning",
+                method="full-ft",
+                search_space={"learning_rate": [1e-5, 2e-5]},
+                n_trials=3,
+                hpo_seed=123,
+                output_root="outputs/hpo",
+            )
+
+    def test_validate_hpo_base_stage_rejects_quick_and_final(self):
+        validate_hpo_base_stage("tuning")
+        validate_hpo_base_stage("smoke", allow_smoke_hpo=True)
+
+        with self.assertRaisesRegex(ValueError, "tuning experiment"):
+            validate_hpo_base_stage("quick")
+        with self.assertRaisesRegex(ValueError, "tuning experiment"):
+            validate_hpo_base_stage("final")
+        with self.assertRaisesRegex(ValueError, "tuning experiment"):
+            validate_hpo_base_stage("smoke")
 
     def test_build_seed_run_overrides_forces_full_data_without_sample_caps(self):
         runs = build_seed_run_overrides(
@@ -305,6 +328,35 @@ class HpoTests(unittest.TestCase):
                 },
             )
 
+    def test_merge_trial_overrides_rejects_hash_unsafe_alias_overrides(self):
+        with self.assertRaisesRegex(ValueError, "mixed_precision=fp16"):
+            merge_trial_overrides(
+                base_args={"method": "full-ft"},
+                user_overrides={"fp16": True},
+                trial_overrides={"trial_id": "trial001"},
+                hash_keys=["method", "mixed_precision"],
+            )
+
+        with self.assertRaisesRegex(ValueError, "per_device_train_batch_size"):
+            merge_trial_overrides(
+                base_args={"method": "lp-ft"},
+                user_overrides={"batch_size": 16},
+                trial_overrides={"trial_id": "trial001"},
+                hash_keys=[
+                    "method",
+                    "per_device_train_batch_size",
+                    "per_device_eval_batch_size",
+                ],
+            )
+
+        merged = merge_trial_overrides(
+            base_args={"method": "bilstm"},
+            user_overrides={"batch_size": 64},
+            trial_overrides={"trial_id": "trial001"},
+            hash_keys=["method", "batch_size"],
+        )
+        self.assertEqual(merged["batch_size"], 64)
+
     def test_overwrite_output_dir_does_not_change_config_hash(self):
         trial = {
             "learning_rate": 2e-5,
@@ -347,7 +399,7 @@ class HpoTests(unittest.TestCase):
         self.assertIn("full_ft", config["search_spaces"])
         self.assertEqual(config["shared_fixed"]["class_weighting"], "none")
         self.assertEqual(config["shared_fixed"]["optim"], "adamw_torch")
-        self.assertEqual(get_trial_cap(config, "full_ft"), 6)
+        self.assertEqual(get_trial_cap(config, "full_ft"), 3)
         self.assertEqual(get_time_cap_gpu_hours(config, "full_ft"), 2.0)
         self.assertIn("learning_rate", get_config_hash_keys(config, "full_ft"))
         self.assertIn("ngram_range", get_config_hash_keys(config, "tfidf_logreg"))

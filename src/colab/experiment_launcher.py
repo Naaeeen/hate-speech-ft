@@ -23,6 +23,7 @@ from src.experiments.hpo import (
     merge_trial_overrides,
     SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
     shared_fixed_command_overrides,
+    validate_hpo_base_stage,
     validate_seed_run_base_stage,
 )
 from src.experiments.registry import (
@@ -273,12 +274,7 @@ class ExperimentLauncher:
         user_overrides = dict(config["overrides"])
         if config.get("overwrite_output_dir"):
             user_overrides["overwrite_output_dir"] = True
-        if spec.stage == "smoke":
-            raise ValueError(
-                "HPO trial generation should use a tuning experiment, not a smoke "
-                "experiment with sample caps. Select the matching tuning experiment "
-                "for real trial suggestions."
-            )
+        validate_hpo_base_stage(spec.stage)
         search_space_name = config.get("search_space") or default_search_space_name(
             spec.method
         )

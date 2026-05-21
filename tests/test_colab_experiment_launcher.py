@@ -101,7 +101,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("final", commands[0])
         self.assertIn("--run_test", commands[0])
         self.assertIn("--hpo_trial_cap", commands[0])
-        self.assertIn("6", commands[0])
+        self.assertIn("3", commands[0])
         self.assertIn("--hpo_time_cap_gpu_hours", commands[0])
         self.assertIn("2", commands[0])
         self.assertIn("--seed", commands[1])
@@ -194,6 +194,82 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             launcher.build_trial_commands()
+
+    def test_trial_commands_reject_quick_base(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_quick",
+            "overrides": {},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "suggest_trials": 1,
+            "search_space": "full_ft",
+            "hpo_seed": 42,
+            "trial_output_root": "outputs/hpo",
+        }
+
+        with self.assertRaisesRegex(ValueError, "tuning experiment"):
+            launcher.build_trial_commands()
+
+    def test_trial_commands_reject_fp16_alias_override(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_tuning",
+            "overrides": {"fp16": True},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 1,
+            "search_space": "full_ft",
+            "hpo_seed": 42,
+            "trial_output_root": "outputs/hpo",
+        }
+
+        with self.assertRaisesRegex(ValueError, "mixed_precision=fp16"):
+            launcher.build_trial_commands()
+
+    def test_lp_ft_seed_commands_reject_batch_size_alias_override(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_lp_ft_tuning",
+            "overrides": {
+                "stage1_head_learning_rate": 0.0001,
+                "stage1_epochs": 5,
+                "stage2_learning_rate": 2e-5,
+                "stage2_epochs": 2,
+                "batch_size": 16,
+            },
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "final",
+            "seed_output_root": "outputs/final",
+        }
+
+        with self.assertRaisesRegex(ValueError, "per_device_train_batch_size"):
+            launcher.build_seed_run_commands()
 
     def test_seed_run_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)

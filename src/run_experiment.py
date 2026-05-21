@@ -36,6 +36,7 @@ from src.experiments.hpo import (
     merge_trial_overrides,
     SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
     shared_fixed_command_overrides,
+    validate_hpo_base_stage,
     validate_seed_run_base_stage,
 )
 
@@ -210,13 +211,10 @@ def main() -> int:
             search_config = load_hpo_config(args.search_config)
             search_space_name = args.search_space or default_search_space_name(spec.method)
             hash_keys = get_config_hash_keys(search_config, search_space_name)
-            if spec.stage == "smoke" and not args.allow_smoke_hpo:
-                raise SystemExit(
-                    "Refusing to generate HPO trials from a smoke experiment because "
-                    "its sample caps are for setup checks, not model selection. Use a "
-                    "matching tuning experiment for real HPO, or pass "
-                    "--allow_smoke_hpo for a smoke-only command test."
-                )
+            validate_hpo_base_stage(
+                spec.stage,
+                allow_smoke_hpo=args.allow_smoke_hpo,
+            )
             search_space = get_search_space(search_config, search_space_name)
             trials = build_trial_overrides(
                 base_experiment_id=spec.experiment_id,

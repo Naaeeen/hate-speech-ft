@@ -25,7 +25,7 @@
     "random_init_distilbert": 4,
     "frozen_backbone": 6,
     "partial_ft": 6,
-    "full_ft": 6,
+    "full_ft": 3,
     "lora": 6,
     "lp_ft": 4,
     "efficient_head_ft": 4

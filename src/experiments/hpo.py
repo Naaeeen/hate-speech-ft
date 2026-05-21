@@ -42,6 +42,17 @@ SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS = PROTECTED_USER_OVERRIDE_KEYS | {
     "max_test_samples",
 }
 CONFIG_HASH_SUFFIX_PATTERN = re.compile(r"__[0-9a-f]{12}$")
+UNSUPPORTED_HASH_ALIAS_MESSAGES = {
+    "fp16": "Use mixed_precision=fp16 so precision is part of the config hash.",
+}
+UNSUPPORTED_HASH_ALIAS_MESSAGES_BY_METHOD = {
+    "lp-ft": {
+        "batch_size": (
+            "Use per_device_train_batch_size and per_device_eval_batch_size so "
+            "LP+FT batch-size changes are part of the config hash."
+        ),
+    },
+}
 
 
 def load_hpo_config(path: str | Path = DEFAULT_SEARCH_SPACE_PATH) -> dict[str, Any]:
@@ -147,11 +158,33 @@ def merge_trial_overrides(
             "Use --trial_output_root, --seed_output_root, --hpo_seed, or the "
             "experiment catalog instead."
         )
+    validate_hash_safe_user_overrides(
+        method=str(base_args.get("method", "")),
+        user_overrides=user_overrides,
+    )
 
     merged = {**trial_overrides, **user_overrides}
     hash_payload = build_config_hash_payload({**base_args, **merged}, hash_keys=hash_keys)
     merged["config_hash"] = build_config_hash(hash_payload)
     return add_config_hash_to_generated_identity(merged)
+
+
+def validate_hash_safe_user_overrides(
+    *,
+    method: str,
+    user_overrides: dict[str, Any],
+) -> None:
+    messages = dict(UNSUPPORTED_HASH_ALIAS_MESSAGES)
+    messages.update(UNSUPPORTED_HASH_ALIAS_MESSAGES_BY_METHOD.get(method, {}))
+    blocked = [key for key in sorted(user_overrides) if key in messages]
+    if not blocked:
+        return
+
+    details = "; ".join(f"{key}: {messages[key]}" for key in blocked)
+    raise ValueError(
+        "Launcher-managed runs do not accept legacy alias overrides that can "
+        f"change training behavior without stable output identity. {details}"
+    )
 
 
 def add_config_hash_to_generated_identity(overrides: dict[str, Any]) -> dict[str, Any]:
@@ -237,6 +270,18 @@ def validate_seed_run_base_stage(stage: str) -> None:
             "Seed-run generation must start from a tuning experiment so smoke "
             "sample caps and final-only test flags are not inherited."
         )
+
+
+def validate_hpo_base_stage(stage: str, *, allow_smoke_hpo: bool = False) -> None:
+    if stage == "tuning":
+        return
+    if stage == "smoke" and allow_smoke_hpo:
+        return
+    raise ValueError(
+        "HPO trial generation must start from a tuning experiment so smoke/quick "
+        "sample caps, one-epoch setup defaults, and final-only settings are not "
+        "inherited."
+    )
 
 
 def shared_fixed_command_overrides(config: dict[str, Any]) -> dict[str, Any]:
@@ -329,6 +374,12 @@ def build_trial_overrides(
     trials = []
     method_part = default_search_space_name(method)
     combinations = enumerate_search_space(search_space)
+    if n_trials > len(combinations):
+        raise ValueError(
+            f"Requested {n_trials} trials for {method}, but search space has only "
+            f"{len(combinations)} unique configuration(s). Reduce --suggest_trials "
+            "or expand configs/search_spaces.json."
+        )
     rng = random.Random(hpo_seed)
     rng.shuffle(combinations)
     fixed_overrides = dict(fixed_overrides or {})

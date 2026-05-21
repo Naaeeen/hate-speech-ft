@@ -122,7 +122,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--seed 42", completed.stdout)
         self.assertIn("--seed 43", completed.stdout)
         self.assertIn("--seed 44", completed.stdout)
-        self.assertEqual(completed.stdout.count("--hpo_trial_cap 6"), 3)
+        self.assertEqual(completed.stdout.count("--hpo_trial_cap 3"), 3)
         self.assertEqual(completed.stdout.count("--hpo_time_cap_gpu_hours 2"), 3)
         hashes = re.findall(r"--config_hash ([0-9a-f]+)", completed.stdout)
         self.assertEqual(len(hashes), 3)
@@ -301,6 +301,21 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("tuning experiment", smoke.stderr)
         self.assertIn("tuning experiment", final.stderr)
 
+    def test_suggest_trials_rejects_quick_base(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_quick",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "full_ft",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("tuning experiment", completed.stderr)
+
     def test_allow_smoke_hpo_marks_smoke_stage(self):
         completed = self.run_cli(
             "--experiment",
@@ -317,6 +332,81 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage smoke", completed.stdout)
         self.assertNotIn("--search_stage tuning", completed.stdout)
+
+    def test_hpo_rejects_fp16_alias_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "full_ft",
+            "--set",
+            "fp16=true",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("mixed_precision=fp16", completed.stderr)
+
+    def test_direct_final_rejects_fp16_alias_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_final_seed42",
+            "--dry_run",
+            "--set",
+            "fp16=true",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("mixed_precision=fp16", completed.stderr)
+
+    def test_lp_ft_seed_runs_reject_batch_size_alias_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_lp_ft_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "stage1_head_learning_rate=0.0001",
+            "--set",
+            "stage1_epochs=5",
+            "--set",
+            "stage2_learning_rate=2e-5",
+            "--set",
+            "stage2_epochs=2",
+            "--set",
+            "batch_size=16",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("per_device_train_batch_size", completed.stderr)
+
+    def test_bilstm_seed_runs_allow_method_batch_size_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "hidden_size=128",
+            "--set",
+            "dropout=0.3",
+            "--set",
+            "learning_rate=0.001",
+            "--set",
+            "batch_size=64",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.count("--batch_size 64"), 3)
 
     def test_lp_ft_smoke_preview_uses_two_stage_method_script(self):
         completed = self.run_cli(

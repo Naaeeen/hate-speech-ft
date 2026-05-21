@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from src.experiments.hpo import (
+    enumerate_search_space,
     get_config_hash_keys,
     get_trial_cap,
     shared_fixed_command_overrides,
@@ -37,7 +38,7 @@ EXPECTED_METHODS = (
     ExpectedMethod("random-init-distilbert", "random_init_distilbert", 4),
     ExpectedMethod("frozen-backbone", "frozen_backbone", 6),
     ExpectedMethod("partial-ft", "partial_ft", 6),
-    ExpectedMethod("full-ft", "full_ft", 6, catalog_stage="tuning"),
+    ExpectedMethod("full-ft", "full_ft", 3, catalog_stage="tuning"),
     ExpectedMethod("lora", "lora", 6),
     ExpectedMethod("lp-ft", "lp_ft", 4, catalog_stage="tuning"),
     ExpectedMethod("efficient-head-ft", "efficient_head_ft", 4),
@@ -248,6 +249,18 @@ def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> No
         if name not in spaces:
             errors.append(f"Missing search space '{name}'.")
             continue
+        trial_cap = get_trial_cap(hpo_config, name)
+        if trial_cap is not None:
+            try:
+                unique_config_count = len(enumerate_search_space(spaces[name]))
+            except ValueError as exc:
+                errors.append(f"search_spaces.{name} is invalid: {exc}")
+                unique_config_count = 0
+            if unique_config_count and trial_cap > unique_config_count:
+                errors.append(
+                    f"trial_caps.{name}={trial_cap} exceeds the "
+                    f"{unique_config_count} unique config(s) in search_spaces.{name}."
+                )
         missing_keys = sorted(required_keys - set(spaces[name]))
         if missing_keys:
             errors.append(

@@ -11,6 +11,7 @@ from src.experiments.hpo import (
     add_config_hash_to_generated_identity,
     build_config_hash,
     build_config_hash_payload,
+    validate_hash_safe_user_overrides,
 )
 
 
@@ -242,6 +243,7 @@ def validate_direct_run_overrides(
             f"{', '.join(blocked)}. Use catalog entries, HPO trial generation, or "
             "seed-run generation for stage/test/sample-policy changes."
         )
+    validate_hash_safe_user_overrides(method=spec.method, user_overrides=overrides)
 
 
 def _format_cli_value(value: Any) -> str:
@@ -350,6 +352,10 @@ def build_experiment_command(
         raise FileNotFoundError(
             f"Experiment '{spec.experiment_id}' points to missing script: {spec.script}"
         )
+    validate_hash_safe_user_overrides(
+        method=spec.method,
+        user_overrides=overrides or {},
+    )
 
     args = {
         "method": spec.method,
