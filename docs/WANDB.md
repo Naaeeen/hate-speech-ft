@@ -33,6 +33,11 @@ Colab workflow:
    - Optional overrides such as `learning_rate=3e-5`
 5. Preview the command, then run it.
 
+The widget opens with `Use W&B` checked and `Mode=online`. If the secret is not
+available, uncheck W&B or switch Mode to `offline` / `disabled` before the first
+run. W&B is optional; local JSON summaries remain the source of truth for
+aggregation.
+
 Do not paste the API key into the notebook, a README, a Python file, or
 `configs/experiments.json`.
 
@@ -123,9 +128,11 @@ python src/run_experiment.py \
   --wandb_project hate-speech-ft
 ```
 
-Use a tuning experiment for real HPO. Smoke experiments keep tiny sample caps for
-setup checks, so the CLI blocks smoke-based HPO suggestions unless explicitly
-overridden.
+Use a tuning experiment for real HPO. Smoke and quick experiments keep setup
+sample caps or one-epoch defaults, so they are not comparable model-selection
+bases. The CLI blocks quick/final bases and blocks smoke bases unless
+`--allow_smoke_hpo` is passed for a smoke-only command test; the Colab launcher
+requires a tuning base.
 Do not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
 `config_hash` with `--set` in HPO mode. The generated command records
 `hpo_trial_cap` and, when configured, `hpo_time_cap_gpu_hours`; do not override

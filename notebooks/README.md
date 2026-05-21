@@ -20,7 +20,8 @@ The notebook should:
 6. Load `ExperimentLauncher`.
 7. Preview and run catalog experiments.
 8. Optionally preview HPO, confirmation, or final seed commands from
-   `configs/search_spaces.json`.
+   `configs/search_spaces.json`. HPO previews must use a `*_tuning`
+   experiment; smoke/quick/final entries are not valid Colab HPO bases.
 9. Aggregate finished run summaries with `launcher.aggregate_results()`.
 
 ## Do Not Put Training Logic Here
@@ -56,9 +57,17 @@ across different Colab GPU or CUDA environments.
 When `Trials > 0`, do not put `output_dir`, `trial_id`, `search_stage`,
 `hpo_seed`, or `config_hash` in the override box. Trial identity is generated
 from the selected experiment, search space, HPO seed, and Trial root.
+Select a tuning experiment such as `distilbert_full_tuning`,
+`distilbert_lp_ft_tuning`, `tfidf_logreg_tuning`, or `bilstm_tuning`; the Colab
+launcher rejects smoke/quick/final bases so setup caps are not mislabeled as
+HPO.
 The generated `config_hash` uses the selected search space's `config_hash_keys`,
 so it follows the method's effective hyperparameters instead of unrelated
 defaults from other method families.
+Do not use legacy aliases that are not hash fields: use `mixed_precision=fp16`
+instead of `fp16=true`, and for LP+FT use `per_device_train_batch_size` /
+`per_device_eval_batch_size` instead of `batch_size`. Bi-LSTM `batch_size` is a
+method-owned parameter and is valid.
 Direct runs reject managed protocol overrides such as `search_stage`, `trial_id`,
 `config_hash`, HPO accounting fields, and `run_test`; final direct runs also
 protect seed and sample-policy fields. Use the Seed runs control for final
@@ -92,6 +101,9 @@ WANDB_API_KEY
 ```
 
 Do not paste the API key into notebook cells.
+The launcher widget opens with W&B enabled and `online` mode. If the secret is
+missing, uncheck W&B or choose `offline` / `disabled`; the notebook still writes
+local JSON result files for aggregation.
 
 ## Keeping Notebooks Clean
 

@@ -133,6 +133,11 @@ python src/run_experiment.py \
   --search_space full_ft
 ```
 
+The current Full FT search space contains three unique learning-rate configs,
+so its trial cap is `3`. If the team wants more Full FT HPO trials, expand
+`search_spaces.full_ft` first; the launcher rejects duplicate-config requests
+instead of silently repeating the same effective run.
+
 For DistilBERT LP+FT, use:
 
 ```bash
@@ -171,13 +176,22 @@ does not hash Transformer-only fields such as `optim` or `warmup_ratio`. This
 keeps final seed grouping stable when unrelated shared defaults change.
 
 Use a tuning experiment for real HPO. Smoke experiments keep sample caps for
-setup checks and are blocked for HPO unless `--allow_smoke_hpo` is passed.
+setup checks, quick experiments keep shortened setup defaults, and final
+experiments are for test reporting only. The CLI blocks quick/final bases and
+blocks smoke bases unless `--allow_smoke_hpo` is passed for a command-shape
+test; the Colab launcher requires a tuning base.
 HPO trial identity fields are launcher-managed: do not set `output_dir`,
 `trial_id`, `search_stage`, `hpo_seed`, `hpo_trial_cap`,
 `hpo_time_cap_gpu_hours`, or `config_hash` through `--set`.
 Use `--trial_output_root` or edit the catalog/search-space config instead.
 The time cap is recorded in generated commands and run configs; it is not
 currently enforced as an automatic kill switch.
+
+Do not use legacy aliases in launcher-managed overrides when they are not hash
+fields. Use `mixed_precision=fp16` instead of `fp16=true`, and for LP+FT use
+`per_device_train_batch_size` / `per_device_eval_batch_size` instead of
+`batch_size`. Bi-LSTM `batch_size` is a method-owned parameter and is listed in
+`config_hash_keys.bilstm`, so it remains valid for Bi-LSTM overrides.
 
 Generate confirmation and final seed commands from `shared_fixed.seeds_confirm`
 and `shared_fixed.seeds_final`:

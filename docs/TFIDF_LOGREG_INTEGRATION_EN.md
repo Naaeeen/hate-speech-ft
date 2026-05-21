@@ -244,7 +244,9 @@ the exact trace is:
    - `command_defaults` contributes command args such as `dataset_name`.
    - `family_command_defaults` is resolved by
      `_resolve_family_command_defaults()`.
-   - TF-IDF uses `family="classical"`, whose family defaults are `{}`.
+   - TF-IDF uses `family="classical"`, whose family defaults currently add
+     `class_weighting=none`. This keeps the shared class-weighting contract and
+     config hashes explicit even though the method is not a Transformer.
    - final `ExperimentSpec.args` becomes:
      `command_defaults + classical family defaults + entry args`.
 4. `ExperimentRegistry.get("tfidf_logreg_smoke")` looks up the spec from the

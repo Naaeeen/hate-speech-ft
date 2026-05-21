@@ -112,3 +112,7 @@ total_params
 
 The saved prediction files contain class probabilities instead of Transformer
 logits.
+Because this is a CPU sklearn baseline, runtime metadata records
+`compute_device=cpu` and does not report GPU-hours. If you run the notebook in a
+GPU Colab runtime, the GPU is not counted as consumed training compute for this
+method.

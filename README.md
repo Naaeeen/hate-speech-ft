@@ -298,16 +298,26 @@ which keeps each method's hash tied to its effective hyperparameters rather
 than unrelated defaults from another method family.
 `configs/search_spaces.json` also records allocated HPO trial caps and optional
 GPU-hour caps. The Full FT search space currently records
-`time_caps_gpu_hours.full_ft=2.0`; this is logged into generated trial commands
-as `hpo_time_cap_gpu_hours` for reporting, but it is not an automatic Colab
-stopwatch.
+`trial_caps.full_ft=3` and `time_caps_gpu_hours.full_ft=2.0`; these values are
+logged into generated trial commands for reporting, but the time cap is not an
+automatic Colab stopwatch. HPO generation also refuses requests for more trials
+than the selected search space has unique configurations, so duplicate configs
+cannot silently waste search budget.
 In HPO mode, do not override identity fields such as `output_dir`, `trial_id`,
 `search_stage`, `hpo_seed`, `hpo_trial_cap`, `hpo_time_cap_gpu_hours`, or
 `config_hash` with `--set`; use `--trial_output_root`, `--hpo_seed`, or a named
 catalog experiment instead.
-The CLI refuses to create HPO trials from smoke experiments unless
-`--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
-checks.
+Use tuning experiments for HPO. The CLI refuses quick/final bases because they
+carry setup or reporting defaults; smoke bases are allowed only with
+`--allow_smoke_hpo` for command-shape tests and stay labeled `search_stage=smoke`.
+The Colab launcher has no smoke-HPO escape hatch.
+
+Avoid legacy alias overrides on launcher-managed runs. Use
+`mixed_precision=fp16` instead of `fp16=true`; for LP+FT use
+`per_device_train_batch_size` and `per_device_eval_batch_size` instead of the
+old `batch_size` alias. This keeps `config_hash`, output directories, and
+aggregation groups tied to the effective training config. Bi-LSTM `batch_size`
+is a real method parameter and is included in its hash keys.
 
 Before running a batch, validate the catalog and HPO protocol:
 
@@ -410,7 +420,9 @@ src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
 ```
 
-You can still run full FT directly:
+You can still run full FT directly for debugging. For comparable team runs,
+prefer `src/run_experiment.py`; direct commands must include protocol flags
+explicitly because they bypass catalog defaults.
 
 ```bash
 python src/methods/distilbert_full/train.py \
@@ -420,6 +432,9 @@ python src/methods/distilbert_full/train.py \
   --max_train_samples 64 \
   --max_eval_samples 64 \
   --num_train_epochs 1 \
+  --load_best_model_at_end \
+  --early_stopping_patience 2 \
+  --metric_for_best_model eval_f1_macro \
   --output_dir outputs/manual_distilbert_smoke
 ```
 
@@ -513,6 +528,10 @@ Mode: online
 Entity: your team or username
 Project: hate-speech-ft
 ```
+
+The Colab widget currently opens with `Use W&B=true` and `Mode=online`. If you
+have not added `WANDB_API_KEY`, either uncheck W&B or switch Mode to `offline`
+or `disabled` before running. Local JSON outputs are still written in all modes.
 
 Every method should log comparable top-level metadata:
 

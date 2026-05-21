@@ -189,14 +189,26 @@ If `configs/search_spaces.json` defines `time_caps_gpu_hours` for the search
 space, generated trial commands also include `hpo_time_cap_gpu_hours` so the
 allocated time budget is recorded with each run. The current code records this
 cap for reporting; it does not automatically stop Colab jobs at that time.
+The launcher refuses `--suggest_trials` values larger than the number of unique
+configs in the selected search space. For example, current Full FT HPO has
+three unique learning-rate configs and a trial cap of `3`; expand the search
+space before asking for more Full FT trials.
 Do not set HPO identity fields (`output_dir`, `trial_id`, `search_stage`,
 `hpo_seed`, `hpo_trial_cap`, `hpo_time_cap_gpu_hours`, or `config_hash`) through
 `--set`; use `--trial_output_root`, `--hpo_seed`, or a catalog/search-space edit
 instead.
 Trial caps from `configs/search_spaces.json` are enforced by default. Use
 `--allow_over_cap` only for exploratory runs that intentionally exceed the
-research protocol. The CLI also refuses HPO suggestions from smoke experiments
-unless `--allow_smoke_hpo` is passed.
+research protocol. HPO should start from a tuning experiment. The CLI refuses
+quick/final bases and refuses smoke bases unless `--allow_smoke_hpo` is passed
+for a smoke-only command test; the Colab launcher requires a tuning base.
+
+Launcher-managed overrides also reject legacy aliases that can change effective
+training behavior without changing `config_hash`. Use `mixed_precision=fp16`
+instead of `fp16=true`. For LP+FT, use `per_device_train_batch_size` and
+`per_device_eval_batch_size` instead of the old `batch_size` alias. Bi-LSTM
+`batch_size` remains valid because it is a method-owned field in
+`config_hash_keys.bilstm`.
 
 ## Confirmation And Final Seed Runs
 

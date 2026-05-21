@@ -41,10 +41,18 @@ python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
 python src/run_experiment.py --experiment distilbert_full_smoke
 ```
 
-Direct execution is still supported for debugging:
+Direct execution is still supported for debugging, but catalog runs are the
+protocol-equivalent path. If you run this script directly, pass the same
+checkpoint/model-selection flags that the catalog supplies.
 
 ```bash
-python src/methods/distilbert_full/train.py --method full-ft --search_stage smoke --trial_id manual_smoke
+python src/methods/distilbert_full/train.py \
+  --method full-ft \
+  --search_stage smoke \
+  --trial_id manual_smoke \
+  --load_best_model_at_end \
+  --early_stopping_patience 2 \
+  --metric_for_best_model eval_f1_macro
 ```
 
 Final-stage runs must include `--run_test`; non-final stages are blocked from

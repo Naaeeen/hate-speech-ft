@@ -70,6 +70,9 @@ FT, DistilBERT LP-FT, and TF-IDF LogReg:
 
 - Builds `resolved_config.json` fields, runtime metadata, W&B run names, and
   model-selection summaries.
+- Runtime cost counts GPU-hours only when the resolved training device is
+  `cuda`. CPU Bi-LSTM runs still record the available GPU type for context but
+  report CPU compute cost.
 
 `src/methods/bilstm/train.py`
 

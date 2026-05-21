@@ -68,6 +68,8 @@ DistilBERT full FT、DistilBERT LP-FT、TF-IDF LogReg 一样的实验协议：
 
 - 生成 `resolved_config.json`、runtime metadata、W&B run name 和 model
   selection summary。
+- runtime cost 只有在实际 training device 是 `cuda` 时才统计 GPU-hours。CPU
+  Bi-LSTM run 仍会记录可用 GPU type 作为环境信息，但 compute cost 记录为 CPU。
 
 `src/methods/bilstm/train.py`
 
