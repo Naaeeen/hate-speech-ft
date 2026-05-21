@@ -57,10 +57,19 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         self.assertEqual(len(commands), 2)
         self.assertIn("--trial_id", commands[0])
-        self.assertIn("distilbert_full_tuning__full_ft__trial001", commands[0])
-        self.assertIn("outputs/hpo/distilbert_full_tuning__full_ft__trial002", commands[1])
+        first_command = " ".join(commands[0])
+        second_command = " ".join(commands[1])
+        self.assertIn("distilbert_full_tuning__full_ft__hpo42__trial001", first_command)
+        self.assertIn(
+            "outputs/hpo/distilbert_full_tuning__full_ft__hpo42__trial002",
+            second_command,
+        )
+        self.assertRegex(first_command, r"--trial_id [^ ]+__[0-9a-f]{12}")
+        self.assertRegex(first_command, r"--output_dir [^ ]+__[0-9a-f]{12}")
         self.assertIn("--optim", commands[0])
         self.assertIn("adamw_torch", commands[0])
+        self.assertIn("--hpo_time_cap_gpu_hours", commands[0])
+        self.assertIn("2", commands[0])
         self.assertIn("--mixed_precision", commands[0])
         self.assertIn("bf16", commands[0])
         self.assertIn("--overwrite_output_dir", commands[0])
@@ -91,8 +100,77 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("--search_stage", commands[0])
         self.assertIn("final", commands[0])
         self.assertIn("--run_test", commands[0])
+        self.assertIn("--hpo_trial_cap", commands[0])
+        self.assertIn("6", commands[0])
+        self.assertIn("--hpo_time_cap_gpu_hours", commands[0])
+        self.assertIn("2", commands[0])
         self.assertIn("--seed", commands[1])
         self.assertIn("43", commands[1])
+
+    def test_bilstm_launcher_rejects_wandb_model_upload(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.get_config = lambda: {
+            "experiment": "bilstm_smoke",
+            "overrides": {},
+            "use_wandb": True,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "end",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "none",
+        }
+
+        with self.assertRaisesRegex(ValueError, "model artifacts locally only"):
+            launcher.build_command()
+
+    def test_tfidf_launcher_rejects_wandb_model_upload(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.get_config = lambda: {
+            "experiment": "tfidf_logreg_smoke",
+            "overrides": {},
+            "use_wandb": True,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "end",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "none",
+        }
+
+        with self.assertRaisesRegex(ValueError, "model artifacts locally only"):
+            launcher.build_command()
+
+    def test_launcher_direct_final_rejects_sample_policy_override(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_final_seed42",
+            "overrides": {"data_fraction": 0.5},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "search_space": "full_ft",
+            "seed_run_stage": "none",
+        }
+
+        with self.assertRaisesRegex(ValueError, "data_fraction"):
+            launcher.build_command()
 
     def test_trial_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)

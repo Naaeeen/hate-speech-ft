@@ -14,9 +14,11 @@ from src.experiments.hpo import (
     build_seed_run_overrides,
     build_trial_overrides,
     default_search_space_name,
+    get_config_hash_keys,
     get_seed_policy,
-    get_trial_cap,
     get_search_space,
+    get_time_cap_gpu_hours,
+    get_trial_cap,
     load_hpo_config,
     merge_trial_overrides,
     SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
@@ -30,6 +32,7 @@ from src.experiments.registry import (
     format_command,
     load_experiment_registry,
     parse_override_text,
+    validate_direct_run_overrides,
 )
 
 
@@ -226,6 +229,16 @@ class ExperimentLauncher:
         overrides = dict(config["overrides"])
         if config.get("overwrite_output_dir"):
             overrides["overwrite_output_dir"] = True
+        config_hash_keys = None
+        if spec.stage == "final":
+            search_space_name = config.get("search_space") or default_search_space_name(
+                spec.method
+            )
+            config_hash_keys = get_config_hash_keys(
+                self.search_config,
+                search_space_name,
+            )
+        validate_direct_run_overrides(spec, overrides)
         return build_experiment_command(
             spec,
             overrides=overrides,
@@ -236,6 +249,7 @@ class ExperimentLauncher:
             wandb_tags=config["wandb_tags"],
             wandb_mode=config["wandb_mode"],
             wandb_log_model=config["wandb_log_model"],
+            config_hash_keys=config_hash_keys,
         )
 
     def preview_command(self) -> str:
@@ -265,8 +279,11 @@ class ExperimentLauncher:
                 "experiment with sample caps. Select the matching tuning experiment "
                 "for real trial suggestions."
             )
-        search_space_name = config["search_space"] or default_search_space_name(spec.method)
+        search_space_name = config.get("search_space") or default_search_space_name(
+            spec.method
+        )
         search_space = get_search_space(self.search_config, search_space_name)
+        hash_keys = get_config_hash_keys(self.search_config, search_space_name)
         trial_overrides = build_trial_overrides(
             base_experiment_id=spec.experiment_id,
             method=spec.method,
@@ -275,14 +292,20 @@ class ExperimentLauncher:
             hpo_seed=int(config["hpo_seed"]),
             output_root=config["trial_output_root"],
             trial_cap=get_trial_cap(self.search_config, search_space_name),
+            time_cap_gpu_hours=get_time_cap_gpu_hours(
+                self.search_config,
+                search_space_name,
+            ),
             fixed_overrides=shared_fixed_command_overrides(self.search_config),
+            hash_keys=hash_keys,
         )
         commands = []
         for overrides in trial_overrides:
             merged_overrides = merge_trial_overrides(
-                base_args=spec.args,
+                base_args={**spec.args, "method": spec.method},
                 user_overrides=user_overrides,
                 trial_overrides=overrides,
+                hash_keys=hash_keys,
             )
             commands.append(
                 build_experiment_command(
@@ -310,6 +333,10 @@ class ExperimentLauncher:
         user_overrides = dict(config["overrides"])
         if config.get("overwrite_output_dir"):
             user_overrides["overwrite_output_dir"] = True
+        search_space_name = config.get("search_space") or default_search_space_name(
+            spec.method
+        )
+        hash_keys = get_config_hash_keys(self.search_config, search_space_name)
         seed_overrides = build_seed_run_overrides(
             base_experiment_id=spec.experiment_id,
             method=spec.method,
@@ -318,14 +345,20 @@ class ExperimentLauncher:
             or f"/content/drive/MyDrive/hate_speech_ft/outputs/{seed_stage}",
             search_stage=seed_stage,
             fixed_overrides=shared_fixed_command_overrides(self.search_config),
+            trial_cap=get_trial_cap(self.search_config, search_space_name),
+            time_cap_gpu_hours=get_time_cap_gpu_hours(
+                self.search_config,
+                search_space_name,
+            ),
         )
         commands = []
         for overrides in seed_overrides:
             merged_overrides = merge_trial_overrides(
-                base_args=spec.args,
+                base_args={**spec.args, "method": spec.method},
                 user_overrides=user_overrides,
                 trial_overrides=overrides,
                 protected_user_override_keys=SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
+                hash_keys=hash_keys,
             )
             commands.append(
                 build_experiment_command(

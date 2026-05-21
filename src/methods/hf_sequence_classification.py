@@ -21,6 +21,7 @@ from src.methods.hf_common import (
     build_trainer,
     build_training_arguments,
     build_weighted_trainer_class,
+    build_compute_cost_fields,
     compute_metrics_fn,
     get_gpu_type,
     get_peak_memory_mb,
@@ -477,14 +478,29 @@ def save_final_model(
     output_dir: str | Path,
     no_save_final_model: bool,
     model_source: str,
-) -> None:
+) -> dict[str, Path]:
     if no_save_final_model:
         print("\nSkipping final model save because --no_save_final_model was set.")
-        return
+        return {}
 
     print(f"\nSaving final model and tokenizer from {model_source}...")
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)
+    output_path = Path(output_dir)
+    artifact_names = (
+        "model.safetensors",
+        "pytorch_model.bin",
+        "config.json",
+        "training_args.bin",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+    )
+    return {
+        name: output_path / name
+        for name in artifact_names
+        if (output_path / name).exists()
+    }
 
 
 def save_final_predictions(
@@ -535,6 +551,7 @@ def build_runtime_metrics(
 ) -> dict[str, Any]:
     metrics = {
         "training_time_sec": training_time_sec,
+        **build_compute_cost_fields(training_time_sec, gpu_type=gpu_type),
         "peak_memory_mb": get_peak_memory_mb(),
         "peak_memory_allocated_mb": get_peak_memory_mb(),
         "peak_memory_reserved_mb": get_peak_memory_reserved_mb(),
@@ -645,6 +662,7 @@ def write_success_outputs(
     model_selection: dict[str, Any],
     prediction_paths: dict[str, Path],
     wandb_run,
+    model_artifact_paths: dict[str, Path] | None = None,
     extra_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     if wandb_run is not None:
@@ -659,6 +677,7 @@ def write_success_outputs(
         runtime_metrics=runtime_metrics,
         model_selection=model_selection,
         prediction_paths=prediction_paths,
+        artifact_paths=model_artifact_paths,
         extra_metrics=extra_metrics,
     )
 

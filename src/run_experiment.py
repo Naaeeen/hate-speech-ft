@@ -16,6 +16,7 @@ from src.experiments.registry import (
     format_command,
     load_experiment_registry,
     parse_override_pairs,
+    validate_direct_run_overrides,
 )
 from src.experiments.protocol import (
     format_protocol_report,
@@ -26,10 +27,11 @@ from src.experiments.hpo import (
     build_seed_run_overrides,
     build_trial_overrides,
     default_search_space_name,
+    get_config_hash_keys,
     get_seed_policy,
+    get_search_space,
     get_time_cap_gpu_hours,
     get_trial_cap,
-    get_search_space,
     load_hpo_config,
     merge_trial_overrides,
     SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
@@ -164,6 +166,8 @@ def main() -> int:
             search_config = load_hpo_config(args.search_config)
             seed_stage = args.suggest_seed_runs
             validate_seed_run_base_stage(spec.stage)
+            search_space_name = args.search_space or default_search_space_name(spec.method)
+            hash_keys = get_config_hash_keys(search_config, search_space_name)
             output_root = args.seed_output_root or f"outputs/{seed_stage}"
             seed_overrides = build_seed_run_overrides(
                 base_experiment_id=spec.experiment_id,
@@ -172,13 +176,19 @@ def main() -> int:
                 output_root=output_root,
                 search_stage=seed_stage,
                 fixed_overrides=shared_fixed_command_overrides(search_config),
+                trial_cap=get_trial_cap(search_config, search_space_name),
+                time_cap_gpu_hours=get_time_cap_gpu_hours(
+                    search_config,
+                    search_space_name,
+                ),
             )
             for trial_overrides in seed_overrides:
                 merged_overrides = merge_trial_overrides(
-                    base_args=spec.args,
+                    base_args={**spec.args, "method": spec.method},
                     user_overrides=overrides,
                     trial_overrides=trial_overrides,
                     protected_user_override_keys=SEED_RUN_PROTECTED_USER_OVERRIDE_KEYS,
+                    hash_keys=hash_keys,
                 )
                 command = build_experiment_command(
                     spec,
@@ -199,6 +209,7 @@ def main() -> int:
         if args.suggest_trials:
             search_config = load_hpo_config(args.search_config)
             search_space_name = args.search_space or default_search_space_name(spec.method)
+            hash_keys = get_config_hash_keys(search_config, search_space_name)
             if spec.stage == "smoke" and not args.allow_smoke_hpo:
                 raise SystemExit(
                     "Refusing to generate HPO trials from a smoke experiment because "
@@ -222,12 +233,14 @@ def main() -> int:
                 ),
                 allow_over_cap=args.allow_over_cap,
                 fixed_overrides=shared_fixed_command_overrides(search_config),
+                hash_keys=hash_keys,
             )
             for trial_overrides in trials:
                 merged_overrides = merge_trial_overrides(
-                    base_args=spec.args,
+                    base_args={**spec.args, "method": spec.method},
                     user_overrides=overrides,
                     trial_overrides=trial_overrides,
+                    hash_keys=hash_keys,
                 )
                 command = build_experiment_command(
                     spec,
@@ -245,6 +258,12 @@ def main() -> int:
                 print(format_command(command))
             return 0
 
+        config_hash_keys = None
+        if spec.stage == "final":
+            search_config = load_hpo_config(args.search_config)
+            search_space_name = args.search_space or default_search_space_name(spec.method)
+            config_hash_keys = get_config_hash_keys(search_config, search_space_name)
+        validate_direct_run_overrides(spec, overrides)
         command = build_experiment_command(
             spec,
             repo_root=REPO_ROOT,
@@ -257,6 +276,7 @@ def main() -> int:
             wandb_mode=args.wandb_mode,
             wandb_log_model=args.wandb_log_model,
             python_executable=args.python,
+            config_hash_keys=config_hash_keys,
         )
     except (FileNotFoundError, ValueError, KeyError) as exc:
         print(f"Cannot run experiment: {exc}", file=sys.stderr)

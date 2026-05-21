@@ -6,6 +6,7 @@ from src.experiments.hpo import (
     build_trial_overrides,
     default_search_space_name,
     enumerate_search_space,
+    get_config_hash_keys,
     get_time_cap_gpu_hours,
     get_trial_cap,
     get_search_space,
@@ -62,6 +63,7 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(trials[0]["optim"], "adamw_torch")
         self.assertIn("config_hash", trials[0])
         self.assertNotEqual(trials[0]["learning_rate"], trials[1]["learning_rate"])
+        self.assertIn("hpo123", trials[0]["trial_id"])
         self.assertIn("trial001", trials[0]["trial_id"])
         self.assertTrue(trials[0]["output_dir"].endswith(trials[0]["trial_id"]))
 
@@ -168,6 +170,25 @@ class HpoTests(unittest.TestCase):
             {"C": 10.0},
         )
 
+    def test_config_hash_payload_can_use_method_effective_keys(self):
+        from src.experiments.hpo import build_config_hash_payload
+
+        payload = build_config_hash_payload(
+            {
+                "ngram_range": "1,2",
+                "C": 1,
+                "min_df": 2,
+                "optim": "adamw_torch",
+                "warmup_ratio": 0.06,
+            },
+            hash_keys=["ngram_range", "C", "min_df"],
+        )
+
+        self.assertEqual(
+            payload,
+            {"ngram_range": [1, 2], "C": 1.0, "min_df": 2},
+        )
+
     def test_merge_trial_overrides_lets_user_override_global_switches_and_rehashes(self):
         trial = {
             "learning_rate": 2e-5,
@@ -189,7 +210,65 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(merged["mixed_precision"], "bf16")
         self.assertIs(merged["gradient_checkpointing"], True)
         self.assertNotEqual(merged["config_hash"], "oldhash")
-        self.assertEqual(merged["trial_id"], "trial001")
+        self.assertTrue(merged["trial_id"].startswith("trial001__"))
+        self.assertTrue(merged["output_dir"].endswith(merged["trial_id"]))
+        self.assertIn(merged["config_hash"], merged["trial_id"])
+
+    def test_merge_trial_overrides_isolates_seed_run_output_by_config_hash(self):
+        first = merge_trial_overrides(
+            base_args={"model_name": "distilbert-base-uncased"},
+            user_overrides={"learning_rate": 1e-5},
+            trial_overrides={
+                "search_stage": "final",
+                "trial_id": "bilstm_tuning__bilstm__final_seed42",
+                "seed": 42,
+                "run_test": True,
+                "output_dir": "outputs/final/bilstm_tuning__bilstm__final_seed42",
+            },
+        )
+        second = merge_trial_overrides(
+            base_args={"model_name": "distilbert-base-uncased"},
+            user_overrides={"learning_rate": 2e-5},
+            trial_overrides={
+                "search_stage": "final",
+                "trial_id": "bilstm_tuning__bilstm__final_seed42",
+                "seed": 42,
+                "run_test": True,
+                "output_dir": "outputs/final/bilstm_tuning__bilstm__final_seed42",
+            },
+        )
+
+        self.assertNotEqual(first["config_hash"], second["config_hash"])
+        self.assertNotEqual(first["trial_id"], second["trial_id"])
+        self.assertNotEqual(first["output_dir"], second["output_dir"])
+        self.assertIn(first["config_hash"], first["output_dir"])
+        self.assertIn(second["config_hash"], second["output_dir"])
+
+    def test_merge_trial_overrides_hash_ignores_irrelevant_shared_defaults(self):
+        trial = {
+            "ngram_range": [1, 2],
+            "C": 1.0,
+            "min_df": 2,
+            "search_stage": "tuning",
+            "trial_id": "trial001",
+            "output_dir": "outputs/hpo/trial001",
+        }
+        hash_keys = ["ngram_range", "C", "min_df", "max_features"]
+
+        first = merge_trial_overrides(
+            base_args={"max_features": 50000},
+            user_overrides={},
+            trial_overrides={**trial, "optim": "adamw_torch"},
+            hash_keys=hash_keys,
+        )
+        second = merge_trial_overrides(
+            base_args={"max_features": 50000},
+            user_overrides={},
+            trial_overrides={**trial, "optim": "sgd", "warmup_ratio": 0.5},
+            hash_keys=hash_keys,
+        )
+
+        self.assertEqual(first["config_hash"], second["config_hash"])
 
     def test_merge_trial_overrides_rejects_identity_overrides(self):
         with self.assertRaises(ValueError):
@@ -264,11 +343,14 @@ class HpoTests(unittest.TestCase):
 
         self.assertIn("shared_fixed", config)
         self.assertIn("trial_caps", config)
+        self.assertIn("config_hash_keys", config)
         self.assertIn("full_ft", config["search_spaces"])
         self.assertEqual(config["shared_fixed"]["class_weighting"], "none")
         self.assertEqual(config["shared_fixed"]["optim"], "adamw_torch")
         self.assertEqual(get_trial_cap(config, "full_ft"), 6)
         self.assertEqual(get_time_cap_gpu_hours(config, "full_ft"), 2.0)
+        self.assertIn("learning_rate", get_config_hash_keys(config, "full_ft"))
+        self.assertIn("ngram_range", get_config_hash_keys(config, "tfidf_logreg"))
         self.assertEqual(
             shared_fixed_command_overrides(config)["mixed_precision"],
             "none",

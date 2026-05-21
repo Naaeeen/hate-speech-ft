@@ -122,6 +122,8 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--seed 42", completed.stdout)
         self.assertIn("--seed 43", completed.stdout)
         self.assertIn("--seed 44", completed.stdout)
+        self.assertEqual(completed.stdout.count("--hpo_trial_cap 6"), 3)
+        self.assertEqual(completed.stdout.count("--hpo_time_cap_gpu_hours 2"), 3)
         hashes = re.findall(r"--config_hash ([0-9a-f]+)", completed.stdout)
         self.assertEqual(len(hashes), 3)
         self.assertEqual(len(set(hashes)), 1)
@@ -159,6 +161,58 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 2)
         self.assertIn("Final-stage experiments must enable --run_test", completed.stderr)
+
+    def test_direct_run_rejects_stage_and_test_policy_overrides(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_smoke",
+            "--dry_run",
+            "--set",
+            "search_stage=final",
+            "--set",
+            "run_test=true",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("search_stage", completed.stderr)
+        self.assertIn("run_test", completed.stderr)
+
+    def test_direct_final_rejects_sample_policy_overrides(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_final_seed42",
+            "--dry_run",
+            "--set",
+            "data_fraction=0.5",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("data_fraction", completed.stderr)
+
+    def test_direct_final_output_dir_isolated_by_config_hash(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_final_seed42",
+            "--dry_run",
+            "--set",
+            "learning_rate=3e-5",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        config_hash = re.search(r"--config_hash ([0-9a-f]+)", completed.stdout)
+        output_dir = re.search(r"--output_dir ([^ ]+)", completed.stdout)
+        trial_id = re.search(r"--trial_id ([^ ]+)", completed.stdout)
+        self.assertIsNotNone(config_hash)
+        self.assertIsNotNone(output_dir)
+        self.assertIsNotNone(trial_id)
+        self.assertIn(config_hash.group(1), output_dir.group(1))
+        self.assertIn(config_hash.group(1), trial_id.group(1))
 
     def test_seed_run_hash_matches_hpo_hash_for_same_fixed_config(self):
         hpo = self.run_cli(
@@ -297,7 +351,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--hpo_trial_cap 4", completed.stdout)
         self.assertIn("--stage1_head_learning_rate", completed.stdout)
         self.assertIn("--stage2_learning_rate", completed.stdout)
-        self.assertIn("distilbert_lp_ft_tuning__lp_ft__trial001", completed.stdout)
+        self.assertIn("distilbert_lp_ft_tuning__lp_ft__hpo42__trial001", completed.stdout)
 
     def test_tfidf_smoke_preview_uses_method_script(self):
         completed = self.run_cli(
@@ -330,7 +384,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--search_stage tuning", completed.stdout)
         self.assertIn("--hpo_trial_cap 12", completed.stdout)
         self.assertRegex(completed.stdout, r"--ngram_range \[[0-9],[0-9]\]")
-        self.assertIn("tfidf_logreg_tuning__tfidf_logreg__trial001", completed.stdout)
+        self.assertIn("tfidf_logreg_tuning__tfidf_logreg__hpo42__trial001", completed.stdout)
 
     def test_tfidf_final_seed_hash_matches_hpo_hash_for_same_fixed_config(self):
         hpo = self.run_cli(
@@ -369,6 +423,282 @@ class RunExperimentCliTests(unittest.TestCase):
         )
 
         self.assertEqual(final.returncode, 0, final.stderr)
+        final_hash = re.search(r"--config_hash ([0-9a-f]+)", final.stdout)
+        self.assertIsNotNone(final_hash)
+        self.assertEqual(hpo_hash.group(1), final_hash.group(1))
+        self.assertIn(final_hash.group(1), final.stdout)
+
+    def test_tfidf_direct_final_hash_matches_seed_generated_final_hash(self):
+        direct = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_final_seed42",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+        generated = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "ngram_range=[1,2]",
+            "--set",
+            "min_df=2",
+            "--set",
+            "C=1.0",
+            "--set",
+            "max_features=50000",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        direct_hash = re.search(r"--config_hash ([0-9a-f]+)", direct.stdout)
+        generated_hash = re.search(r"--config_hash ([0-9a-f]+)", generated.stdout)
+        self.assertIsNotNone(direct_hash)
+        self.assertIsNotNone(generated_hash)
+        self.assertEqual(direct_hash.group(1), generated_hash.group(1))
+
+    def test_bilstm_final_seed_outputs_are_isolated_by_selected_config(self):
+        first = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "hidden_size=128",
+            "--set",
+            "dropout=0.3",
+            "--set",
+            "learning_rate=0.001",
+            "--python",
+            "python",
+        )
+        second = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            "hidden_size=256",
+            "--set",
+            "dropout=0.3",
+            "--set",
+            "learning_rate=0.001",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        first_output = re.search(r"--output_dir ([^ ]+)", first.stdout)
+        second_output = re.search(r"--output_dir ([^ ]+)", second.stdout)
+        first_hash = re.search(r"--config_hash ([0-9a-f]+)", first.stdout)
+        second_hash = re.search(r"--config_hash ([0-9a-f]+)", second.stdout)
+        self.assertIsNotNone(first_output)
+        self.assertIsNotNone(second_output)
+        self.assertIsNotNone(first_hash)
+        self.assertIsNotNone(second_hash)
+        self.assertNotEqual(first_hash.group(1), second_hash.group(1))
+        self.assertNotEqual(first_output.group(1), second_output.group(1))
+        self.assertIn(first_hash.group(1), first_output.group(1))
+        self.assertIn(second_hash.group(1), second_output.group(1))
+
+    def test_bilstm_confirm_seed_outputs_are_isolated_by_selected_config(self):
+        first = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_seed_runs",
+            "confirm",
+            "--set",
+            "hidden_size=128",
+            "--set",
+            "dropout=0.3",
+            "--set",
+            "learning_rate=0.001",
+            "--python",
+            "python",
+        )
+        second = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_seed_runs",
+            "confirm",
+            "--set",
+            "hidden_size=256",
+            "--set",
+            "dropout=0.3",
+            "--set",
+            "learning_rate=0.001",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(first.stdout.count("--search_stage confirm"), 2)
+        self.assertNotIn("--run_test", first.stdout)
+        first_output = re.search(r"--output_dir ([^ ]+)", first.stdout)
+        second_output = re.search(r"--output_dir ([^ ]+)", second.stdout)
+        first_hash = re.search(r"--config_hash ([0-9a-f]+)", first.stdout)
+        second_hash = re.search(r"--config_hash ([0-9a-f]+)", second.stdout)
+        self.assertIsNotNone(first_output)
+        self.assertIsNotNone(second_output)
+        self.assertIsNotNone(first_hash)
+        self.assertIsNotNone(second_hash)
+        self.assertNotEqual(first_hash.group(1), second_hash.group(1))
+        self.assertNotEqual(first_output.group(1), second_output.group(1))
+        self.assertIn(first_hash.group(1), first_output.group(1))
+        self.assertIn(second_hash.group(1), second_output.group(1))
+
+    def test_bilstm_smoke_preview_uses_method_script(self):
+        completed = self.run_cli(
+            "--experiment",
+            "bilstm_smoke",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("src/methods/bilstm/train.py", completed.stdout)
+        self.assertIn("--method bilstm", completed.stdout)
+        self.assertIn("--search_stage smoke", completed.stdout)
+        self.assertIn("--max_train_samples 64", completed.stdout)
+        self.assertIn("--max_eval_samples 64", completed.stdout)
+        self.assertIn("--weight_decay 0.01", completed.stdout)
+        self.assertIn("--warmup_ratio 0.06", completed.stdout)
+        self.assertIn("--max_grad_norm 1", completed.stdout)
+        self.assertIn("--optim adamw_torch", completed.stdout)
+        self.assertIn("--lr_scheduler_type linear", completed.stdout)
+
+    def test_bilstm_hpo_uses_tuning_base_and_search_space(self):
+        completed = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "bilstm",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_stage tuning", completed.stdout)
+        self.assertIn("--hpo_trial_cap 8", completed.stdout)
+        self.assertIn("--hidden_size", completed.stdout)
+        self.assertIn("--dropout", completed.stdout)
+        self.assertIn("--learning_rate", completed.stdout)
+        self.assertIn("bilstm_tuning__bilstm__hpo42__trial001", completed.stdout)
+
+    def test_bilstm_hpo_output_paths_are_isolated_by_hpo_seed(self):
+        first = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "bilstm",
+            "--hpo_seed",
+            "42",
+            "--python",
+            "python",
+        )
+        second = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "bilstm",
+            "--hpo_seed",
+            "43",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("__hpo42__trial001", first.stdout)
+        self.assertIn("__hpo43__trial001", second.stdout)
+        first_output = re.search(r"--output_dir ([^ ]+)", first.stdout)
+        second_output = re.search(r"--output_dir ([^ ]+)", second.stdout)
+        self.assertIsNotNone(first_output)
+        self.assertIsNotNone(second_output)
+        self.assertNotEqual(first_output.group(1), second_output.group(1))
+
+    def test_bilstm_rejects_wandb_model_upload_before_method_launch(self):
+        completed = self.run_cli(
+            "--experiment",
+            "bilstm_smoke",
+            "--dry_run",
+            "--use_wandb",
+            "--wandb_log_model",
+            "end",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("saves model artifacts locally only", completed.stderr)
+
+    def test_tfidf_rejects_wandb_model_upload_before_method_launch(self):
+        completed = self.run_cli(
+            "--experiment",
+            "tfidf_logreg_smoke",
+            "--dry_run",
+            "--use_wandb",
+            "--wandb_log_model",
+            "end",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("saves model artifacts locally only", completed.stderr)
+
+    def test_bilstm_final_seed_hash_matches_hpo_hash_for_same_fixed_config(self):
+        hpo = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "bilstm",
+            "--python",
+            "python",
+        )
+        self.assertEqual(hpo.returncode, 0, hpo.stderr)
+        hidden_size = re.search(r"--hidden_size ([0-9]+)", hpo.stdout)
+        dropout = re.search(r"--dropout ([0-9.eE+-]+)", hpo.stdout)
+        learning_rate = re.search(r"--learning_rate ([0-9.eE+-]+)", hpo.stdout)
+        hpo_hash = re.search(r"--config_hash ([0-9a-f]+)", hpo.stdout)
+        self.assertIsNotNone(hidden_size)
+        self.assertIsNotNone(dropout)
+        self.assertIsNotNone(learning_rate)
+        self.assertIsNotNone(hpo_hash)
+
+        final = self.run_cli(
+            "--experiment",
+            "bilstm_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--set",
+            f"hidden_size={hidden_size.group(1)}",
+            "--set",
+            f"dropout={dropout.group(1)}",
+            "--set",
+            f"learning_rate={learning_rate.group(1)}",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(final.returncode, 0, final.stderr)
+        self.assertEqual(final.stdout.count("--search_stage final"), 3)
+        self.assertEqual(final.stdout.count("--run_test"), 3)
         final_hash = re.search(r"--config_hash ([0-9a-f]+)", final.stdout)
         self.assertIsNotNone(final_hash)
         self.assertEqual(hpo_hash.group(1), final_hash.group(1))

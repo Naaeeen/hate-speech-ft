@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument(
         "--group_by",
         nargs="+",
-        default=["method", "search_stage"],
+        default=["method", "search_stage", "config_hash"],
         help="Run fields used to group mean/std summaries.",
     )
     parser.add_argument(

@@ -102,6 +102,32 @@ class HfSequenceClassificationWorkflowTests(unittest.TestCase):
             self.assertTrue(note.exists())
             self.assertEqual(setup.experiment_config["output_dir"], str(output_dir))
 
+    def test_initialize_hf_run_records_gpu_type(self):
+        with TemporaryDirectory() as tmp:
+            def gpu_type():
+                return "cpu"
+
+            args = argparse.Namespace(
+                output_dir=tmp,
+                overwrite_output_dir=False,
+                mixed_precision="none",
+                fp16=False,
+            )
+            with patch(
+                "src.methods.hf_sequence_classification.get_gpu_type",
+                side_effect=gpu_type,
+            ):
+                setup = initialize_hf_run(
+                    args,
+                    build_setup_failure_config_fn=lambda args, **kwargs: {
+                        "output_dir": args.output_dir,
+                        "gpu_type": kwargs["gpu_type"],
+                    },
+                    resolve_wandb_settings_fn=lambda _: WandbSettings(enabled=False),
+                )
+
+            self.assertEqual(setup.gpu_type, "cpu")
+
     def test_save_final_predictions_writes_eval_and_test_files(self):
         with TemporaryDirectory() as tmp:
             context = build_context(Path(tmp), search_stage="final", run_test=True)

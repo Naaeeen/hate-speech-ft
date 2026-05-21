@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from src.methods.hf_common import (
+    build_compute_cost_fields,
     get_git_commit_hash,
     get_peak_memory_mb,
     get_peak_memory_reserved_mb,
@@ -189,6 +190,7 @@ def build_runtime_metrics(
     )
     runtime = {
         "training_time_sec": training_time_sec,
+        **build_compute_cost_fields(training_time_sec, gpu_type=gpu_type),
         "peak_memory_mb": resolved_peak_memory_mb,
         "peak_memory_allocated_mb": resolved_peak_memory_mb,
         "peak_memory_reserved_mb": resolved_peak_memory_reserved_mb,

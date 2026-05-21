@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.experiments.hpo import get_trial_cap, shared_fixed_command_overrides
+from src.experiments.hpo import (
+    get_config_hash_keys,
+    get_trial_cap,
+    shared_fixed_command_overrides,
+)
 from src.experiments.registry import ExperimentRegistry, REPO_ROOT
 
 
@@ -29,7 +33,7 @@ class ProtocolValidationReport:
 
 EXPECTED_METHODS = (
     ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, catalog_stage="tuning"),
-    ExpectedMethod("bilstm", "bilstm", 8),
+    ExpectedMethod("bilstm", "bilstm", 8, catalog_stage="tuning"),
     ExpectedMethod("random-init-distilbert", "random_init_distilbert", 4),
     ExpectedMethod("frozen-backbone", "frozen_backbone", 6),
     ExpectedMethod("partial-ft", "partial_ft", 6),
@@ -227,6 +231,7 @@ def _validate_trial_cap(
 
 def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> None:
     spaces = hpo_config.get("search_spaces") or {}
+    hash_keys_by_space = hpo_config.get("config_hash_keys") or {}
     time_caps = hpo_config.get("time_caps_gpu_hours") or {}
     for name, cap in time_caps.items():
         if cap is None:
@@ -248,6 +253,19 @@ def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> No
             errors.append(
                 f"search_spaces.{name} is missing keys: {', '.join(missing_keys)}."
             )
+        try:
+            hash_keys = get_config_hash_keys(hpo_config, name)
+        except ValueError as exc:
+            errors.append(str(exc))
+            hash_keys = []
+        if not hash_keys:
+            errors.append(f"config_hash_keys.{name} must list effective config fields.")
+
+    for name, keys in hash_keys_by_space.items():
+        if name not in spaces:
+            errors.append(f"config_hash_keys.{name} has no matching search space.")
+        if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
+            errors.append(f"config_hash_keys.{name} must be a list of strings.")
 
     lora_space = spaces.get("lora") or {}
     _expect_equal(

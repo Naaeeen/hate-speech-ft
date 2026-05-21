@@ -164,7 +164,7 @@ def main():
             metric_for_best_model=args.metric_for_best_model,
             greater_is_better=not args.lower_is_better,
         )
-        save_final_model(
+        model_artifact_paths = save_final_model(
             trainer,
             context.tokenizer,
             output_dir=args.output_dir,
@@ -189,6 +189,7 @@ def main():
             runtime_metrics=runtime_metrics,
             model_selection=model_selection,
             prediction_paths=prediction_paths,
+            model_artifact_paths=model_artifact_paths,
             wandb_run=wandb_run,
         )
 

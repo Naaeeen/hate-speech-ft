@@ -72,6 +72,21 @@ def get_git_commit_hash(repo_root: Path) -> str | None:
     return commit or None
 
 
+def build_compute_cost_fields(
+    training_time_sec: float | None,
+    *,
+    gpu_type: str | None,
+) -> dict[str, float | None]:
+    training_time_hours = (
+        training_time_sec / 3600 if training_time_sec is not None else None
+    )
+    has_gpu = bool(gpu_type and gpu_type not in {"cpu", "unknown"})
+    return {
+        "training_time_hours": training_time_hours,
+        "gpu_hours": training_time_hours if has_gpu else None,
+    }
+
+
 def resolve_precision_policy(args) -> dict[str, Any]:
     mixed_precision = args.mixed_precision
     if args.fp16:

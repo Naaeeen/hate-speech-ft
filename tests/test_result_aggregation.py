@@ -1,9 +1,12 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from src.aggregate_results import parse_args as parse_aggregate_cli_args
 from src.experiments.aggregate_results import (
     aggregate_records,
     build_aggregate_report,
@@ -65,6 +68,12 @@ def completed_summary(
 
 
 class ResultAggregationTests(unittest.TestCase):
+    def test_aggregate_cli_defaults_group_by_config_hash(self):
+        with patch.object(sys, "argv", ["aggregate_results.py", "outputs/final"]):
+            args = parse_aggregate_cli_args()
+
+        self.assertEqual(args.group_by, ["method", "search_stage", "config_hash"])
+
     def test_discovers_completed_and_failed_summary_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

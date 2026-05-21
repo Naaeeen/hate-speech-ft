@@ -18,6 +18,7 @@ from src.methods.distilbert_full.train import (
     save_prediction_file,
     validate_output_dir_for_run,
 )
+from src.methods.distilbert_full.args import parse_args
 
 
 class RecordingTokenizer:
@@ -38,6 +39,19 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
     def test_repo_root_points_to_project_root_after_method_move(self):
         self.assertTrue((REPO_ROOT / "configs" / "experiments.json").is_file())
         self.assertTrue((REPO_ROOT / "src" / "methods" / "distilbert_full" / "train.py").is_file())
+
+    def test_parser_accepts_shared_hpo_arguments(self):
+        args = parse_args(
+            [
+                "--hpo_trial_cap",
+                "6",
+                "--hpo_time_cap_gpu_hours",
+                "2.0",
+            ]
+        )
+
+        self.assertEqual(args.hpo_trial_cap, 6)
+        self.assertEqual(args.hpo_time_cap_gpu_hours, 2.0)
 
     def test_build_fixed_label_maps_uses_hatexplain_class_order(self):
         id2label, label2id, num_labels = build_fixed_label_maps()
@@ -301,6 +315,7 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             output_dir = Path(tmp)
             (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
             (output_dir / "model.safetensors").write_text("model", encoding="utf-8")
+            (output_dir / "training_args.bin").write_text("args", encoding="utf-8")
             (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
             checkpoint = output_dir / "checkpoint-1"
             checkpoint.mkdir()
@@ -321,11 +336,13 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
                     "result_summary.json",
                     "stage2_full_ft",
                     "test_predictions.json",
+                    "training_args.bin",
                 },
             )
             self.assertFalse(checkpoint.exists())
             self.assertFalse(stage_dir.exists())
             self.assertFalse((output_dir / "model.safetensors").exists())
+            self.assertFalse((output_dir / "training_args.bin").exists())
             self.assertTrue(note.exists())
 
 

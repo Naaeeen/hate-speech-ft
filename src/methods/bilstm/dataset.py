@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import torch
 from torch.utils.data import Dataset
 
-from .tokenizer import StandardBiLSTMTokenizer
+if TYPE_CHECKING:
+    from .tokenizer import StandardBiLSTMTokenizer
 
 
 class HateXplainBiLSTMDataset(Dataset):

@@ -55,6 +55,7 @@ def write_result_files(
     test_metrics: dict[str, Any] | None = None,
     model_selection: dict[str, Any] | None = None,
     prediction_paths: dict[str, str | Path] | None = None,
+    artifact_paths: dict[str, str | Path] | None = None,
     extra_metrics: dict[str, Any] | None = None,
     status: str = "completed",
 ) -> dict[str, Path]:
@@ -74,6 +75,7 @@ def write_result_files(
         "model_selection": model_selection or {},
         "artifacts": {
             "predictions": prediction_paths or {},
+            "model": artifact_paths or {},
         },
     }
 

@@ -219,11 +219,13 @@ def main() -> None:
             if test_metrics is not None:
                 wandb_run.log(test_metrics)
 
+        model_artifact_paths = {}
         if args.no_save_final_model:
             print("\nSkipping final model save because --no_save_final_model was set.")
         else:
             model_path = output_dir / "model.joblib"
             dump(pipeline, model_path)
+            model_artifact_paths["model.joblib"] = model_path
             print(f"\nSaved final TF-IDF pipeline: {model_path}")
 
         prediction_paths = write_final_prediction_files(
@@ -253,6 +255,7 @@ def main() -> None:
             runtime_metrics=runtime_metrics,
             model_selection=model_selection,
             prediction_paths=prediction_paths,
+            artifact_paths=model_artifact_paths,
             status="completed",
         )
         print_result_report(

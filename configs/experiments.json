@@ -35,11 +35,23 @@
       "inherits": "transformer"
     },
     "neural-scratch": {
+      "optim": "adamw_torch",
+      "lr_scheduler_type": "linear",
+      "weight_decay": 0.01,
+      "warmup_ratio": 0.06,
+      "max_grad_norm": 1.0,
+      "eval_strategy": "epoch",
+      "save_strategy": "epoch",
+      "load_best_model_at_end": true,
+      "mixed_precision": "none",
+      "gradient_checkpointing": false,
       "class_weighting": "none",
       "early_stopping_patience": 2,
       "early_stopping_threshold": 0.001
     },
-    "classical": {}
+    "classical": {
+      "class_weighting": "none"
+    }
   },
   "experiments": {
     "distilbert_full_smoke": {
@@ -196,25 +208,6 @@
         "output_dir": "outputs/tfidf_logreg_final_seed42"
       }
     },
-    "bilstm_template": {
-      "status": "planned",
-      "method": "bilstm",
-      "family": "neural-scratch",
-      "stage": "template",
-      "script": "src/methods/bilstm/train.py",
-      "description": "Template for a Bi-LSTM trained from scratch.",
-      "tags": ["bilstm", "scratch", "baseline"],
-      "args": {
-        "embedding_size": 100,
-        "hidden_size": 128,
-        "dropout": 0.3,
-        "learning_rate": 1e-3,
-        "batch_size": 32,
-        "epochs": 5,
-        "seed": 42,
-        "output_dir": "outputs/bilstm_template"
-      }
-    },
     "random_init_distilbert_template": {
       "status": "planned",
       "method": "random-init-distilbert",
@@ -231,6 +224,8 @@
         "num_train_epochs": 5,
         "seed": 42,
         "output_dir": "outputs/random_init_distilbert_template"
+      }
+    },
     "bilstm_smoke": {
       "status": "ready",
       "method": "bilstm",
@@ -247,7 +242,7 @@
         "num_layers": 2,
         "dropout": 0.3,
         "learning_rate": 1e-3,
-        "weight_decay": 0.0,
+        "weight_decay": 0.01,
         "batch_size": 32,
         "eval_batch_size": 32,
         "epochs": 1,
@@ -262,6 +257,98 @@
         "max_train_samples": 64,
         "max_eval_samples": 64,
         "output_dir": "outputs/bilstm_smoke"
+      }
+    },
+    "bilstm_quick": {
+      "status": "ready",
+      "method": "bilstm",
+      "family": "neural-scratch",
+      "stage": "quick",
+      "script": "src/methods/bilstm/train.py",
+      "description": "Quick Bi-LSTM sanity run on capped data.",
+      "tags": ["bilstm", "scratch", "quick"],
+      "args": {
+        "device": "auto",
+        "max_length": 128,
+        "embedding_size": 100,
+        "hidden_size": 128,
+        "num_layers": 2,
+        "dropout": 0.3,
+        "learning_rate": 1e-3,
+        "weight_decay": 0.01,
+        "batch_size": 32,
+        "eval_batch_size": 32,
+        "epochs": 1,
+        "eval_strategy": "epoch",
+        "save_strategy": "epoch",
+        "save_total_limit": 2,
+        "load_best_model_at_end": true,
+        "metric_for_best_model": "eval_f1_macro",
+        "seed": 42,
+        "max_train_samples": 512,
+        "max_eval_samples": 256,
+        "output_dir": "outputs/bilstm_quick"
+      }
+    },
+    "bilstm_tuning": {
+      "status": "ready",
+      "method": "bilstm",
+      "family": "neural-scratch",
+      "stage": "tuning",
+      "script": "src/methods/bilstm/train.py",
+      "description": "Full-data Bi-LSTM base used for HPO trial command generation.",
+      "tags": ["bilstm", "scratch", "tuning"],
+      "args": {
+        "device": "auto",
+        "max_length": 128,
+        "embedding_size": 100,
+        "hidden_size": 128,
+        "num_layers": 2,
+        "dropout": 0.3,
+        "learning_rate": 1e-3,
+        "weight_decay": 0.01,
+        "batch_size": 32,
+        "eval_batch_size": 32,
+        "epochs": 5,
+        "eval_strategy": "epoch",
+        "save_strategy": "epoch",
+        "save_total_limit": 2,
+        "load_best_model_at_end": true,
+        "metric_for_best_model": "eval_f1_macro",
+        "seed": 42,
+        "data_fraction": 1.0,
+        "output_dir": "outputs/bilstm_tuning"
+      }
+    },
+    "bilstm_final_seed42": {
+      "status": "ready",
+      "method": "bilstm",
+      "family": "neural-scratch",
+      "stage": "final",
+      "script": "src/methods/bilstm/train.py",
+      "description": "Full-data Bi-LSTM baseline for one final seed.",
+      "tags": ["bilstm", "scratch", "final"],
+      "args": {
+        "device": "auto",
+        "max_length": 128,
+        "embedding_size": 100,
+        "hidden_size": 128,
+        "num_layers": 2,
+        "dropout": 0.3,
+        "learning_rate": 1e-3,
+        "weight_decay": 0.01,
+        "batch_size": 32,
+        "eval_batch_size": 32,
+        "epochs": 5,
+        "eval_strategy": "epoch",
+        "save_strategy": "epoch",
+        "save_total_limit": 2,
+        "load_best_model_at_end": true,
+        "metric_for_best_model": "eval_f1_macro",
+        "seed": 42,
+        "data_fraction": 1.0,
+        "run_test": true,
+        "output_dir": "outputs/bilstm_final_seed42"
       }
     },
     "frozen_distilbert_template": {
@@ -294,7 +381,7 @@
         "max_length": 128,
         "dropout": 0.2,
         "learning_rate": 0.001,
-        "weight_decay": 0.0,
+        "weight_decay": 0.01,
         "batch_size": 32,
         "eval_batch_size": 32,
         "epochs": 1,
