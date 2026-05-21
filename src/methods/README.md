@@ -10,6 +10,7 @@ _template/          copyable starter for a new method
 distilbert_full/    ready DistilBERT full fine-tuning method
 distilbert_lp_ft/   ready DistilBERT linear probing + full fine-tuning method
 tfidf_logreg/       ready TF-IDF + Logistic Regression baseline
+bilstm/             ready Bi-LSTM from-scratch baseline
 common.py           method-agnostic CLI/config/output policy helpers
 hf_common.py        Hugging Face Trainer helpers shared by Transformer methods
 hf_sequence_classification.py
@@ -79,6 +80,7 @@ sequence-classification fine-tuning method. It owns the repeated lifecycle:
 - runtime and failure summaries
 - final validation/test evaluation
 - final model, prediction, and result JSON writing
+- runtime metadata such as memory, training hours, and GPU-hours
 
 Method packages still own the method-specific parts: trainability policy,
 stage layout, method-specific hyperparameters, and resolved-config schema.
@@ -88,6 +90,9 @@ Every completed method run should write `resolved_config.json`, `metrics.json`,
 per-sample outputs should also write `eval_predictions.json`; final runs with
 `--run_test` should write `test_predictions.json` and store those paths in
 `result_summary.json`.
+When a method saves a local final model, pass those paths to
+`write_result_files()` so `result_summary.json.artifacts.model` identifies the
+model artifact behind the recorded metrics.
 
 Keep method-specific model code in the method package. That includes PEFT
 adapter choices, TF-IDF vectorizers, Bi-LSTM modules, freezing policy, and
@@ -117,3 +122,25 @@ src/methods/tfidf_logreg/train.py     executable orchestration entry point
 
 Keep `train.py` runnable because the catalog dispatches to that path, but avoid
 putting new TF-IDF internals there unless they are orchestration-only.
+
+The Bi-LSTM package follows the same small-file structure and shared contract:
+
+```text
+src/methods/bilstm/args.py      CLI knobs and no-dependency validation
+src/methods/bilstm/config.py    resolved config, runtime, and model selection
+src/methods/bilstm/data.py      shared HateXplain preprocessing/split handling
+src/methods/bilstm/model.py     torch BiLSTM classifier
+src/methods/bilstm/tokenizer.py DistilBERT tokenizer wrapper for token ids
+src/methods/bilstm/training.py  torch training loop, metrics, checkpoints
+src/methods/bilstm/train.py     executable orchestration entry point
+```
+
+Bi-LSTM is not a Hugging Face Trainer method, so it does not use
+`hf_sequence_classification.py`. It still uses the same catalog, W&B, output-dir
+protection, final-only test policy, result JSON names, failure summary, and HPO
+identity fields as the other ready methods.
+
+Bi-LSTM HPO is intentionally not stored under `src/methods/bilstm/`. Use
+`configs/search_spaces.json` plus `src/run_experiment.py --suggest_trials` so
+trial caps, seeds, config hashes, and output directories stay consistent with
+the rest of the pipeline.

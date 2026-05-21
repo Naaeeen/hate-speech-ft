@@ -22,6 +22,10 @@ contracts.
   explanation of the TF-IDF + Logistic Regression pipeline integration.
 - [TFIDF_LOGREG_INTEGRATION_ZH.md](TFIDF_LOGREG_INTEGRATION_ZH.md): 中文版
   TF-IDF + Logistic Regression pipeline 集成说明。
+- [BILSTM_INTEGRATION_EN.md](BILSTM_INTEGRATION_EN.md): English explanation of
+  Minh's Bi-LSTM integration into the shared pipeline.
+- [BILSTM_INTEGRATION_ZH.md](BILSTM_INTEGRATION_ZH.md): 中文版 Minh Bi-LSTM
+  pipeline 集成说明。
 
 ## What Belongs Here
 

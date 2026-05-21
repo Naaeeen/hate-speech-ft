@@ -47,9 +47,16 @@ These overrides are temporary. Reusable configs belong in
 
 Use the override box for one run. Edit `configs/experiments.json` only when the
 setting should become a shared team experiment.
+Use the shared `seed` field for normal reproducibility control. Neural methods
+on GPU are best-effort reproducible, so small differences can still appear
+across different Colab hardware/software environments.
 Use `output_dir` here only when `Trials = 0`. When `Trials > 0`, the launcher
 owns `trial_id`, `output_dir`, `search_stage`, `hpo_seed`, and `config_hash`;
 change the `Trial root` field instead of overriding those identity fields.
+Direct runs also protect `search_stage`, `trial_id`, `config_hash`, HPO
+accounting fields, and `run_test`; final-stage direct runs additionally protect
+seed and sample-policy fields. Use `Seed runs=confirm/final` for multi-seed or
+final test runs instead of changing those fields manually.
 Leave `Overwrite output` off for normal work. Turn it on only when you want to
 replace a previous local run in the same directory. When it is enabled, the
 method runner clears managed summaries, prediction files, checkpoints, and saved
@@ -58,10 +65,10 @@ model/tokenizer files before the replacement run starts.
 ## HPO Trial Suggestions
 
 Set `Trials` to a positive number and optionally set `Search` to a search-space
-name such as `full_ft`, `lp_ft`, `tfidf_logreg`, or `lora`. Use a tuning
+name such as `full_ft`, `lp_ft`, `tfidf_logreg`, `bilstm`, or `lora`. Use a tuning
 experiment such as `distilbert_full_tuning`, `distilbert_lp_ft_tuning`, or
-`tfidf_logreg_tuning`; smoke experiments are intentionally blocked for HPO
-because they use tiny sample caps.
+`tfidf_logreg_tuning`, or `bilstm_tuning`; smoke experiments are intentionally
+blocked for HPO because they use tiny sample caps.
 
 The notebook's normal preview and run cells dispatch to trial mode when
 `Trials > 0`. You can also call:
@@ -70,7 +77,10 @@ The notebook's normal preview and run cells dispatch to trial mode when
 launcher.preview_trial_commands()
 ```
 
-This prints deterministic commands with unique `trial_id` and `output_dir`.
+This prints deterministic commands with `trial_id` and `output_dir` values that
+include the HPO seed, trial index, and final `config_hash`.
+The hash uses `config_hash_keys` from `configs/search_spaces.json`, so it tracks
+the selected method's effective hyperparameters instead of every shared default.
 When the search config defines an allocated GPU-hour cap, trial commands include
 `hpo_time_cap_gpu_hours` for reporting. This records the budget but does not
 automatically stop the Colab runtime.
@@ -113,8 +123,18 @@ C=1.0
 max_features=50000
 ```
 
+For Bi-LSTM, include the selected architecture/training hyperparameters:
+
+```text
+hidden_size=128
+dropout=0.3
+learning_rate=0.001
+```
+
 The launcher owns seed-run `trial_id`, `output_dir`, `search_stage`, and
 `config_hash` so final seed outputs aggregate cleanly by `method config_hash`.
+Seed-run commands also carry the search space's HPO trial/time caps when
+configured, preserving budget provenance in final result summaries.
 Leave `Seed root` blank to use a stage-specific Drive path, or set it when a
 batch should go somewhere else.
 
@@ -134,6 +154,8 @@ report should be written to a custom path.
 The aggregate report reads local `result_summary.json` and
 `failure_summary.json` files. For final-stage runs it also surfaces prediction
 artifact paths recorded by the method runner.
+Saved local model artifacts are surfaced from `result_summary.json` under
+`artifacts.model` when present.
 The default aggregate metrics are validation macro-F1, training time, and
 `best_epoch`; the report also writes total training time in seconds/hours.
 

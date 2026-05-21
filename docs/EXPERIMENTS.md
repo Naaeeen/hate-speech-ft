@@ -128,6 +128,11 @@ use different data subsets during data-fraction experiments.
 `data_fraction` records the requested fraction. `effective_train_fraction`
 records the actual fraction after any `max_train_samples` cap.
 
+The shared `seed` records the normal reproducibility setting. Neural methods on
+GPU are best-effort reproducible: the same seed should keep runs comparable, but
+small differences can still appear across Colab GPU, driver, PyTorch, or CUDA
+versions.
+
 ## HPO Trial Planning
 
 Search spaces and trial caps live in `configs/search_spaces.json`.
@@ -163,8 +168,23 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
-Each suggested command gets a unique `trial_id`, `hpo_seed`, `search_stage`, and
-`output_dir`. This prevents HPO runs from overwriting each other.
+Bi-LSTM uses the same launcher path with its from-scratch neural search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment bilstm_tuning \
+  --suggest_trials 4 \
+  --search_space bilstm \
+  --hpo_seed 42
+```
+
+Each suggested command gets a `trial_id` and `output_dir` that include the HPO
+seed, trial index, and final `config_hash`. This prevents separate HPO batches
+and selected configs from sharing the same default output paths.
+The `config_hash` is computed from `configs/search_spaces.json`'
+`config_hash_keys` for the selected search space. Those keys should represent
+the method-effective config, so TF-IDF hashes TF-IDF knobs instead of unrelated
+Transformer-only defaults.
 If `configs/search_spaces.json` defines `time_caps_gpu_hours` for the search
 space, generated trial commands also include `hpo_time_cap_gpu_hours` so the
 allocated time budget is recorded with each run. The current code records this
@@ -228,11 +248,26 @@ python src/run_experiment.py \
   --set max_features=50000
 ```
 
+For Bi-LSTM, pass the selected architecture and training hyperparameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment bilstm_tuning \
+  --suggest_seed_runs final \
+  --set hidden_size=128 \
+  --set dropout=0.3 \
+  --set learning_rate=0.001
+```
+
 Final runs use `shared_fixed.seeds_final`, set `search_stage=final`, and add
 `--run_test`. Final-stage runs must evaluate the test split, and non-final
 stages must not. The generated commands keep the same `config_hash` for the
 fixed hyperparameter config across HPO, confirmation, and final seeds;
-aggregate final results by `method config_hash`.
+aggregate final results by `method config_hash`. Generated confirmation and
+final `trial_id`/`output_dir` values include that selected `config_hash`, and
+also carry the method's configured HPO trial/time caps when present, so
+different candidate configs can be stored side by side under the default roots
+without losing budget provenance.
 
 ## Colab
 
@@ -282,18 +317,22 @@ type, message, partial runtime, and config. A failed run clears stale managed
 success artifacts first, so old metrics and predictions are not mistaken for
 the failed attempt.
 
-The DistilBERT method runners protect existing local run artifacts by default. If
+Ready method runners protect existing local run artifacts by default. If
 `output_dir` already contains summaries, checkpoints, or saved model files, the
 run exits before writing anything. Use a new output directory for a new run, or
 pass `--overwrite_output_dir` only for an intentional replacement.
 
-The current DistilBERT runners write these files through
-`src/experiments/results.py`. New method scripts should reuse that helper or
-write the same file names with the same meaning.
+The current ready runners write these files through `src/experiments/results.py`.
+New method scripts should reuse that helper or write the same file names with
+the same meaning.
 For final-stage runs, `eval_predictions.json` and `test_predictions.json`
 include sample ids, text, gold labels, predicted labels, and model scores.
 Transformer methods write logits; TF-IDF writes class probabilities. Their paths
 are recorded in `result_summary.json` under `artifacts.predictions`.
+Bi-LSTM final prediction files also write class probabilities.
+Saved local models are recorded in `result_summary.json` under
+`artifacts.model` when present, for example Transformer model/tokenizer files,
+TF-IDF `model.joblib`, or Bi-LSTM `model.pt` and tokenizer directory.
 
 ## Aggregating Runs
 
@@ -379,10 +418,13 @@ Ready now:
 - `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
 - `tfidf_logreg_final_seed42`
+- `bilstm_smoke`
+- `bilstm_quick`
+- `bilstm_tuning`
+- `bilstm_final_seed42`
 
 Templates for later scripts:
 
-- `bilstm_template`
 - `random_init_distilbert_template`
 - `frozen_distilbert_template`
 - `partial_distilbert_template`
@@ -402,10 +444,10 @@ Fixed across methods:
 - Final seed policy: 42, 43, 44
 
 Runs should record both the raw split sizes exposed by the dataset loader and
-the post-policy split sizes used for training/evaluation. The DistilBERT runner
-also logs `dropped_no_majority_*` fields; these are post-loader accounting
-fields and may be zero if the Hugging Face builder already filtered undecided
-posts before exposing the split.
+the post-policy split sizes used for training/evaluation. Ready method runners
+also log `dropped_no_majority_*` fields; these are post-loader accounting
+fields and may be zero if the upstream builder already filtered undecided posts
+before exposing the split.
 
 The default seed policy is recorded in `configs/experiments.json`, but the
 catalog currently only includes `distilbert_full_final_seed42` as a ready final

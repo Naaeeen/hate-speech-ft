@@ -7,8 +7,9 @@ hyperparameters are defined. Hyperparameters live in
 Current status:
 - `src/run_experiment.py` is the preferred entry point for listed experiments.
 - `src/methods/distilbert_full/train.py` and
-  `src/methods/distilbert_lp_ft/train.py` support direct W&B usage through
-  Hugging Face Trainer.
+  `src/methods/distilbert_lp_ft/train.py`,
+  `src/methods/tfidf_logreg/train.py`, and `src/methods/bilstm/train.py`
+  support direct W&B usage.
 - Enable W&B with `--use_wandb`.
 - Colab uses `src/colab/experiment_launcher.py` to pick an experiment and
   optional overrides from `configs/experiments.json`.
@@ -24,8 +25,8 @@ Colab workflow:
 2. Open `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb`.
 3. Run setup cells.
 4. In the experiment launcher widget, choose:
-  - Experiment: for example `distilbert_full_smoke`
-    or `distilbert_lp_ft_smoke`
+  - Experiment: for example `distilbert_full_smoke`,
+    `distilbert_lp_ft_smoke`, `tfidf_logreg_smoke`, or `bilstm_smoke`
    - Mode: `online`, `offline`, or `disabled`
    - Entity: your team or username
    - Project: `hate-speech-ft`
@@ -50,6 +51,16 @@ LP+FT uses the same W&B switches:
 ```bash
 python src/run_experiment.py \
   --experiment distilbert_lp_ft_smoke \
+  --use_wandb \
+  --wandb_entity hate-speech-ft-team \
+  --wandb_project hate-speech-ft
+```
+
+TF-IDF and Bi-LSTM use the same W&B switches:
+
+```bash
+python src/run_experiment.py \
+  --experiment bilstm_smoke \
   --use_wandb \
   --wandb_entity hate-speech-ft-team \
   --wandb_project hate-speech-ft
@@ -94,7 +105,9 @@ Failed runs write `failure_summary.json` locally so errors are still auditable.
 ## Many Runs Per Method
 
 For hyperparameter search, every trial should have a distinct `trial_id`,
-`output_dir`, and W&B run. The current runner includes `trial_id` in the
+`output_dir`, and W&B run. Generated HPO runs include the HPO seed, trial index,
+and `config_hash` in the run identity; generated confirm and final seed runs
+include the selected config hash. The current runner includes `trial_id` in the
 auto-generated W&B run name, so repeated runs of the same method are easier to
 separate in the dashboard.
 
@@ -125,6 +138,7 @@ Use W&B groups for method-level grouping, for example:
 wandb_group=full-ft
 wandb_group=lora
 wandb_group=tfidf-logreg
+wandb_group=bilstm
 ```
 
 Use tags for stage and method labels, for example:
@@ -161,11 +175,12 @@ reruns. Use a fresh output directory for a new run, or pass
 intentional. Overwrite mode clears managed summaries, prediction files,
 checkpoints, and saved model/tokenizer files before the replacement run starts.
 
-For the current DistilBERT runner:
+For current one-stage ready methods such as DistilBERT full FT, TF-IDF LogReg,
+and Bi-LSTM:
 
 ```text
-output_dir/checkpoint-*     intermediate Hugging Face checkpoints
-output_dir/                 final saved model, tokenizer, metrics, config, and
+output_dir/checkpoint-*     intermediate checkpoints when the method uses them
+output_dir/                 final saved model/tokenizer, metrics, config, and
                             final-stage prediction files when produced
 ```
 
@@ -192,8 +207,12 @@ W&B model upload is controlled separately:
 --wandb_log_model checkpoint  upload checkpoints
 ```
 
+Hugging Face Trainer methods support those upload modes. TF-IDF LogReg and
+Bi-LSTM currently require `false` and record model artifacts locally under
+`output_dir`; the CLI and Colab launcher reject those commands when they request
+`end` or `checkpoint`.
 Keep `false` for smoke and most tuning runs unless the team explicitly wants to
-store model artifacts in W&B.
+store model artifacts in W&B and the selected method supports it.
 
 ## What To Compare In W&B
 
@@ -217,5 +236,8 @@ Use validation metrics for selection. Test metrics should appear only in final
 runs, and final runs should include them. Local `result_summary.json` records
 prediction file paths when `eval_predictions.json` or `test_predictions.json`
 exist.
+When a method saves a local final model, the same summary records those paths
+under `artifacts.model`; this is the local source of truth even when
+`wandb_log_model=false`.
 Use local aggregate reports for HPO cost accounting: they include total training
 time in seconds/hours and summarize `best_epoch` by mean/std/min/max.

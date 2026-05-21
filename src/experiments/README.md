@@ -67,10 +67,21 @@ needs a specific Python executable.
 training. It samples from `configs/search_spaces.json`, stamps each command with
 a unique `trial_id` and `output_dir`, and keeps HPO planning deterministic via
 `--hpo_seed`.
+Config hashes use the selected search space's `config_hash_keys` allowlist, so a
+method's hash is based on effective hyperparameters rather than unrelated shared
+defaults.
+When the search space declares an allocated time budget, generated commands
+also carry `--hpo_time_cap_gpu_hours`; this records the budget for reporting
+but does not stop a running job automatically.
 
 Identity fields are launcher-managed in trial mode. Do not pass
-`output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or `config_hash` through
-`--set`; use `--trial_output_root`, `--hpo_seed`, or the experiment catalog.
+`output_dir`, `trial_id`, `search_stage`, `hpo_seed`, `hpo_trial_cap`,
+`hpo_time_cap_gpu_hours`, or `config_hash` through `--set`; use
+`--trial_output_root`, `--hpo_seed`, or the experiment catalog.
+Direct catalog runs also reject `search_stage`, `trial_id`, `config_hash`,
+HPO accounting fields, and `run_test` overrides. For final-stage catalog runs,
+seed and sample-policy fields are protected as well. Direct final commands add
+the generated `config_hash` to `trial_id` and `output_dir` before launch.
 
 ## Result Aggregation
 
@@ -87,8 +98,10 @@ python src/aggregate_results.py outputs/hpo \
 The aggregator includes failed runs in counts and excludes them from metric
 means. This keeps HPO accounting honest without breaking final mean/std tables.
 Flattened records also carry model-selection fields and prediction artifact
-paths when the method writes them, so aggregate reports can point back to
-`eval_predictions.json` and `test_predictions.json` for final-stage inspection.
+paths when the method writes them, plus saved local model artifact paths under
+`model_artifacts` when available. Aggregate reports can point back to
+`eval_predictions.json`, `test_predictions.json`, and the model files used for
+final-stage inspection.
 Aggregate reports include total training time in seconds/hours at the top level
 and per group. The top-level `hpo_total_training_time_*` fields sum tuning and
 confirmation runs, including failed runs that recorded partial runtime.

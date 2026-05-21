@@ -396,8 +396,8 @@ python src/run_experiment.py \
 This prints commands; it does not automatically run all trials. Each printed
 command gets:
 
-- a unique `trial_id`
-- a unique `output_dir`
+- a `trial_id` containing the HPO seed, trial index, and `config_hash`
+- an `output_dir` derived from that run identity
 - `hpo_seed`
 - `hpo_trial_cap`
 - `config_hash`

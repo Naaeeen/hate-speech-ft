@@ -100,6 +100,7 @@ For Hugging Face Trainer methods, reuse `src.methods.hf_common` for:
 - metrics
 - model-selection summary
 - GPU and memory metadata
+- runtime cost fields such as training hours and GPU-hours
 
 For Hugging Face sequence-classification fine-tuning methods, also reuse
 `src.methods.hf_sequence_classification` for the standard lifecycle instead of
@@ -111,6 +112,7 @@ copying `distilbert_full/train.py`:
 - model/tokenizer/data-collator setup
 - Trainer construction
 - runtime, failure, metrics, predictions, and result-file writing
+- final model artifact path recording under `result_summary.json.artifacts.model`
 
 Your method package should still own the decisions that make the method unique.
 For example, LP+FT owns its two stages and freeze/unfreeze helpers, while full
