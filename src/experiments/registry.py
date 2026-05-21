@@ -16,6 +16,7 @@ METADATA_DEFAULT_KEYS = {
     "test_policy",
     "wandb_project",
 }
+STAGE_TAGS = {"smoke", "quick", "tuning", "confirm", "final"}
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,8 @@ class ExperimentSpec:
     tags: tuple[str, ...]
     args: dict[str, Any]
     defaults: dict[str, Any]
+    command_defaults: dict[str, Any]
+    family_command_defaults: dict[str, Any]
 
     @property
     def is_ready(self) -> bool:
@@ -43,9 +46,17 @@ class ExperimentSpec:
 
 
 class ExperimentRegistry:
-    def __init__(self, experiments: list[ExperimentSpec], defaults: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        experiments: list[ExperimentSpec],
+        defaults: dict[str, Any],
+        command_defaults: dict[str, Any],
+        family_command_defaults: dict[str, dict[str, Any]],
+    ) -> None:
         self.experiments = experiments
         self.defaults = defaults
+        self.command_defaults = command_defaults
+        self.family_command_defaults = family_command_defaults
         self._by_id = {experiment.experiment_id: experiment for experiment in experiments}
 
     def get(self, experiment_id: str) -> ExperimentSpec:
@@ -67,29 +78,72 @@ def load_experiment_registry(
     registry_path = Path(path)
     data = json.loads(registry_path.read_text(encoding="utf-8"))
     defaults = dict(data.get("defaults") or {})
-    command_defaults = {
-        key: value
-        for key, value in defaults.items()
-        if key not in METADATA_DEFAULT_KEYS
+    raw_command_defaults = data.get("command_defaults")
+    if raw_command_defaults is None:
+        command_defaults = {
+            key: value
+            for key, value in defaults.items()
+            if key not in METADATA_DEFAULT_KEYS
+        }
+    else:
+        command_defaults = dict(raw_command_defaults)
+    raw_family_command_defaults = {
+        str(family): dict(values or {})
+        for family, values in (data.get("family_command_defaults") or {}).items()
+    }
+    family_command_defaults = {
+        family: _resolve_family_command_defaults(raw_family_command_defaults, family)
+        for family in raw_family_command_defaults
     }
     experiments = []
     for experiment_id, raw in (data.get("experiments") or {}).items():
-        args = {**command_defaults, **dict(raw.get("args") or {})}
+        family = str(raw.get("family", ""))
+        per_family_defaults = family_command_defaults.get(family, {})
+        args = {**command_defaults, **per_family_defaults, **dict(raw.get("args") or {})}
         experiments.append(
             ExperimentSpec(
                 experiment_id=experiment_id,
                 status=str(raw.get("status", "planned")),
                 method=str(raw["method"]),
-                family=str(raw.get("family", "")),
+                family=family,
                 stage=str(raw.get("stage", "")),
                 script=str(raw["script"]),
                 description=str(raw.get("description", "")),
                 tags=tuple(str(tag) for tag in raw.get("tags", ())),
                 args=args,
                 defaults=defaults,
+                command_defaults={**command_defaults, **per_family_defaults},
+                family_command_defaults=per_family_defaults,
             )
         )
-    return ExperimentRegistry(experiments, defaults)
+    return ExperimentRegistry(
+        experiments,
+        defaults,
+        command_defaults,
+        family_command_defaults,
+    )
+
+
+def _resolve_family_command_defaults(
+    all_family_defaults: dict[str, dict[str, Any]],
+    family: str,
+    seen: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    if family in seen:
+        cycle = " -> ".join((*seen, family))
+        raise ValueError(f"Cycle in family_command_defaults inheritance: {cycle}")
+    values = dict(all_family_defaults.get(family, {}))
+    parent = values.pop("inherits", None)
+    if not parent:
+        return values
+    return {
+        **_resolve_family_command_defaults(
+            all_family_defaults,
+            str(parent),
+            (*seen, family),
+        ),
+        **values,
+    }
 
 
 def _parse_scalar(value: str) -> Any:
@@ -156,6 +210,41 @@ def _append_cli_arg(command: list[str], key: str, value: Any) -> None:
     command.extend([flag, _format_cli_value(value)])
 
 
+def _effective_search_stage(spec: ExperimentSpec, args: dict[str, Any]) -> str:
+    return str(args.get("search_stage") or spec.stage)
+
+
+def _default_wandb_group(spec: ExperimentSpec, args: dict[str, Any]) -> str:
+    return f"{spec.method}-{_effective_search_stage(spec, args)}"
+
+
+def _default_wandb_tags(spec: ExperimentSpec, args: dict[str, Any]) -> str:
+    effective_stage = _effective_search_stage(spec, args)
+    tags: list[str] = []
+    replaced_stage = False
+    for tag in spec.tags:
+        next_tag = effective_stage if tag in STAGE_TAGS else tag
+        if tag in STAGE_TAGS:
+            replaced_stage = True
+        if next_tag not in tags:
+            tags.append(next_tag)
+    if not replaced_stage and effective_stage not in tags:
+        tags.append(effective_stage)
+    return ",".join(tags)
+
+
+def _validate_command_policy(args: dict[str, Any]) -> None:
+    search_stage = args.get("search_stage")
+    run_test = bool(args.get("run_test", False))
+    if run_test and search_stage != "final":
+        raise ValueError(
+            "--run_test is only allowed for final-stage experiments. "
+            f"Received search_stage={search_stage!r}."
+        )
+    if search_stage == "final" and not run_test:
+        raise ValueError("Final-stage experiments must enable --run_test.")
+
+
 def build_experiment_command(
     spec: ExperimentSpec,
     *,
@@ -182,6 +271,7 @@ def build_experiment_command(
         **spec.args,
         **(overrides or {}),
     }
+    _validate_command_policy(args)
     command = [python_executable or sys.executable, spec.script]
     for key, value in args.items():
         _append_cli_arg(command, key, value)
@@ -190,8 +280,12 @@ def build_experiment_command(
         command.append("--use_wandb")
         _append_cli_arg(command, "wandb_entity", wandb_entity)
         _append_cli_arg(command, "wandb_project", wandb_project)
-        _append_cli_arg(command, "wandb_group", wandb_group or spec.method)
-        combined_tags = wandb_tags or ",".join(spec.tags)
+        _append_cli_arg(
+            command,
+            "wandb_group",
+            wandb_group or _default_wandb_group(spec, args),
+        )
+        combined_tags = wandb_tags or _default_wandb_tags(spec, args)
         _append_cli_arg(command, "wandb_tags", combined_tags)
         _append_cli_arg(command, "wandb_mode", wandb_mode)
         _append_cli_arg(command, "wandb_log_model", wandb_log_model)

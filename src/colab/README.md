@@ -17,6 +17,8 @@ for:
 - enabling/disabling W&B
 - setting W&B entity/project/mode
 - writing temporary override lines
+- suggesting HPO trial commands from `configs/search_spaces.json`
+- suggesting confirmation and final seed commands from the configured seed policy
 - previewing the exact command
 - running the command
 
@@ -45,6 +47,95 @@ These overrides are temporary. Reusable configs belong in
 
 Use the override box for one run. Edit `configs/experiments.json` only when the
 setting should become a shared team experiment.
+Use `output_dir` here only when `Trials = 0`. When `Trials > 0`, the launcher
+owns `trial_id`, `output_dir`, `search_stage`, `hpo_seed`, and `config_hash`;
+change the `Trial root` field instead of overriding those identity fields.
+Leave `Overwrite output` off for normal work. Turn it on only when you want to
+replace a previous local run in the same directory. When it is enabled, the
+method runner clears managed summaries, prediction files, checkpoints, and saved
+model/tokenizer files before the replacement run starts.
+
+## HPO Trial Suggestions
+
+Set `Trials` to a positive number and optionally set `Search` to a search-space
+name such as `full_ft`, `lp_ft`, `tfidf_logreg`, or `lora`. Use a tuning
+experiment such as `distilbert_full_tuning`, `distilbert_lp_ft_tuning`, or
+`tfidf_logreg_tuning`; smoke experiments are intentionally blocked for HPO
+because they use tiny sample caps.
+
+The notebook's normal preview and run cells dispatch to trial mode when
+`Trials > 0`. You can also call:
+
+```python
+launcher.preview_trial_commands()
+```
+
+This prints deterministic commands with unique `trial_id` and `output_dir`.
+When the search config defines an allocated GPU-hour cap, trial commands include
+`hpo_time_cap_gpu_hours` for reporting. This records the budget but does not
+automatically stop the Colab runtime.
+Call `launcher.run_trial_commands()` only after reviewing the preview.
+
+## Confirmation And Final Seed Suggestions
+
+After selecting a fixed config from HPO aggregation, leave `Trials` at `0` and
+set `Seed runs` to `confirm` or `final`.
+
+- `confirm` uses `seeds_confirm` and validation only.
+- `final` uses `seeds_final`, sets `search_stage=final`, and adds `--run_test`.
+  Final seed runs must evaluate the test split; HPO, smoke, quick, and confirm
+  runs must not.
+
+The override box should contain only the selected config's hyperparameters, for
+example:
+
+```text
+learning_rate=2e-5
+```
+
+For LP+FT, include both stage configs:
+
+```text
+stage1_head_learning_rate=1e-4
+stage1_epochs=5
+stage2_learning_rate=2e-5
+stage2_epochs=2
+```
+
+For TF-IDF, include the selected classical hyperparameters. JSON-style
+`ngram_range` values match the HPO command format, and the launcher normalizes
+`1,2` and `[1,2]` to the same `config_hash`:
+
+```text
+ngram_range=[1,2]
+min_df=2
+C=1.0
+max_features=50000
+```
+
+The launcher owns seed-run `trial_id`, `output_dir`, `search_stage`, and
+`config_hash` so final seed outputs aggregate cleanly by `method config_hash`.
+Leave `Seed root` blank to use a stage-specific Drive path, or set it when a
+batch should go somewhere else.
+
+After a batch finishes in Drive-backed outputs, aggregate from a notebook cell:
+
+```python
+launcher.preview_aggregate_command()
+aggregate_report = launcher.aggregate_results()
+aggregate_report["groups"][:5]
+```
+
+By default, aggregation follows the active run root. With `Trials > 0`, that is
+`Trial root`; with `Seed runs=confirm` or `Seed runs=final`, that is `Seed root`
+or the stage-specific Drive seed folder if `Seed root` is blank. Fill
+`Agg input` or `Agg output` only when the summaries live somewhere else or the
+report should be written to a custom path.
+The aggregate report reads local `result_summary.json` and
+`failure_summary.json` files. For final-stage runs it also surfaces prediction
+artifact paths recorded by the method runner.
+The default aggregate metrics are validation macro-F1, training time, and
+`best_epoch`; the report also writes total training time in seconds/hours.
 
 ## Old DistilBERT-Only Launcher
 

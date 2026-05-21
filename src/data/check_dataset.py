@@ -14,3 +14,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# train: 15383
+# validation: 1922
+# test: 1924
+#
+# Keys: dict_keys(['id', 'annotators', 'rationales', 'post_tokens'])
+#
+# First 20 tokens: ['u', 'really', 'think', 'i', 'would', 'not', 'have', 'been', 'raped', 'by', 'feral', 'hindu', 'or', 'muslim', 'back', 'in', 'india', 'or', 'bangladesh', 'and']

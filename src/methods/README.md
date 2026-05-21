@@ -1,137 +1,119 @@
-# Method Scripts
+# Method Packages
 
-Future method-specific training scripts should live here.
+This directory contains method-owned training packages and shared method
+helpers.
 
-Examples:
-
-```text
-src/methods/tfidf_logreg/train.py
-src/methods/bilstm/train.py
-src/methods/distilbert_frozen/train.py
-src/methods/distilbert_partial/train.py
-src/methods/distilbert_lora/train.py
-src/methods/distilbert_lp_ft/train.py
-```
-
-## Rule
-
-One method family should have its own script or package. Do not put every method
-inside `src/run_distilbert_hatexplain.py`.
-
-## Shared Arguments
-
-Where possible, method scripts should accept:
+## What Goes Where
 
 ```text
---method
---search_stage
---trial_id
---hpo_seed
---dataset_name
---seed
---data_fraction
---max_train_samples
---max_eval_samples
---output_dir
---use_wandb
---wandb_entity
---wandb_project
---wandb_group
---wandb_tags
---wandb_mode
---wandb_log_model
---run_test
---eval_strategy
---save_strategy
---save_total_limit
---load_best_model_at_end
---metric_for_best_model
---no_save_final_model
+_template/          copyable starter for a new method
+distilbert_full/    ready DistilBERT full fine-tuning method
+distilbert_lp_ft/   ready DistilBERT linear probing + full fine-tuning method
+tfidf_logreg/       ready TF-IDF + Logistic Regression baseline
+common.py           method-agnostic CLI/config/output policy helpers
+hf_common.py        Hugging Face Trainer helpers shared by Transformer methods
+hf_sequence_classification.py
+                    shared setup/train/eval/save workflow for HF text classifiers
+transformer_data.py shared HateXplain tokenization/split helpers for Transformer methods
+predictions.py      shared per-sample prediction JSON writer
 ```
 
-Method-specific scripts can add their own arguments:
+New methods should use their own package:
 
 ```text
-TF-IDF: ngram_range, min_df, max_features, C, class_weight
-Bi-LSTM: embedding_size, hidden_size, dropout, learning_rate, batch_size, epochs
-LoRA: lora_r, lora_alpha, lora_dropout, target_modules
-Partial FT: unfrozen_layers
-LP-FT: stage1_* and stage2_* settings
+src/methods/tfidf_logreg/
+src/methods/bilstm/
+src/methods/distilbert_lora/
+src/methods/distilbert_frozen/
 ```
 
-## Required Data Policy
+Do not put new methods inside `distilbert_full/`.
 
-All methods must use `src/data` preprocessing:
+## Adding A Method
 
-- join `post_tokens`
-- strict majority labels
-- drop no-majority samples for main experiments
-- official train/validation/test splits
-
-Do not create method-specific data cleaning unless the experiment explicitly
-documents that it is outside the main comparison.
-
-## Required Tracking Shape
-
-Every method should log comparable fields:
+Read the full checklist in:
 
 ```text
-method
-search_stage
-trial_id
-seed
-dataset
-data_fraction
-model_name
-tokenizer_name
-hyperparameters
-checkpoint_policy
-trainable_params
-total_params
-training_time_sec
-peak_memory_mb
-gpu_type
+docs/ADDING_METHOD.md
 ```
 
-Method-specific knobs go inside `hyperparameters`.
-
-Every completed run should also write the standard local result files:
+The minimum flow is:
 
 ```text
-resolved_config.json
-metrics.json
-runtime.json
-result_summary.json
+copy src/methods/_template/ -> src/methods/<method_name>/
+edit the copied train.py
+register a planned experiment in configs/experiments.json
+validate and run a smoke test
+mark the experiment ready only after smoke works
 ```
 
-Reuse `src/experiments/results.py` when possible. Only final runs should accept
-`--run_test`; smoke, quick, and tuning runs should use validation metrics only.
+## Shared Boundaries
 
-## Model Saving
+Use `common.py` for behavior every method should share:
 
-Every method that trains a model should document where the model is saved.
-Prefer this convention:
+- common CLI flags
+- comparable config metadata
+- output directory protection
+- final/test policy: final-stage runs must use `--run_test`, and non-final
+  stages must not
+- managed-artifact cleanup for intentional overwrite or failed attempts
+- HPO accounting fields such as `hpo_trial_cap` and `hpo_time_cap_gpu_hours`
+
+Use `hf_common.py` for Hugging Face Trainer behavior:
+
+- metrics
+- mixed precision
+- class weighting
+- TrainingArguments compatibility
+- model-selection summaries
+- GPU and memory metadata
+
+Use `hf_sequence_classification.py` when a method is a Hugging Face
+sequence-classification fine-tuning method. It owns the repeated lifecycle:
+
+- output directory setup and managed-artifact overwrite behavior
+- W&B run start/update/finish
+- HateXplain split loading, tokenization, and split accounting
+- tokenizer/model/data-collator construction
+- Trainer construction
+- runtime and failure summaries
+- final validation/test evaluation
+- final model, prediction, and result JSON writing
+
+Method packages still own the method-specific parts: trainability policy,
+stage layout, method-specific hyperparameters, and resolved-config schema.
+
+Every completed method run should write `resolved_config.json`, `metrics.json`,
+`runtime.json`, and `result_summary.json`. Final-stage runs that can produce
+per-sample outputs should also write `eval_predictions.json`; final runs with
+`--run_test` should write `test_predictions.json` and store those paths in
+`result_summary.json`.
+
+Keep method-specific model code in the method package. That includes PEFT
+adapter choices, TF-IDF vectorizers, Bi-LSTM modules, freezing policy, and
+two-stage training logic.
+
+For example, LP+FT keeps its stage-1 head-only freezing and stage-2 full
+unfreeze helpers in `src/methods/distilbert_lp_ft/training.py`; the shared HF
+workflow only provides the comparable data, logging, W&B, checkpoint, and
+output contracts.
+
+TF-IDF + Logistic Regression keeps its vectorizer, sklearn estimator, classical
+metrics, and prediction writer inside `src/methods/tfidf_logreg/`. It still uses
+the shared output guard, final-only test policy, W&B settings, and local result
+JSON contract.
+
+The TF-IDF package follows the same small-file layout used by the Transformer
+methods:
 
 ```text
-output_dir/checkpoint-*     intermediate checkpoints, if the method has them
-output_dir/                 final model plus config and metrics
+src/methods/tfidf_logreg/args.py      CLI knobs
+src/methods/tfidf_logreg/config.py    resolved config and runtime summaries
+src/methods/tfidf_logreg/data.py      classical split/text preparation
+src/methods/tfidf_logreg/reporting.py final artifacts and console reporting
+src/methods/tfidf_logreg/training.py  sklearn pipeline, metrics, predictions
+src/methods/tfidf_logreg/train.py     executable orchestration entry point
 ```
 
-If a method supports best-checkpoint selection, expose it through arguments such
-as `load_best_model_at_end` and `metric_for_best_model`. If the method only
-saves the last model, record that in `checkpoint_policy.final_model_source`.
-
-Classical methods should follow the same idea even if they do not use Hugging
-Face checkpoints. For example, a TF-IDF baseline can save its vectorizer and
-classifier under `output_dir/` and record `final_model_source=last_fit`.
-
-## Registration
-
-After adding a script, register it in:
-
-```text
-configs/experiments.json
-```
-
-Keep the entry `planned` until the script exists and a smoke run works. Then set
-it to `ready`.
+Keep `train.py` runnable because the catalog dispatches to that path, but avoid
+putting new TF-IDF internals there unless they are orchestration-only.

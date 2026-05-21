@@ -8,8 +8,15 @@ TF-IDF, Bi-LSTM, or any other method.
 
 - `registry.py`: loads `configs/experiments.json`, parses overrides, validates
   script paths, and builds method-specific commands.
+- `hpo.py`: loads `configs/search_spaces.json` and builds deterministic HPO
+  trial overrides.
+- `results.py`: writes standard local result, failure, and artifact summary
+  files for method runners.
+- `aggregate_results.py`: reads local run summaries and builds grouped
+  mean/std reports.
 - `../run_experiment.py`: CLI entry point for listing, dry-running, and running
   catalog experiments.
+- `../aggregate_results.py`: CLI entry point for aggregation.
 
 ## Design Rule
 
@@ -33,7 +40,7 @@ code
 Current precedence:
 
 ```text
-catalog defaults < catalog experiment args < CLI --set overrides
+global command defaults < family command defaults < experiment args < CLI --set overrides
 ```
 
 For example:
@@ -48,11 +55,48 @@ python src/run_experiment.py \
 The dry-run should show `--learning_rate 3e-05`.
 
 Metadata defaults such as `final_seeds`, `selection_metric`, `test_policy`, and
-`wandb_project` stay on the registry object. They document shared policy but are
-not automatically appended to every method command.
+`wandb_project` stay on the registry object. Shared runner args live in
+`command_defaults` and are appended to method commands.
 
 Use `--python` on `src/run_experiment.py` when Colab or another environment
 needs a specific Python executable.
+
+## HPO Suggestions
+
+`run_experiment.py --suggest_trials N` prints trial commands without running
+training. It samples from `configs/search_spaces.json`, stamps each command with
+a unique `trial_id` and `output_dir`, and keeps HPO planning deterministic via
+`--hpo_seed`.
+
+Identity fields are launcher-managed in trial mode. Do not pass
+`output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or `config_hash` through
+`--set`; use `--trial_output_root`, `--hpo_seed`, or the experiment catalog.
+
+## Result Aggregation
+
+After a batch finishes, aggregate local summaries:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
+The aggregator includes failed runs in counts and excludes them from metric
+means. This keeps HPO accounting honest without breaking final mean/std tables.
+Flattened records also carry model-selection fields and prediction artifact
+paths when the method writes them, so aggregate reports can point back to
+`eval_predictions.json` and `test_predictions.json` for final-stage inspection.
+Aggregate reports include total training time in seconds/hours at the top level
+and per group. The top-level `hpo_total_training_time_*` fields sum tuning and
+confirmation runs, including failed runs that recorded partial runtime.
+`best_epoch` is a default metric, so groups report best-epoch mean/std/min/max.
+
+The registry enforces the test policy before commands are launched:
+final-stage experiments must include `--run_test`, and non-final stages must not
+include it.
 
 ## Adding More Shared Behavior
 

@@ -21,7 +21,8 @@ class ExperimentRegistryTests(unittest.TestCase):
         all_ids = {spec.experiment_id for spec in self.registry.experiments}
 
         self.assertIn("distilbert_full_smoke", ready_ids)
-        self.assertIn("tfidf_logreg_template", all_ids)
+        self.assertIn("distilbert_full_tuning", ready_ids)
+        self.assertIn("tfidf_logreg_tuning", ready_ids)
         self.assertIn("lora_distilbert_template", all_ids)
 
     def test_build_ready_experiment_command_includes_common_and_wandb_args(self):
@@ -36,7 +37,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         )
 
         self.assertEqual(command[0], sys.executable)
-        self.assertEqual(command[1], "src/run_distilbert_hatexplain.py")
+        self.assertEqual(command[1], "src/methods/distilbert_full/train.py")
         self.assertIn("--method", command)
         self.assertIn("full-ft", command)
         self.assertIn("--search_stage", command)
@@ -86,8 +87,20 @@ class ExperimentRegistryTests(unittest.TestCase):
         spec = self.registry.get("frozen_distilbert_template")
 
         self.assertEqual(spec.args["dataset_name"], "Hate-speech-CNERG/hatexplain")
+        self.assertEqual(spec.args["class_weighting"], "none")
+        self.assertEqual(spec.args["mixed_precision"], "none")
         self.assertIn("final_seeds", spec.defaults)
         self.assertNotIn("final_seeds", spec.args)
+        self.assertIn("class_weighting", spec.command_defaults)
+        self.assertNotIn("wandb_project", spec.command_defaults)
+
+        tfidf_spec = self.registry.get("tfidf_logreg_tuning")
+        self.assertNotIn("mixed_precision", tfidf_spec.args)
+        self.assertNotIn("gradient_checkpointing", tfidf_spec.args)
+
+        lora_spec = self.registry.get("lora_distilbert_template")
+        self.assertEqual(lora_spec.args["mixed_precision"], "none")
+        self.assertEqual(lora_spec.args["optim"], "adamw_torch")
 
     def test_final_experiment_enables_test_evaluation(self):
         spec = self.registry.get("distilbert_full_final_seed42")
@@ -96,7 +109,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("--run_test", command)
 
     def test_missing_planned_script_is_not_runnable(self):
-        spec = self.registry.get("tfidf_logreg_template")
+        spec = self.registry.get("bilstm_template")
 
         with self.assertRaises(FileNotFoundError):
             build_experiment_command(spec, repo_root=self.repo_root)
