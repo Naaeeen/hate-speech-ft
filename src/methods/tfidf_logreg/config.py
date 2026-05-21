@@ -7,8 +7,6 @@ from typing import Any
 from src.methods.hf_common import (
     build_compute_cost_fields,
     get_git_commit_hash,
-    get_peak_memory_mb,
-    get_peak_memory_reserved_mb,
 )
 from src.methods.tfidf_logreg.data import ClassicalSplit
 from src.methods.tfidf_logreg.training import parse_ngram_range
@@ -180,17 +178,12 @@ def build_runtime_metrics(
     peak_memory_mb: float | None = None,
     peak_memory_reserved_mb: float | None = None,
 ) -> dict[str, Any]:
-    resolved_peak_memory_mb = (
-        get_peak_memory_mb() if peak_memory_mb is None else peak_memory_mb
-    )
-    resolved_peak_memory_reserved_mb = (
-        get_peak_memory_reserved_mb()
-        if peak_memory_reserved_mb is None
-        else peak_memory_reserved_mb
-    )
+    resolved_peak_memory_mb = peak_memory_mb
+    resolved_peak_memory_reserved_mb = peak_memory_reserved_mb
     runtime = {
         "training_time_sec": training_time_sec,
-        **build_compute_cost_fields(training_time_sec, gpu_type=gpu_type),
+        **build_compute_cost_fields(training_time_sec, gpu_type="cpu"),
+        "compute_device": "cpu",
         "peak_memory_mb": resolved_peak_memory_mb,
         "peak_memory_allocated_mb": resolved_peak_memory_mb,
         "peak_memory_reserved_mb": resolved_peak_memory_reserved_mb,

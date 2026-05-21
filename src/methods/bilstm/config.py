@@ -162,9 +162,10 @@ def build_runtime_metrics(
     final_model_source: str | None = None,
     failure_phase: str | None = None,
 ) -> dict[str, Any]:
+    cost_gpu_type = gpu_type if str(device).startswith("cuda") else "cpu"
     runtime: dict[str, Any] = {
         "training_time_sec": training_time_sec,
-        **build_compute_cost_fields(training_time_sec, gpu_type=gpu_type),
+        **build_compute_cost_fields(training_time_sec, gpu_type=cost_gpu_type),
         "device": device,
         "gpu_type": gpu_type,
         "peak_memory_mb": peak_memory_mb,

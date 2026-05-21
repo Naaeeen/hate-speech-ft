@@ -23,8 +23,6 @@ from src.methods.common import (  # noqa: E402
 )
 from src.methods.hf_common import (  # noqa: E402
     get_gpu_type,
-    get_peak_memory_mb,
-    get_peak_memory_reserved_mb,
 )
 from src.methods.tfidf_logreg.args import parse_args  # noqa: E402
 from src.methods.tfidf_logreg.config import (  # noqa: E402
@@ -67,8 +65,8 @@ def build_runtime_metrics(
         gpu_type=gpu_type,
         status=status,
         failure_phase=failure_phase,
-        peak_memory_mb=get_peak_memory_mb(),
-        peak_memory_reserved_mb=get_peak_memory_reserved_mb(),
+        peak_memory_mb=None,
+        peak_memory_reserved_mb=None,
     )
 
 

@@ -62,6 +62,12 @@ def validate_classical_args(args: argparse.Namespace, ngram_range: tuple[int, in
         raise ValueError("TF-IDF is CPU/classical and does not support mixed precision.")
     if args.gradient_checkpointing:
         raise ValueError("TF-IDF is CPU/classical and does not support gradient checkpointing.")
+    if args.wandb_log_model != "false":
+        raise ValueError(
+            "TF-IDF currently records local model artifacts only. "
+            "Use --wandb_log_model false until W&B artifact upload is implemented "
+            "for this method."
+        )
     if ngram_range[0] > ngram_range[1]:
         raise ValueError("Invalid --ngram_range.")
     for option_name in ("max_train_samples", "max_eval_samples", "max_test_samples"):

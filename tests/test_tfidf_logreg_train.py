@@ -156,6 +156,13 @@ class TfidfLogregTrainTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_ngram_range("2,1")
 
+    def test_rejects_unsupported_wandb_model_upload(self):
+        with patch.object(sys, "argv", ["train.py", "--wandb_log_model", "end"]):
+            args = tfidf_args.parse_args()
+
+        with self.assertRaisesRegex(ValueError, "local model artifacts only"):
+            train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
+
     def test_classification_metrics_use_shared_key_names(self):
         metrics = build_classification_metrics(
             [0, 1, 2],
@@ -168,6 +175,20 @@ class TfidfLogregTrainTests(unittest.TestCase):
         self.assertIn("eval_accuracy", metrics)
         self.assertIn("eval_precision_hatespeech", metrics)
         self.assertEqual(metrics["eval_support_normal"], 1)
+
+    def test_runtime_metrics_do_not_count_gpu_hours_for_cpu_baseline(self):
+        runtime = tfidf_config.build_runtime_metrics(
+            training_time_sec=60.0,
+            gpu_type="NVIDIA A100-SXM4-80GB",
+            status="completed",
+        )
+
+        self.assertEqual(runtime["gpu_type"], "NVIDIA A100-SXM4-80GB")
+        self.assertEqual(runtime["compute_device"], "cpu")
+        self.assertAlmostEqual(runtime["training_time_hours"], 60.0 / 3600)
+        self.assertIsNone(runtime["gpu_hours"])
+        self.assertIsNone(runtime["peak_memory_mb"])
+        self.assertIsNone(runtime["peak_memory_reserved_mb"])
 
     def run_fake_main(self, output_dir, *, search_stage="tuning", run_test=False):
         dataset = FakeDataset()
@@ -202,8 +223,6 @@ class TfidfLogregTrainTests(unittest.TestCase):
             patch.object(sys, "argv", argv),
             patch.object(train, "load_libraries", return_value=fake_libraries),
             patch.object(train, "get_gpu_type", return_value="cpu"),
-            patch.object(train, "get_peak_memory_mb", return_value=None),
-            patch.object(train, "get_peak_memory_reserved_mb", return_value=None),
         ):
             train.main()
         return dataset
@@ -276,8 +295,6 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 patch.object(train, "load_libraries", return_value=fake_libraries),
                 patch.object(train, "init_wandb_run", return_value=fake_run),
                 patch.object(train, "get_gpu_type", return_value="cpu"),
-                patch.object(train, "get_peak_memory_mb", return_value=None),
-                patch.object(train, "get_peak_memory_reserved_mb", return_value=None),
             ):
                 with self.assertRaises(RuntimeError):
                     train.main()

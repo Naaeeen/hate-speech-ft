@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from src.experiments.results import write_json
 from src.methods.bilstm import args as bilstm_args
+from src.methods.bilstm import config as bilstm_config
 from src.methods.bilstm import train as bilstm_train
 
 
@@ -45,6 +46,29 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "local model artifacts only"):
             bilstm_args.validate_bilstm_args(args)
+
+    def test_runtime_metrics_count_gpu_hours_only_when_training_on_cuda(self):
+        cpu_runtime = bilstm_config.build_runtime_metrics(
+            training_time_sec=60.0,
+            device="cpu",
+            gpu_type="NVIDIA A100-SXM4-80GB",
+            peak_memory_mb=None,
+            peak_memory_reserved_mb=None,
+            status="completed",
+        )
+        cuda_runtime = bilstm_config.build_runtime_metrics(
+            training_time_sec=60.0,
+            device="cuda",
+            gpu_type="NVIDIA A100-SXM4-80GB",
+            peak_memory_mb=100.0,
+            peak_memory_reserved_mb=200.0,
+            status="completed",
+        )
+
+        self.assertEqual(cpu_runtime["gpu_type"], "NVIDIA A100-SXM4-80GB")
+        self.assertEqual(cpu_runtime["device"], "cpu")
+        self.assertIsNone(cpu_runtime["gpu_hours"])
+        self.assertAlmostEqual(cuda_runtime["gpu_hours"], 60.0 / 3600)
 
     def test_final_main_writes_standard_artifacts_with_fake_training_stack(self):
         with TemporaryDirectory() as temp_dir:
