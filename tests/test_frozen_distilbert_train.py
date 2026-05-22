@@ -15,8 +15,21 @@ class FakeParameter:
         return 1
 
 
+class FakeBackbone:
+    def __init__(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False
+        return self
+
+
 class FakeModel:
     def __init__(self):
+        self.training = True
+        self.base_model = FakeBackbone()
+        self.base_model_prefix = "distilbert"
+        self.distilbert = self.base_model
         self.items = [
             ("distilbert.embeddings.word_embeddings.weight", FakeParameter()),
             ("distilbert.transformer.layer.0.attention.q_lin.weight", FakeParameter()),
@@ -30,6 +43,11 @@ class FakeModel:
     def parameters(self):
         return [parameter for _, parameter in self.items]
 
+    def train(self, mode=True):
+        self.training = mode
+        self.base_model.training = mode
+        return self
+
 
 class FrozenDistilbertTrainTests(unittest.TestCase):
     def test_frozen_trainability_freezes_backbone_and_trains_head(self):
@@ -42,6 +60,15 @@ class FrozenDistilbertTrainTests(unittest.TestCase):
         self.assertFalse(state["distilbert.transformer.layer.0.attention.q_lin.weight"])
         self.assertTrue(state["pre_classifier.weight"])
         self.assertTrue(state["classifier.bias"])
+
+    def test_frozen_backbone_stays_eval_after_model_train_call(self):
+        model = FakeModel()
+
+        training.set_frozen_backbone_trainability(model)
+        model.train(True)
+
+        self.assertTrue(model.training)
+        self.assertFalse(model.base_model.training)
 
     def test_parser_defaults_match_shared_hf_contract(self):
         with patch.object(sys, "argv", ["prog"]):

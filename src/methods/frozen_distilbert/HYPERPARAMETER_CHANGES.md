@@ -126,9 +126,11 @@ The current trial cap is:
   Hugging Face sequence-classification head, where `pre_classifier`,
   `classifier`, and `score` parameters are treated as trainable head
   parameters.
-- The original explicit `backbone.eval()` and `torch.no_grad()` behavior is not
-  preserved exactly; the current method freezes backbone parameters but uses
-  the standard Trainer workflow.
+- The original explicit `backbone.eval()` behavior is preserved by patching the
+  loaded Hugging Face model so the backbone remains in eval mode when Trainer
+  calls `model.train()`. The current method does not keep a custom
+  `torch.no_grad()` wrapper, but all backbone parameters have
+  `requires_grad=False`.
 
 ## Practical Meaning
 
@@ -139,5 +141,5 @@ exact reproduction of the original frozen DistilBERT method choices.
 
 If exact preservation is required, the team should explicitly decide whether to
 restore the original custom head, `dropout`, `learning_rate`, batch size,
-`weight_decay`, and backbone `eval()`/`no_grad()` behavior before running final
+`weight_decay`, and custom `torch.no_grad()` wrapper before running final
 experiments.

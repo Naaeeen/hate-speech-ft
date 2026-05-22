@@ -150,6 +150,7 @@ def build_experiment_config(
         "training_policy": {
             "trainable_scope": "classification_head_only",
             "frozen_backbone": True,
+            "frozen_backbone_eval_mode": True,
             "optim": args.optim,
             "lr_scheduler_type": args.lr_scheduler_type,
             "max_grad_norm": args.max_grad_norm,
