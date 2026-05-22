@@ -765,6 +765,16 @@ Check:
 - you are not using `tfidf_logreg_smoke`, `tfidf_logreg_quick`, or
   `tfidf_logreg_final_seed42` as the HPO base
 
+### Seed Runs Still Preview Or Run HPO Trials
+
+Check:
+
+- `Trials` is set back to `0`
+- `Seed runs` is `confirm` or `final`
+
+The launcher now rejects this ambiguous state, but the fix is still to clear
+`Trials` before previewing or running confirmation/final seed commands.
+
 ### Final Runs Do Not Have Test Metrics
 
 Check:

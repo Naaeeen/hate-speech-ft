@@ -333,6 +333,20 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         self.assertEqual(launcher.run(), ["seed-result"])
 
+    def test_run_rejects_trials_and_seed_runs_together(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 1, "seed_run_stage": "confirm"}
+
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            launcher.run()
+
+    def test_preview_rejects_trials_and_seed_runs_together(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 1, "seed_run_stage": "final"}
+
+        with self.assertRaisesRegex(ValueError, "Set Trials to 0"):
+            launcher.preview_command()
+
     def test_build_aggregate_command_uses_widget_settings(self):
         launcher = object.__new__(ExperimentLauncher)
         launcher.trial_output_root = ValueBox("outputs/hpo")

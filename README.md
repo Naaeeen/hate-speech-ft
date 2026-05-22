@@ -409,7 +409,7 @@ python src/run_experiment.py \
   --set num_train_epochs=5
 ```
 
-`confirm` uses seeds `42,43` and validation only. `final` uses seeds
+`confirm` uses seeds `42,43,44` and validation only. `final` uses seeds
 `42,43,44` and adds `--run_test`. Final-stage runs are required to run the
 test split; smoke, quick, tuning, and confirm runs are required not to. All
 generated seed runs share one `config_hash` for the selected fixed

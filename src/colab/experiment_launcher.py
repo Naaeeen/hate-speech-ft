@@ -193,6 +193,16 @@ class ExperimentLauncher:
             "seed_output_root": self.seed_output_root.value,
         }
 
+    @staticmethod
+    def _validate_exclusive_batch_mode(config: dict[str, Any]) -> None:
+        trials = int(config.get("suggest_trials") or 0)
+        seed_stage = config.get("seed_run_stage")
+        if trials > 0 and seed_stage not in {None, "none"}:
+            raise ValueError(
+                "Trials and Seed runs are mutually exclusive. Set Trials to 0 "
+                "before previewing or running confirm/final seed commands."
+            )
+
     def get_aggregate_config(self) -> dict[str, Any]:
         group_by = [
             item.strip()
@@ -255,6 +265,7 @@ class ExperimentLauncher:
 
     def preview_command(self) -> str:
         config = self.get_config()
+        self._validate_exclusive_batch_mode(config)
         if int(config["suggest_trials"] or 0) > 0:
             return "\n".join(self.preview_trial_commands())
         if config.get("seed_run_stage") not in {None, "none"}:
@@ -387,6 +398,7 @@ class ExperimentLauncher:
 
     def run(self):
         config = self.get_config()
+        self._validate_exclusive_batch_mode(config)
         if int(config["suggest_trials"] or 0) > 0:
             return self.run_trial_commands()
         if config.get("seed_run_stage") not in {None, "none"}:

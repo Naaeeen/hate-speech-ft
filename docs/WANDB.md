@@ -142,16 +142,26 @@ Do not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
 those by hand. Use `--trial_output_root` for where trial directories are
 created.
 
-Use W&B groups for method-level grouping, for example:
+If you leave `wandb_group` blank, the launcher uses a safe generated group:
+`method-stage` for ordinary runs and `method-stage-config_hash` for tuning,
+confirmation, and final seed runs. This keeps HPO, confirmation, final, and
+different selected configs separated in W&B.
+
+Only set `wandb_group` manually when you still include the stage and enough
+identity to avoid mixing unrelated runs, for example:
 
 ```text
-wandb_group=full-ft
-wandb_group=lora
-wandb_group=tfidf-logreg
-wandb_group=bilstm
+wandb_group=full-ft-tuning
+wandb_group=full-ft-confirm
+wandb_group=full-ft-final
+wandb_group=tfidf-logreg-hpo
+wandb_group=tfidf-logreg-confirm
+wandb_group=tfidf-logreg-final
 ```
 
-Use tags for stage and method labels, for example:
+Avoid method-only groups such as `full-ft` or `tfidf-logreg` for real batches;
+they collapse HPO, confirmation, final, and different selected configs into one
+group. Use tags for extra stage and method labels, for example:
 
 ```text
 smoke,distilbert,full-ft
