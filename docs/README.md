@@ -20,6 +20,9 @@ contracts.
   中文版 DistilBERT LP+FT pipeline 集成说明。
 - [TFIDF_LOGREG_INTEGRATION_EN.md](TFIDF_LOGREG_INTEGRATION_EN.md): English
   explanation of the TF-IDF + Logistic Regression pipeline integration.
+- [TFIDF_LOGREG_COLAB_GUIDE.md](TFIDF_LOGREG_COLAB_GUIDE.md): beginner-friendly
+  Colab walkthrough for running TF-IDF + Logistic Regression smoke, HPO, final,
+  W&B, and aggregation workflows.
 - [TFIDF_LOGREG_INTEGRATION_ZH.md](TFIDF_LOGREG_INTEGRATION_ZH.md): 中文版
   TF-IDF + Logistic Regression pipeline 集成说明。
 - [BILSTM_INTEGRATION_EN.md](BILSTM_INTEGRATION_EN.md): English explanation of

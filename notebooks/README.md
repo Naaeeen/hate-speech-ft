@@ -40,6 +40,10 @@ For new methods, copy `src/methods/_template/` and keep shared boilerplate in
 `src.methods.common`. The notebook should only select registered experiments;
 it should not own method code.
 
+For a beginner-friendly TF-IDF + Logistic Regression walkthrough using this
+notebook, see
+[docs/TFIDF_LOGREG_COLAB_GUIDE.md](../docs/TFIDF_LOGREG_COLAB_GUIDE.md).
+
 Then register runnable experiments in:
 
 ```text
@@ -74,10 +78,11 @@ protect seed and sample-policy fields. Use the Seed runs control for final
 multi-seed/test runs.
 
 For confirmation or final seed batches, leave `Trials` at `0` and set
-`Seed runs` to `confirm` or `final`. Confirmation uses validation only. Final
-seed runs add `--run_test` and should be used only after the selected config is
-frozen. Leave `Seed root` blank to use the stage-specific default Drive folder,
-or set it explicitly for a custom batch folder.
+`Seed runs` to `confirm` or `final`. Confirmation uses validation only and now
+uses seeds `42,43,44`; run it for each top config you want to compare. Final
+seed runs also use `42,43,44`, add `--run_test`, and should be used only after
+the selected config is frozen. Leave `Seed root` blank to use the stage-specific
+default Drive folder, or set it explicitly for a custom batch folder.
 
 When `Agg input` is blank, `launcher.aggregate_results()` follows the active
 run root. HPO uses `Trial root`; confirmation and final seed batches use

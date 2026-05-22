@@ -654,7 +654,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertEqual(first.stdout.count("--search_stage confirm"), 2)
+        self.assertEqual(first.stdout.count("--search_stage confirm"), 3)
         self.assertNotIn("--run_test", first.stdout)
         first_output = re.search(r"--output_dir ([^ ]+)", first.stdout)
         second_output = re.search(r"--output_dir ([^ ]+)", second.stdout)

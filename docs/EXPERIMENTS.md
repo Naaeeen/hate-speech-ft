@@ -238,7 +238,9 @@ python src/run_experiment.py \
 ```
 
 Confirmation runs use `shared_fixed.seeds_confirm` from
-`configs/search_spaces.json` and keep `run_test=false`.
+`configs/search_spaces.json` and keep `run_test=false`. The current confirmation
+policy uses seeds `42, 43, 44`, so each selected top config gets three
+validation-only confirmation runs before the final config is chosen.
 
 For final reporting:
 

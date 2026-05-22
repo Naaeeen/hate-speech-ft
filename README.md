@@ -50,6 +50,8 @@ Run the setup cells, then use the experiment launcher widget.
   need to implement a new model or training method.
 - [TF-IDF + LogReg integration](docs/TFIDF_LOGREG_INTEGRATION_EN.md): what was
   changed for Chris's TF-IDF baseline and how to run it.
+- [TF-IDF + LogReg Colab guide](docs/TFIDF_LOGREG_COLAB_GUIDE.md): step-by-step
+  beginner workflow for smoke, HPO, final seeds, W&B, and result inspection.
 - [Bi-LSTM integration](docs/BILSTM_INTEGRATION_EN.md): how Minh's Bi-LSTM was
   wired into the shared launcher/result contract.
 - [Frozen DistilBERT integration](docs/FROZEN_DISTILBERT_INTEGRATION_EN.md):
@@ -109,9 +111,10 @@ Planned templates exist for:
 script is not implemented yet. The generic runner will not silently run a
 missing method script.
 
-The catalog default records the intended final seed policy as `42, 43, 44`. The
-static final entries are one-seed examples; use `--suggest_seed_runs final` from
-the tuning entry to generate all final seed commands for a selected config.
+The catalog default records confirmation seeds and final seeds as `42, 43, 44`.
+The static final entries are one-seed examples; use `--suggest_seed_runs confirm`
+or `--suggest_seed_runs final` from the tuning entry to generate the full
+multi-seed commands for a selected config.
 
 ## Repo Layout
 

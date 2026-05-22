@@ -60,7 +60,7 @@ REQUIRED_SHARED_FIXED = {
     "gradient_checkpointing": False,
     "class_weighting": "none",
     "seeds_search": [42],
-    "seeds_confirm": [42, 43],
+    "seeds_confirm": [42, 43, 44],
     "seeds_final": [42, 43, 44],
 }
 

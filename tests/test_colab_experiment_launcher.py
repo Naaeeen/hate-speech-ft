@@ -316,6 +316,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         commands = launcher.build_seed_run_commands()
 
+        self.assertEqual(len(commands), 3)
         self.assertIn("outputs/confirm", " ".join(commands[0]))
 
     def test_run_dispatches_to_trial_commands_when_trials_are_requested(self):
