@@ -20,6 +20,10 @@ Current tests cover:
 - local result file recording
 - final-only test evaluation policy
 - Colab launcher working-directory behavior
+- global training switches
+- HPO search-space sampling
+- structured failure summaries
+- result aggregation over completed and failed run summaries
 
 ## When To Add Tests
 
@@ -38,11 +42,20 @@ Compile key modules:
 
 ```bash
 python -m py_compile \
-  src/run_distilbert_hatexplain.py \
+  src/methods/distilbert_full/train.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/experiments/results.py \
+  src/experiments/aggregate_results.py \
+  src/experiments/hpo.py \
+  src/aggregate_results.py \
   src/colab/experiment_launcher.py \
+  src/methods/common.py \
+  src/methods/hf_common.py \
+  src/methods/_template/train.py \
+  src/methods/distilbert_full/args.py \
+  src/methods/distilbert_full/config.py \
+  src/methods/distilbert_full/data.py \
   src/utils/wandb_config.py
 ```
 

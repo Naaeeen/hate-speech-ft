@@ -19,6 +19,7 @@ If you only want to run the current ready experiment:
 
 ```bash
 python src/run_experiment.py --list
+python src/run_experiment.py --validate_protocol
 python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
 python src/run_experiment.py --experiment distilbert_full_smoke
 ```
@@ -45,6 +46,8 @@ Run the setup cells, then use the experiment launcher widget.
 
 - [Experiment running guide](docs/EXPERIMENTS.md): commands, overrides, and the
   method onboarding contract.
+- [Adding a method](docs/ADDING_METHOD.md): the shortest path for teammates who
+  need to implement a new model or training method.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
@@ -69,12 +72,14 @@ Ready now:
 
 - `distilbert_full_smoke`
 - `distilbert_full_quick`
+- `distilbert_full_tuning`
 - `distilbert_full_final_seed42`
 
 Planned templates exist for:
 
 - `tfidf_logreg_template`
 - `bilstm_template`
+- `random_init_distilbert_template`
 - `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
@@ -94,6 +99,7 @@ seed entries after the final experiment set is agreed by the team.
 ```text
 configs/
   experiments.json              # shared experiment catalog
+  search_spaces.json            # HPO trial caps and method search spaces
 
 docs/
   EXPERIMENTS.md                # experiment workflow and method contract
@@ -104,17 +110,21 @@ notebooks/
 
 src/
   run_experiment.py             # generic list / dry-run / run entry point
-  run_distilbert_hatexplain.py  # current ready DistilBERT full-FT runner
   colab/                        # notebook-facing launcher widgets
   data/                         # shared HateXplain preprocessing policy
   experiments/                  # catalog loading and command building
-  methods/                      # future method-specific training scripts
-  models/                       # model loading/check utilities
+  methods/                      # method packages and shared method helpers
+    _template/                  # copyable starter for new methods
+    distilbert_full/            # current ready DistilBERT full-FT method
   utils/                        # W&B and environment helpers
 
 tests/
   test_*.py                     # data, command, W&B, and runner tests
 ```
+
+`src/methods/common.py` contains method-agnostic helpers for shared CLI
+arguments, common tracking config, output-dir protection, and final-test policy
+validation. New methods should reuse it instead of duplicating those contracts.
 
 ## Setup
 
@@ -130,8 +140,9 @@ Local:
 pip install -r requirements.txt
 ```
 
-The local `requirements.txt` is currently a pinned environment snapshot. Colab
-work should use `requirements-colab.txt`.
+`requirements.txt` intentionally points at the same lean dependency set as
+`requirements-colab.txt` so local dry-runs and Colab runs install from one
+source of truth.
 
 ## Experiment Catalog Workflow
 
@@ -186,19 +197,93 @@ python src/run_experiment.py \
 Use `--set` for one-off exploration. If a configuration becomes a team standard,
 add a named experiment to [configs/experiments.json](configs/experiments.json).
 
+Shared training switches live in `configs/experiments.json`. Repo-wide command
+defaults are under `command_defaults`; model-family defaults are under
+`family_command_defaults`. The current transformer switches live in
+`family_command_defaults.transformer` and apply to transformer catalog
+experiments unless an experiment or `--set` override changes them:
+
+```text
+mixed_precision=none|fp16|bf16
+gradient_checkpointing=true|false
+class_weighting=none|balanced
+early_stopping_patience=2
+early_stopping_threshold=0.001
+max_grad_norm=1.0
+```
+
+For HPO planning, use `configs/search_spaces.json`:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --hpo_seed 42
+```
+
+This prints deterministic trial commands with unique `trial_id` and `output_dir`.
+Preview them before running expensive training.
+In HPO mode, do not override identity fields such as `output_dir`, `trial_id`,
+`search_stage`, `hpo_seed`, or `config_hash` with `--set`; use
+`--trial_output_root`, `--hpo_seed`, or a named catalog experiment instead.
+The CLI refuses to create HPO trials from smoke experiments unless
+`--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
+checks.
+
+Before running a batch, validate the catalog and HPO protocol:
+
+```bash
+python src/run_experiment.py --validate_protocol
+```
+
+After selecting a fixed config from HPO results, generate confirmation or final
+seed commands from the configured seed policy:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs confirm \
+  --set learning_rate=2e-5
+
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_seed_runs final \
+  --set learning_rate=2e-5
+```
+
+`confirm` uses seeds `42,43` and validation only. `final` uses seeds
+`42,43,44` and adds `--run_test`. All generated seed runs share one
+`config_hash` for the selected fixed hyperparameter config, so HPO,
+confirmation, and final aggregation can be traced by `method config_hash`.
+
+After running several trials or final seeds, aggregate local summaries:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage \
+  --metric eval_f1_macro \
+  --metric training_time_sec \
+  --metric trainable_pct
+```
+
+For final test reporting, include `--metric test_f1_macro` and group by the
+fields that define the fixed config, usually `method config_hash`.
+
 ## Direct DistilBERT Runner
 
 The generic runner dispatches to method-specific scripts. The current ready
 method script is:
 
 ```text
-src/run_distilbert_hatexplain.py
+src/methods/distilbert_full/train.py
 ```
 
 You can still run it directly:
 
 ```bash
-python src/run_distilbert_hatexplain.py \
+python src/methods/distilbert_full/train.py \
   --method full-ft \
   --search_stage smoke \
   --trial_id manual_distilbert_smoke \
@@ -261,6 +346,7 @@ hpo_seed
 seed
 dataset
 data_fraction
+effective_train_fraction
 model_name
 tokenizer_name
 hyperparameters
@@ -279,7 +365,13 @@ resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
+failure_summary.json        # only when a run fails after setup
 ```
+
+By default, the DistilBERT runner refuses to start if `output_dir` already
+contains result, checkpoint, or model artifacts. Use a new `output_dir` for each
+real experiment run. Pass `--overwrite_output_dir` only when you intentionally
+want to replace the previous local files in that directory.
 
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
 `hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.
@@ -293,6 +385,9 @@ save_strategy=epoch
 save_total_limit=2
 load_best_model_at_end=true
 metric_for_best_model=eval_f1_macro
+early_stopping_patience=2
+class_weighting=none
+mixed_precision=none
 ```
 
 During training, Hugging Face checkpoints are written under
@@ -324,6 +419,16 @@ src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
 src/methods/distilbert_lora/train.py
 ```
+
+Start by copying:
+
+```text
+src/methods/_template/
+```
+
+Then update the copied package defaults and implement the method-specific
+training logic. The template already imports `src.methods.common` and exposes
+the shared CLI contract expected by `configs/experiments.json` and Colab.
 
 Then register the method in:
 
@@ -357,7 +462,7 @@ Compile key modules:
 
 ```bash
 python -m py_compile \
-  src/run_distilbert_hatexplain.py \
+  src/methods/distilbert_full/train.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/colab/experiment_launcher.py \

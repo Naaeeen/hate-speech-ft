@@ -25,6 +25,7 @@ Sam sees:
 ```text
 distilbert_full_smoke            ready
 distilbert_full_quick            ready
+distilbert_full_tuning           ready
 distilbert_full_final_seed42     ready
 lora_distilbert_template         planned
 tfidf_logreg_template            planned
@@ -49,7 +50,7 @@ python src/run_experiment.py \
 The command prints the real script call:
 
 ```text
-python src/run_distilbert_hatexplain.py --method full-ft ...
+python src/methods/distilbert_full/train.py --method full-ft ...
 ```
 
 Sam checks:
@@ -122,6 +123,42 @@ python src/run_experiment.py \
 
 This is a temporary exploratory run. If it is not important, Sam does not edit
 `configs/experiments.json`.
+Sam uses a fresh `output_dir` for each real manual run. If that directory
+already contains a previous result, the runner stops before overwriting it.
+
+## 4B. Sam Plans A Small HPO Batch
+
+Sam wants to follow the shared search-space protocol instead of inventing trial
+commands manually:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_full_tuning \
+  --suggest_trials 3 \
+  --search_space full_ft \
+  --hpo_seed 42
+```
+
+Sam gets three commands with unique `trial_id` and `output_dir`. Sam previews
+them, then runs the selected commands in Colab.
+Sam does not use `distilbert_full_smoke` here because smoke runs intentionally
+use tiny sample caps for setup checks.
+Sam does not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
+`config_hash` during HPO. If the trial location should change, Sam changes the
+trial output root instead.
+
+After the runs finish, Sam aggregates the local summaries:
+
+```bash
+python src/aggregate_results.py outputs/hpo \
+  --output outputs/hpo/aggregate_summary.json \
+  --group_by method search_stage config_hash \
+  --metric eval_f1_macro \
+  --metric training_time_sec
+```
+
+Sam checks `aggregate_summary.json` for completed/failed trial counts and the
+mean validation macro-F1 per config.
 
 ## 5. Sam Promotes A Useful Config
 
@@ -139,7 +176,7 @@ Sam adds a named experiment:
   "method": "full-ft",
   "family": "transformer",
   "stage": "tuning",
-  "script": "src/run_distilbert_hatexplain.py",
+  "script": "src/methods/distilbert_full/train.py",
   "description": "DistilBERT full fine-tuning with lr=3e-5 on 128 examples.",
   "tags": ["distilbert", "full-ft", "tuning", "lr3e-5"],
   "args": {
@@ -172,11 +209,21 @@ python -m unittest discover -v
 
 Sam wants to implement LoRA later. Sam does not edit the full fine-tuning script.
 
-Sam creates:
+Sam first copies the method template:
+
+```text
+src/methods/_template/
+```
+
+to:
 
 ```text
 src/methods/distilbert_lora/train.py
 ```
+
+The copied `train.py` should keep the `src.methods.common` helpers for shared
+arguments, tracking config, output safety, and final-test policy checks. Sam
+then implements only the LoRA-specific model setup and training logic.
 
 Sam reads:
 

@@ -58,6 +58,16 @@ def parse_args() -> argparse.Namespace:
     choices=["auto", "cpu", "cuda"],
     )   
 
+
+    parser.add_argument("--class_weighting", type=str)
+    parser.add_argument("--early_stopping_patience", type=int)
+    parser.add_argument("--early_stopping_threshold", type=float)
+
+    parser.add_argument("--hpo_seed", type=int)
+    parser.add_argument("--config_hash", type=str)
+    parser.add_argument("--overwrite_output_dir", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--max_test_samples", type=int)
+
     return parser.parse_args()
 
 
