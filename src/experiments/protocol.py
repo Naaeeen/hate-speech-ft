@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.experiments.hpo import get_trial_cap, shared_fixed_command_overrides
+from src.experiments.hpo import (
+    enumerate_search_space,
+    get_config_hash_keys,
+    get_trial_cap,
+    shared_fixed_command_overrides,
+)
 from src.experiments.registry import ExperimentRegistry, REPO_ROOT
 
 
@@ -28,14 +33,14 @@ class ProtocolValidationReport:
 
 
 EXPECTED_METHODS = (
-    ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, search_space_aliases=("tfidf_lr",)),
-    ExpectedMethod("bilstm", "bilstm", 8),
+    ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, catalog_stage="tuning"),
+    ExpectedMethod("bilstm", "bilstm", 8, catalog_stage="tuning"),
     ExpectedMethod("random-init-distilbert", "random_init_distilbert", 4),
-    ExpectedMethod("frozen-backbone", "frozen_backbone", 6),
+    ExpectedMethod("frozen-backbone", "frozen_backbone", 6, catalog_stage="tuning"),
     ExpectedMethod("partial-ft", "partial_ft", 6),
-    ExpectedMethod("full-ft", "full_ft", 6, catalog_stage="tuning"),
+    ExpectedMethod("full-ft", "full_ft", 3, catalog_stage="tuning"),
     ExpectedMethod("lora", "lora", 6),
-    ExpectedMethod("lp-ft", "lp_ft", 4),
+    ExpectedMethod("lp-ft", "lp_ft", 4, catalog_stage="tuning"),
     ExpectedMethod("efficient-head-ft", "efficient_head_ft", 4),
 )
 
@@ -55,7 +60,7 @@ REQUIRED_SHARED_FIXED = {
     "gradient_checkpointing": False,
     "class_weighting": "none",
     "seeds_search": [42],
-    "seeds_confirm": [42, 43],
+    "seeds_confirm": [42, 43, 44],
     "seeds_final": [42, 43, 44],
 }
 
@@ -227,6 +232,7 @@ def _validate_trial_cap(
 
 def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> None:
     spaces = hpo_config.get("search_spaces") or {}
+    hash_keys_by_space = hpo_config.get("config_hash_keys") or {}
     time_caps = hpo_config.get("time_caps_gpu_hours") or {}
     for name, cap in time_caps.items():
         if cap is None:
@@ -243,11 +249,36 @@ def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> No
         if name not in spaces:
             errors.append(f"Missing search space '{name}'.")
             continue
+        trial_cap = get_trial_cap(hpo_config, name)
+        if trial_cap is not None:
+            try:
+                unique_config_count = len(enumerate_search_space(spaces[name]))
+            except ValueError as exc:
+                errors.append(f"search_spaces.{name} is invalid: {exc}")
+                unique_config_count = 0
+            if unique_config_count and trial_cap > unique_config_count:
+                errors.append(
+                    f"trial_caps.{name}={trial_cap} exceeds the "
+                    f"{unique_config_count} unique config(s) in search_spaces.{name}."
+                )
         missing_keys = sorted(required_keys - set(spaces[name]))
         if missing_keys:
             errors.append(
                 f"search_spaces.{name} is missing keys: {', '.join(missing_keys)}."
             )
+        try:
+            hash_keys = get_config_hash_keys(hpo_config, name)
+        except ValueError as exc:
+            errors.append(str(exc))
+            hash_keys = []
+        if not hash_keys:
+            errors.append(f"config_hash_keys.{name} must list effective config fields.")
+
+    for name, keys in hash_keys_by_space.items():
+        if name not in spaces:
+            errors.append(f"config_hash_keys.{name} has no matching search space.")
+        if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
+            errors.append(f"config_hash_keys.{name} must be a list of strings.")
 
     lora_space = spaces.get("lora") or {}
     _expect_equal(

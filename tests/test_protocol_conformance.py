@@ -37,6 +37,13 @@ class ProtocolConformanceTests(unittest.TestCase):
             self.assertIn(method.method_id, experiment_methods)
             self.assertIn(method.search_space, search_spaces)
 
+    def test_bilstm_uses_shared_hpo_config_only(self):
+        self.assertIn("bilstm", self.hpo_config["search_spaces"])
+        self.assertFalse(
+            (self.repo_root / "src" / "methods" / "bilstm" / "hpo.py").exists(),
+            "Bi-LSTM HPO must be managed only by configs/search_spaces.json.",
+        )
+
     def test_validation_catches_non_final_test_evaluation(self):
         bad_registry = load_experiment_registry(
             self.repo_root / "configs" / "experiments.json"

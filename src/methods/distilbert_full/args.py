@@ -8,7 +8,7 @@ from src.utils.wandb_config import VALID_WANDB_LOG_MODEL_VALUES, VALID_WANDB_MOD
 MODEL_NAME = "distilbert-base-uncased"
 
 
-def parse_args():
+def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description="Run DistilBERT on HateXplain")
 
     parser.add_argument("--model_name", type=str, default=MODEL_NAME)
@@ -19,6 +19,8 @@ def parse_args():
     parser.add_argument("--trial_id", type=str, default=None)
     parser.add_argument("--config_hash", type=str, default=None)
     parser.add_argument("--hpo_seed", type=int, default=None)
+    parser.add_argument("--hpo_trial_cap", type=int, default=None)
+    parser.add_argument("--hpo_time_cap_gpu_hours", type=float, default=None)
     parser.add_argument("--test_split_name", type=str, default="test")
     parser.add_argument("--run_test", action="store_true")
 
@@ -104,4 +106,4 @@ def parse_args():
         default="false",
     )
 
-    return parser.parse_args()
+    return parser.parse_args(argv)

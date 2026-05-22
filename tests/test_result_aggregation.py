@@ -1,9 +1,12 @@
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from src.aggregate_results import parse_args as parse_aggregate_cli_args
 from src.experiments.aggregate_results import (
     aggregate_records,
     build_aggregate_report,
@@ -65,6 +68,12 @@ def completed_summary(
 
 
 class ResultAggregationTests(unittest.TestCase):
+    def test_aggregate_cli_defaults_group_by_config_hash(self):
+        with patch.object(sys, "argv", ["aggregate_results.py", "outputs/final"]):
+            args = parse_aggregate_cli_args()
+
+        self.assertEqual(args.group_by, ["method", "search_stage", "config_hash"])
+
     def test_discovers_completed_and_failed_summary_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -154,6 +163,58 @@ class ResultAggregationTests(unittest.TestCase):
             "outputs/seed42/test_predictions.json",
         )
         self.assertEqual(record["summary_path"], "outputs/seed42/result_summary.json")
+
+    def test_flatten_summary_record_handles_tfidf_summary(self):
+        payload = {
+            "status": "completed",
+            "config": {
+                "method": "tfidf-logreg",
+                "search_stage": "final",
+                "trial_id": "tfidf_seed42",
+                "config_hash": "tfidf123",
+                "seed": 42,
+                "hpo_trial_cap": 12,
+                "hpo_time_cap_gpu_hours": 0.5,
+                "model_name": "tfidf-logreg",
+                "output_dir": "outputs/tfidf_seed42",
+                "trainable_params": 150000,
+                "total_params": 150000,
+            },
+            "metrics": {
+                "eval": {"eval_f1_macro": 0.62, "eval_accuracy": 0.64},
+                "test": {"test_f1_macro": 0.60, "test_accuracy": 0.61},
+            },
+            "runtime": {"training_time_sec": 3.5, "gpu_type": "cpu"},
+            "model_selection": {
+                "metric_for_best_model": "eval_f1_macro",
+                "best_metric_key": "eval_f1_macro",
+                "best_metric": 0.62,
+                "best_epoch": None,
+                "best_model_checkpoint": "model.joblib",
+            },
+            "artifacts": {
+                "predictions": {
+                    "eval": "outputs/tfidf_seed42/eval_predictions.json",
+                    "test": "outputs/tfidf_seed42/test_predictions.json",
+                }
+            },
+        }
+
+        record = flatten_summary_record(
+            payload,
+            Path("outputs/tfidf_seed42/result_summary.json"),
+        )
+
+        self.assertEqual(record["method"], "tfidf-logreg")
+        self.assertEqual(record["eval_f1_macro"], 0.62)
+        self.assertEqual(record["test_f1_macro"], 0.60)
+        self.assertEqual(record["training_time_sec"], 3.5)
+        self.assertEqual(record["trainable_pct"], 100.0)
+        self.assertEqual(record["best_model_checkpoint"], "model.joblib")
+        self.assertEqual(
+            record["test_predictions_path"],
+            "outputs/tfidf_seed42/test_predictions.json",
+        )
 
     def test_aggregate_records_computes_mean_std_and_failure_counts(self):
         records = [

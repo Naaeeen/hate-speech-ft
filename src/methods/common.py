@@ -18,11 +18,20 @@ RUN_ARTIFACT_NAMES = {
     "test_predictions.json",
     "trainer_state.json",
     "config.json",
+    "training_args.bin",
+    "model.pt",
+    "finalmodel.pt",
     "model.safetensors",
+    "model.joblib",
     "pytorch_model.bin",
     "tokenizer.json",
     "tokenizer_config.json",
     "special_tokens_map.json",
+    "tokenizer",
+    "stage1_linear_probe",
+    "stage2_full_ft",
+    "lp_checkpoints",
+    "ft_checkpoints",
 }
 CHECKPOINT_PREFIX = "checkpoint-"
 COMMON_DEFAULTS = {

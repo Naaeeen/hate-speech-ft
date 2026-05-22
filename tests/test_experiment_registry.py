@@ -1,5 +1,6 @@
 import unittest
 import sys
+import re
 from pathlib import Path
 
 from src.experiments.registry import (
@@ -22,7 +23,8 @@ class ExperimentRegistryTests(unittest.TestCase):
 
         self.assertIn("distilbert_full_smoke", ready_ids)
         self.assertIn("distilbert_full_tuning", ready_ids)
-        self.assertIn("tfidf_logreg_template", all_ids)
+        self.assertIn("tfidf_logreg_tuning", ready_ids)
+        self.assertIn("frozen_distilbert_tuning", ready_ids)
         self.assertIn("lora_distilbert_template", all_ids)
 
     def test_build_ready_experiment_command_includes_common_and_wandb_args(self):
@@ -52,6 +54,23 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("--wandb_tags", command)
         self.assertIn("distilbert,full-ft,smoke", command)
 
+    def test_wandb_defaults_include_config_hash_and_merge_custom_tags(self):
+        spec = self.registry.get("distilbert_full_tuning")
+
+        command = build_experiment_command(
+            spec,
+            repo_root=self.repo_root,
+            overrides={"config_hash": "abc123def456"},
+            use_wandb=True,
+            wandb_project="hate-speech-ft",
+            wandb_tags="custom,distilbert",
+        )
+
+        group_index = command.index("--wandb_group")
+        tags_index = command.index("--wandb_tags")
+        self.assertEqual(command[group_index + 1], "full-ft-tuning-abc123def456")
+        self.assertEqual(command[tags_index + 1], "distilbert,full-ft,tuning,custom")
+
     def test_parse_override_pairs_supports_basic_types(self):
         overrides = parse_override_pairs(
             [
@@ -66,6 +85,10 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertEqual(overrides["max_train_samples"], 128)
         self.assertIs(overrides["use_scheduler"], True)
         self.assertEqual(overrides["notes"], "manual test")
+
+    def test_parse_override_pairs_rejects_removed_determinism_switch(self):
+        with self.assertRaisesRegex(ValueError, "full_determinism"):
+            parse_override_pairs(["full_determinism=true"])
 
     def test_build_command_applies_overrides(self):
         spec = self.registry.get("distilbert_full_smoke")
@@ -84,7 +107,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertNotIn("--use_wandb", command)
 
     def test_registry_applies_safe_command_defaults(self):
-        spec = self.registry.get("frozen_distilbert_template")
+        spec = self.registry.get("frozen_distilbert_tuning")
 
         self.assertEqual(spec.args["dataset_name"], "Hate-speech-CNERG/hatexplain")
         self.assertEqual(spec.args["class_weighting"], "none")
@@ -94,7 +117,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("class_weighting", spec.command_defaults)
         self.assertNotIn("wandb_project", spec.command_defaults)
 
-        tfidf_spec = self.registry.get("tfidf_logreg_template")
+        tfidf_spec = self.registry.get("tfidf_logreg_tuning")
         self.assertNotIn("mixed_precision", tfidf_spec.args)
         self.assertNotIn("gradient_checkpointing", tfidf_spec.args)
 
@@ -108,8 +131,15 @@ class ExperimentRegistryTests(unittest.TestCase):
 
         self.assertIn("--run_test", command)
 
+    def test_direct_final_experiment_gets_config_hash(self):
+        spec = self.registry.get("distilbert_full_final_seed42")
+        command = build_experiment_command(spec, repo_root=self.repo_root)
+
+        hash_index = command.index("--config_hash")
+        self.assertRegex(command[hash_index + 1], r"^[0-9a-f]{12}$")
+
     def test_missing_planned_script_is_not_runnable(self):
-        spec = self.registry.get("tfidf_logreg_template")
+        spec = self.registry.get("lora_distilbert_template")
 
         with self.assertRaises(FileNotFoundError):
             build_experiment_command(spec, repo_root=self.repo_root)

@@ -3,6 +3,7 @@ import inspect
 import unittest
 
 import src.methods.distilbert_full.train as run_distilbert
+import src.methods.hf_sequence_classification as hf_workflow
 from src.methods.distilbert_full.train import build_experiment_config, build_setup_failure_config
 
 
@@ -255,14 +256,22 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
     def test_completed_summary_is_written_after_final_model_save(self):
         source = inspect.getsource(run_distilbert.main)
 
-        self.assertLess(source.index("trainer.save_model"), source.index('"status": "completed"'))
-        self.assertLess(source.index("trainer.save_model"), source.index("write_result_files("))
+        self.assertLess(source.index("save_final_model("), source.index('status="completed"'))
+        self.assertLess(source.index("save_final_model("), source.index("write_success_outputs("))
+
+        save_source = inspect.getsource(hf_workflow.save_final_model)
+        self.assertIn("trainer.save_model", save_source)
+        self.assertIn("tokenizer.save_pretrained", save_source)
 
     def test_wandb_run_starts_before_remote_setup_can_fail(self):
         source = inspect.getsource(run_distilbert.main)
+        start_source = inspect.getsource(hf_workflow.start_hf_run)
+        prepare_source = inspect.getsource(hf_workflow.prepare_hf_classification_run)
 
-        self.assertLess(source.index("init_wandb_run"), source.index("load_dataset"))
-        self.assertLess(source.index("init_wandb_run"), source.index("write_resolved_config"))
+        self.assertLess(source.index("start_hf_run"), source.index("prepare_hf_classification_run"))
+        self.assertIn("init_wandb_run", start_source)
+        self.assertIn("load_dataset", prepare_source)
+        self.assertLess(source.index("start_hf_run"), source.index("write_config_snapshot"))
 
     def test_early_stopping_requires_best_model_selection(self):
         from src.methods.distilbert_full.train import validate_checkpoint_policy

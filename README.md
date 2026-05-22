@@ -48,6 +48,15 @@ Run the setup cells, then use the experiment launcher widget.
   method onboarding contract.
 - [Adding a method](docs/ADDING_METHOD.md): the shortest path for teammates who
   need to implement a new model or training method.
+- [TF-IDF + LogReg integration](docs/TFIDF_LOGREG_INTEGRATION_EN.md): what was
+  changed for Chris's TF-IDF baseline and how to run it.
+- [TF-IDF + LogReg Colab guide](docs/TFIDF_LOGREG_COLAB_GUIDE.md): step-by-step
+  beginner workflow for smoke, HPO, final seeds, W&B, and result inspection.
+- [Bi-LSTM integration](docs/BILSTM_INTEGRATION_EN.md): how Minh's Bi-LSTM was
+  wired into the shared launcher/result contract.
+- [Frozen DistilBERT integration](docs/FROZEN_DISTILBERT_INTEGRATION_EN.md):
+  how Ming's frozen-backbone DistilBERT was refactored onto the shared HF
+  pipeline.
 - [W&B setup guide](docs/WANDB.md): team setup, Colab secrets, and what W&B is
   responsible for.
 - [Fake teammate walkthrough](docs/TEAMMATE_WALKTHROUGH.md): a concrete example
@@ -74,25 +83,38 @@ Ready now:
 - `distilbert_full_quick`
 - `distilbert_full_tuning`
 - `distilbert_full_final_seed42`
+- `distilbert_lp_ft_smoke`
+- `distilbert_lp_ft_quick`
+- `distilbert_lp_ft_tuning`
+- `distilbert_lp_ft_final_seed42`
+- `frozen_distilbert_smoke`
+- `frozen_distilbert_quick`
+- `frozen_distilbert_tuning`
+- `frozen_distilbert_final_seed42`
+- `tfidf_logreg_smoke`
+- `tfidf_logreg_quick`
+- `tfidf_logreg_tuning`
+- `tfidf_logreg_final_seed42`
+- `bilstm_smoke`
+- `bilstm_quick`
+- `bilstm_tuning`
+- `bilstm_final_seed42`
 
 Planned templates exist for:
 
-- `tfidf_logreg_template`
-- `bilstm_template`
 - `random_init_distilbert_template`
-- `frozen_distilbert_template`
 - `partial_distilbert_template`
 - `lora_distilbert_template`
-- `lp_ft_template`
 - `efficient_head_ft_template`
 
 `planned` means the experiment is documented in the catalog, but the method
 script is not implemented yet. The generic runner will not silently run a
 missing method script.
 
-The catalog default records the intended final seed policy as `42, 43, 44`, but
-only `distilbert_full_final_seed42` is currently instantiated. Add the remaining
-seed entries after the final experiment set is agreed by the team.
+The catalog default records confirmation seeds and final seeds as `42, 43, 44`.
+The static final entries are one-seed examples; use `--suggest_seed_runs confirm`
+or `--suggest_seed_runs final` from the tuning entry to generate the full
+multi-seed commands for a selected config.
 
 ## Repo Layout
 
@@ -115,7 +137,12 @@ src/
   experiments/                  # catalog loading and command building
   methods/                      # method packages and shared method helpers
     _template/                  # copyable starter for new methods
-    distilbert_full/            # current ready DistilBERT full-FT method
+    distilbert_full/            # ready DistilBERT full-FT method
+    frozen_distilbert/          # ready frozen-backbone DistilBERT method
+    distilbert_lp_ft/           # ready DistilBERT linear-probe + full-FT method
+    tfidf_logreg/               # ready TF-IDF + Logistic Regression baseline
+    bilstm/                     # ready Bi-LSTM from-scratch baseline
+    hf_sequence_classification.py # shared HF fine-tuning workflow helper
   utils/                        # W&B and environment helpers
 
 tests/
@@ -125,6 +152,15 @@ tests/
 `src/methods/common.py` contains method-agnostic helpers for shared CLI
 arguments, common tracking config, output-dir protection, and final/test policy
 validation. New methods should reuse it instead of duplicating those contracts.
+
+Transformer fine-tuning methods should also reuse
+`src/methods/hf_sequence_classification.py` for the repeated Hugging Face
+sequence-classification lifecycle: W&B setup, HateXplain split loading,
+tokenization, model/tokenizer setup, Trainer construction, failure summaries,
+final evaluation, prediction files, runtime metrics, and local result JSONs.
+The method package should still own method-specific training decisions such as
+full-FT vs LP+FT stages, freeze/unfreeze policy, PEFT adapters, and
+method-specific hyperparameters.
 
 ## Setup
 
@@ -196,6 +232,12 @@ python src/run_experiment.py \
 
 Use `--set` for one-off exploration. If a configuration becomes a team standard,
 add a named experiment to [configs/experiments.json](configs/experiments.json).
+Direct catalog runs reject managed protocol fields such as `search_stage`,
+`trial_id`, `config_hash`, HPO accounting fields, and `run_test` in `--set`.
+For final-stage catalog entries, `seed`, `data_fraction`, and `max_*_samples`
+are also protected; use seed-run generation for final multi-seed experiments.
+Direct final commands automatically add the selected `config_hash` to
+`trial_id` and `output_dir` so alternate final configs do not collide.
 
 Shared training switches live in `configs/experiments.json`. Repo-wide command
 defaults are under `command_defaults`; model-family defaults are under
@@ -212,6 +254,11 @@ early_stopping_threshold=0.001
 max_grad_norm=1.0
 ```
 
+The shared `seed` controls the normal framework seeding used by each method.
+Neural methods should still be treated as best-effort reproducible on GPU
+because CUDA kernels and library versions can introduce small run-to-run
+differences.
+
 For HPO planning, use `configs/search_spaces.json`:
 
 ```bash
@@ -222,19 +269,76 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
-This prints deterministic trial commands with unique `trial_id` and `output_dir`.
-Preview them before running expensive training.
+For DistilBERT LP+FT HPO, use the LP+FT tuning base and `lp_ft` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_trials 4 \
+  --search_space lp_ft \
+  --hpo_seed 42
+```
+
+For TF-IDF + Logistic Regression HPO, use the TF-IDF tuning base and
+`tfidf_logreg` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_trials 4 \
+  --search_space tfidf_logreg \
+  --hpo_seed 42
+```
+
+For Bi-LSTM HPO, use the Bi-LSTM tuning base and `bilstm` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment bilstm_tuning \
+  --suggest_trials 4 \
+  --search_space bilstm \
+  --hpo_seed 42
+```
+
+For frozen-backbone DistilBERT HPO, use the frozen DistilBERT tuning base and
+`frozen_backbone` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_trials 4 \
+  --search_space frozen_backbone \
+  --hpo_seed 42
+```
+
+This prints deterministic trial commands with `trial_id` and `output_dir`
+values that include the HPO seed, trial index, and final `config_hash`. Preview
+them before running expensive training.
+`config_hash` is based on `config_hash_keys` in `configs/search_spaces.json`,
+which keeps each method's hash tied to its effective hyperparameters rather
+than unrelated defaults from another method family.
 `configs/search_spaces.json` also records allocated HPO trial caps and optional
 GPU-hour caps. The Full FT search space currently records
-`time_caps_gpu_hours.full_ft=2.0`; this is logged into generated trial commands
-as `hpo_time_cap_gpu_hours` for reporting, but it is not an automatic Colab
-stopwatch.
+`trial_caps.full_ft=3` and `time_caps_gpu_hours.full_ft=2.0`; these values are
+logged into generated trial commands for reporting, but the time cap is not an
+automatic Colab stopwatch. HPO generation also refuses requests for more trials
+than the selected search space has unique configurations, so duplicate configs
+cannot silently waste search budget.
 In HPO mode, do not override identity fields such as `output_dir`, `trial_id`,
-`search_stage`, `hpo_seed`, or `config_hash` with `--set`; use
-`--trial_output_root`, `--hpo_seed`, or a named catalog experiment instead.
-The CLI refuses to create HPO trials from smoke experiments unless
-`--allow_smoke_hpo` is passed, because smoke sample caps are only for setup
-checks.
+`search_stage`, `hpo_seed`, `hpo_trial_cap`, `hpo_time_cap_gpu_hours`, or
+`config_hash` with `--set`; use `--trial_output_root`, `--hpo_seed`, or a named
+catalog experiment instead.
+Use tuning experiments for HPO. The CLI refuses quick/final bases because they
+carry setup or reporting defaults; smoke bases are allowed only with
+`--allow_smoke_hpo` for command-shape tests and stay labeled `search_stage=smoke`.
+The Colab launcher has no smoke-HPO escape hatch.
+
+Avoid legacy alias overrides on launcher-managed runs. Use
+`mixed_precision=fp16` instead of `fp16=true`; for LP+FT use
+`per_device_train_batch_size` and `per_device_eval_batch_size` instead of the
+old `batch_size` alias. This keeps `config_hash`, output directories, and
+aggregation groups tied to the effective training config. Bi-LSTM `batch_size`
+is a real method parameter and is included in its hash keys.
 
 Before running a batch, validate the catalog and HPO protocol:
 
@@ -257,19 +361,71 @@ python src/run_experiment.py \
   --set learning_rate=2e-5
 ```
 
-`confirm` uses seeds `42,43` and validation only. `final` uses seeds
+LP+FT uses method-specific selected hyperparameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lp_ft_tuning \
+  --suggest_seed_runs final \
+  --set stage1_head_learning_rate=1e-4 \
+  --set stage1_epochs=5 \
+  --set stage2_learning_rate=2e-5 \
+  --set stage2_epochs=2
+```
+
+TF-IDF uses method-specific selected hyperparameters. JSON-style `ngram_range`
+matches the format printed by HPO trial commands; the launcher also normalizes
+`1,2` and `[1,2]` to the same `config_hash`:
+
+```bash
+python src/run_experiment.py \
+  --experiment tfidf_logreg_tuning \
+  --suggest_seed_runs final \
+  --set ngram_range=[1,2] \
+  --set min_df=2 \
+  --set C=1.0 \
+  --set max_features=50000
+```
+
+Bi-LSTM uses method-specific selected architecture/training hyperparameters:
+
+```bash
+python src/run_experiment.py \
+  --experiment bilstm_tuning \
+  --suggest_seed_runs final \
+  --set hidden_size=128 \
+  --set dropout=0.3 \
+  --set learning_rate=0.001
+```
+
+Frozen DistilBERT uses the selected classification-head learning rate and
+epoch count:
+
+```bash
+python src/run_experiment.py \
+  --experiment frozen_distilbert_tuning \
+  --suggest_seed_runs final \
+  --set head_learning_rate=1e-4 \
+  --set num_train_epochs=5
+```
+
+`confirm` uses seeds `42,43,44` and validation only. `final` uses seeds
 `42,43,44` and adds `--run_test`. Final-stage runs are required to run the
 test split; smoke, quick, tuning, and confirm runs are required not to. All
 generated seed runs share one `config_hash` for the selected fixed
 hyperparameter config, so HPO, confirmation, and final aggregation can be
-traced by `method config_hash`.
+traced by `method config_hash`. Their generated `trial_id` and `output_dir`
+also include that selected `config_hash`, so confirm/final runs for different
+candidate configs do not share the same default output paths. Seed-run commands
+also carry the method's HPO trial/time caps when configured, preserving budget
+provenance in final summaries.
 
 After running several trials or final seeds, aggregate local summaries:
 
 ```bash
 python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
-  --group_by method search_stage \
+  --group_by method search_stage config_hash \
   --metric eval_f1_macro \
   --metric training_time_sec \
   --metric best_epoch \
@@ -284,16 +440,22 @@ Aggregate reports also include `total_training_time_sec`,
 `best_epoch`, which reports mean/std/min/max and can be used as the best-epoch
 mean/range.
 
-## Direct DistilBERT Runner
+## Direct Method Runners
 
 The generic runner dispatches to method-specific scripts. The current ready
-method script is:
+method scripts are:
 
 ```text
 src/methods/distilbert_full/train.py
+src/methods/frozen_distilbert/train.py
+src/methods/distilbert_lp_ft/train.py
+src/methods/tfidf_logreg/train.py
+src/methods/bilstm/train.py
 ```
 
-You can still run it directly:
+You can still run full FT directly for debugging. For comparable team runs,
+prefer `src/run_experiment.py`; direct commands must include protocol flags
+explicitly because they bypass catalog defaults.
 
 ```bash
 python src/methods/distilbert_full/train.py \
@@ -303,7 +465,66 @@ python src/methods/distilbert_full/train.py \
   --max_train_samples 64 \
   --max_eval_samples 64 \
   --num_train_epochs 1 \
+  --load_best_model_at_end \
+  --early_stopping_patience 2 \
+  --metric_for_best_model eval_f1_macro \
   --output_dir outputs/manual_distilbert_smoke
+```
+
+LP+FT can also be run directly, though the catalog launcher is preferred:
+
+```bash
+python src/methods/distilbert_lp_ft/train.py \
+  --method lp-ft \
+  --search_stage smoke \
+  --trial_id manual_lp_ft_smoke \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --stage1_epochs 1 \
+  --stage2_epochs 1 \
+  --output_dir outputs/manual_lp_ft_smoke
+```
+
+Frozen-backbone DistilBERT can be run directly for smoke checks:
+
+```bash
+python src/methods/frozen_distilbert/train.py \
+  --method frozen-backbone \
+  --search_stage smoke \
+  --trial_id manual_frozen_distilbert_smoke \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --num_train_epochs 1 \
+  --head_learning_rate 1e-4 \
+  --output_dir outputs/manual_frozen_distilbert_smoke
+```
+
+TF-IDF + Logistic Regression can be run directly for local smoke checks:
+
+```bash
+python src/methods/tfidf_logreg/train.py \
+  --method tfidf-logreg \
+  --search_stage smoke \
+  --trial_id manual_tfidf_smoke \
+  --ngram_range 1,2 \
+  --min_df 1 \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --output_dir outputs/manual_tfidf_smoke
+```
+
+Bi-LSTM can be run directly, but the catalog launcher is preferred because it
+adds the same HPO/final-stage identity fields used by the other methods:
+
+```bash
+python src/methods/bilstm/train.py \
+  --method bilstm \
+  --search_stage smoke \
+  --trial_id manual_bilstm_smoke \
+  --max_train_samples 64 \
+  --max_eval_samples 64 \
+  --epochs 1 \
+  --output_dir outputs/manual_bilstm_smoke
 ```
 
 Prefer `src/run_experiment.py` for team experiments because it keeps names,
@@ -327,11 +548,11 @@ Fixed rules:
 - Model selection metric: validation macro-F1
 - Test set: final evaluation only
 
-The DistilBERT runner records raw split sizes, post-policy split sizes, and
+Ready method runners record raw split sizes, post-policy split sizes, and
 `dropped_no_majority_*` counts in `resolved_config.json`. Those drop counts are
-measured after the Hugging Face dataset builder exposes the split; if the
-builder has already excluded undecided posts, the recorded drop count can be
-zero even though the policy is still strict-majority only.
+measured after the dataset loader exposes the split; if an upstream builder has
+already excluded undecided posts, the recorded drop count can be zero even
+though the policy is still strict-majority only.
 
 ## W&B
 
@@ -354,6 +575,10 @@ Mode: online
 Entity: your team or username
 Project: hate-speech-ft
 ```
+
+The Colab widget currently opens with `Use W&B=true` and `Mode=online`. If you
+have not added `WANDB_API_KEY`, either uncheck W&B or switch Mode to `offline`
+or `disabled` before running. Local JSON outputs are still written in all modes.
 
 Every method should log comparable top-level metadata:
 
@@ -395,11 +620,16 @@ test_predictions.json       # final-stage runs with --run_test
 
 `result_summary.json` records model-selection details and prediction artifact
 paths when prediction files are produced. The prediction files include sample
-ids, text, gold labels, predicted labels, and logits for inspection.
+ids, text, gold labels, predicted labels, and model scores for inspection
+(`logits` for Transformer methods, class probabilities for TF-IDF).
+Bi-LSTM prediction files also store class probabilities.
+When a method saves a local final model, `result_summary.json` also records the
+saved files under `artifacts.model` so the model used for a metric can be traced
+without inspecting the directory by hand.
 Failed runs write `failure_summary.json` with the error type, message, partial
 runtime, and config.
 
-By default, the DistilBERT runner refuses to start if `output_dir` already
+By default, ready method runners refuse to start if `output_dir` already
 contains result, checkpoint, or model artifacts. Use a new `output_dir` for each
 real experiment run. Pass `--overwrite_output_dir` only when you intentionally
 want to replace the previous local run artifacts in that directory. In overwrite
@@ -409,8 +639,8 @@ saved model/tokenizer files before the replacement run starts.
 Method-specific knobs should go under `hyperparameters`. For example, LoRA uses
 `hyperparameters.lora_r`; TF-IDF uses `hyperparameters.ngram_range`.
 
-Checkpoint and model-saving behavior should be explicit. For the current
-DistilBERT runner, the catalog records:
+Checkpoint and model-saving behavior should be explicit. For neural ready
+methods, the catalog records:
 
 ```text
 eval_strategy=epoch
@@ -423,15 +653,18 @@ class_weighting=none
 mixed_precision=none
 ```
 
-During training, Hugging Face checkpoints are written under
+During Hugging Face fine-tuning, checkpoints are written under
 `output_dir/checkpoint-*`. At the end, `trainer.save_model(output_dir)` writes
-the final model files directly into `output_dir`. When
-`load_best_model_at_end=true`, that final model is the best validation
-checkpoint; otherwise it is the last training state.
+the final model files directly into `output_dir`. Bi-LSTM uses the same
+checkpoint directory convention but saves the final torch artifact as
+`output_dir/model.pt` plus `output_dir/tokenizer/`. When
+`load_best_model_at_end=true`, the final saved neural model is the best
+validation checkpoint; otherwise it is the last training state.
 
-W&B can also upload model artifacts when `--wandb_log_model end` or
-`--wandb_log_model checkpoint` is used. The default is `false` to avoid large
-uploads during smoke and tuning runs.
+Hugging Face Trainer methods can also upload model artifacts when
+`--wandb_log_model end` or `--wandb_log_model checkpoint` is used. Bi-LSTM
+currently requires `--wandb_log_model false` and records local artifacts only.
+The default is `false` to avoid large uploads during smoke and tuning runs.
 
 For more setup detail, see [docs/WANDB.md](docs/WANDB.md).
 
@@ -496,6 +729,10 @@ Compile key modules:
 ```bash
 python -m py_compile \
   src/methods/distilbert_full/train.py \
+  src/methods/frozen_distilbert/train.py \
+  src/methods/distilbert_lp_ft/train.py \
+  src/methods/tfidf_logreg/train.py \
+  src/methods/bilstm/train.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/colab/experiment_launcher.py \

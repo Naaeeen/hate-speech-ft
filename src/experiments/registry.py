@@ -7,6 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.experiments.hpo import (
+    add_config_hash_to_generated_identity,
+    build_config_hash,
+    build_config_hash_payload,
+    validate_hash_safe_user_overrides,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY_PATH = REPO_ROOT / "configs" / "experiments.json"
@@ -17,6 +24,30 @@ METADATA_DEFAULT_KEYS = {
     "wandb_project",
 }
 STAGE_TAGS = {"smoke", "quick", "tuning", "confirm", "final"}
+LOCAL_MODEL_ARTIFACT_ONLY_METHODS = {"bilstm", "tfidf-logreg"}
+REMOVED_OVERRIDE_KEYS = {
+    "full_determinism": (
+        "The full_determinism switch was removed from the shared experiment "
+        "interface. Use the normal seed fields for reproducibility control."
+    )
+}
+DIRECT_RUN_PROTECTED_OVERRIDE_KEYS = {
+    "search_stage",
+    "trial_id",
+    "config_hash",
+    "hpo_seed",
+    "hpo_trial_cap",
+    "hpo_time_cap_gpu_hours",
+    "run_test",
+}
+DIRECT_FINAL_PROTECTED_OVERRIDE_KEYS = {
+    "seed",
+    "data_fraction",
+    "data_fraction_seed",
+    "max_train_samples",
+    "max_eval_samples",
+    "max_test_samples",
+}
 
 
 @dataclass(frozen=True)
@@ -177,6 +208,8 @@ def parse_override_pairs(pairs: list[str] | tuple[str, ...] | None) -> dict[str,
         key = key.strip()
         if not key:
             raise ValueError(f"Override has an empty key: {pair}")
+        if key in REMOVED_OVERRIDE_KEYS:
+            raise ValueError(f"Unsupported override '{key}': {REMOVED_OVERRIDE_KEYS[key]}")
         overrides[key] = _parse_scalar(raw_value.strip())
     return overrides
 
@@ -189,6 +222,28 @@ def parse_override_text(text: str | None) -> dict[str, Any]:
             continue
         pairs.append(line)
     return parse_override_pairs(pairs)
+
+
+def validate_direct_run_overrides(
+    spec: ExperimentSpec,
+    overrides: dict[str, Any] | None,
+) -> None:
+    overrides = overrides or {}
+    if spec.stage == "final" and overrides.get("run_test") is False:
+        raise ValueError("Final-stage experiments must enable --run_test.")
+
+    user_overrides = set(overrides)
+    protected = set(DIRECT_RUN_PROTECTED_OVERRIDE_KEYS)
+    if spec.stage == "final":
+        protected.update(DIRECT_FINAL_PROTECTED_OVERRIDE_KEYS)
+    blocked = sorted(user_overrides & protected)
+    if blocked:
+        raise ValueError(
+            "Direct catalog runs do not allow overriding managed protocol fields: "
+            f"{', '.join(blocked)}. Use catalog entries, HPO trial generation, or "
+            "seed-run generation for stage/test/sample-policy changes."
+        )
+    validate_hash_safe_user_overrides(method=spec.method, user_overrides=overrides)
 
 
 def _format_cli_value(value: Any) -> str:
@@ -215,7 +270,9 @@ def _effective_search_stage(spec: ExperimentSpec, args: dict[str, Any]) -> str:
 
 
 def _default_wandb_group(spec: ExperimentSpec, args: dict[str, Any]) -> str:
-    return f"{spec.method}-{_effective_search_stage(spec, args)}"
+    base = f"{spec.method}-{_effective_search_stage(spec, args)}"
+    config_hash = args.get("config_hash")
+    return f"{base}-{config_hash}" if config_hash else base
 
 
 def _default_wandb_tags(spec: ExperimentSpec, args: dict[str, Any]) -> str:
@@ -233,6 +290,29 @@ def _default_wandb_tags(spec: ExperimentSpec, args: dict[str, Any]) -> str:
     return ",".join(tags)
 
 
+def _merge_wandb_tags(default_tags: str, extra_tags: str | None) -> str:
+    tags: list[str] = []
+    for raw_tags in (default_tags, extra_tags or ""):
+        for raw_tag in raw_tags.split(","):
+            tag = raw_tag.strip()
+            if tag and tag not in tags:
+                tags.append(tag)
+    return ",".join(tags)
+
+
+def _with_default_config_hash(
+    args: dict[str, Any],
+    *,
+    hash_keys: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    if args.get("config_hash") or args.get("search_stage") not in {"tuning", "confirm", "final"}:
+        return args
+    hash_payload = build_config_hash_payload(args, hash_keys=hash_keys)
+    return add_config_hash_to_generated_identity(
+        {**args, "config_hash": build_config_hash(hash_payload)}
+    )
+
+
 def _validate_command_policy(args: dict[str, Any]) -> None:
     search_stage = args.get("search_stage")
     run_test = bool(args.get("run_test", False))
@@ -243,6 +323,14 @@ def _validate_command_policy(args: dict[str, Any]) -> None:
         )
     if search_stage == "final" and not run_test:
         raise ValueError("Final-stage experiments must enable --run_test.")
+
+
+def _validate_wandb_log_model_policy(spec: ExperimentSpec, wandb_log_model: str) -> None:
+    if spec.method in LOCAL_MODEL_ARTIFACT_ONLY_METHODS and wandb_log_model != "false":
+        raise ValueError(
+            f"Experiment '{spec.experiment_id}' uses method '{spec.method}', which "
+            "currently saves model artifacts locally only. Set --wandb_log_model false."
+        )
 
 
 def build_experiment_command(
@@ -258,11 +346,16 @@ def build_experiment_command(
     wandb_mode: str = "online",
     wandb_log_model: str = "false",
     python_executable: str | None = None,
+    config_hash_keys: list[str] | tuple[str, ...] | None = None,
 ) -> list[str]:
     if not spec.script_exists(repo_root):
         raise FileNotFoundError(
             f"Experiment '{spec.experiment_id}' points to missing script: {spec.script}"
         )
+    validate_hash_safe_user_overrides(
+        method=spec.method,
+        user_overrides=overrides or {},
+    )
 
     args = {
         "method": spec.method,
@@ -271,7 +364,9 @@ def build_experiment_command(
         **spec.args,
         **(overrides or {}),
     }
+    args = _with_default_config_hash(args, hash_keys=config_hash_keys)
     _validate_command_policy(args)
+    _validate_wandb_log_model_policy(spec, wandb_log_model)
     command = [python_executable or sys.executable, spec.script]
     for key, value in args.items():
         _append_cli_arg(command, key, value)
@@ -285,7 +380,7 @@ def build_experiment_command(
             "wandb_group",
             wandb_group or _default_wandb_group(spec, args),
         )
-        combined_tags = wandb_tags or _default_wandb_tags(spec, args)
+        combined_tags = _merge_wandb_tags(_default_wandb_tags(spec, args), wandb_tags)
         _append_cli_arg(command, "wandb_tags", combined_tags)
         _append_cli_arg(command, "wandb_mode", wandb_mode)
         _append_cli_arg(command, "wandb_log_model", wandb_log_model)

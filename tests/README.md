@@ -14,6 +14,8 @@ Current tests cover:
 - shared label policy
 - preprocessing and deterministic data fractions
 - DistilBERT runner helper behavior
+- DistilBERT LP+FT two-stage trainability behavior
+- shared Hugging Face sequence-classification workflow behavior
 - W&B config helpers
 - experiment catalog loading
 - command generation and CLI overrides
@@ -45,6 +47,11 @@ Compile key modules:
 ```bash
 python -m py_compile \
   src/methods/distilbert_full/train.py \
+  src/methods/distilbert_lp_ft/train.py \
+  src/methods/distilbert_lp_ft/training.py \
+  src/methods/transformer_data.py \
+  src/methods/predictions.py \
+  src/methods/hf_sequence_classification.py \
   src/run_experiment.py \
   src/experiments/registry.py \
   src/experiments/results.py \

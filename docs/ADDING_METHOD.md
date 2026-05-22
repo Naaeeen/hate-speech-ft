@@ -8,6 +8,7 @@ The short rule is:
 new method code      -> src/methods/<method_name>/
 shared data policy   -> src/data/
 shared HF helpers    -> src/methods/hf_common.py
+shared HF workflow   -> src/methods/hf_sequence_classification.py
 shared method policy -> src/methods/common.py
 experiment entry     -> configs/experiments.json
 HPO space            -> configs/search_spaces.json
@@ -24,7 +25,8 @@ Use a stable, descriptive directory:
 src/methods/tfidf_logreg/
 src/methods/bilstm/
 src/methods/distilbert_lora/
-src/methods/distilbert_frozen/
+src/methods/frozen_distilbert/
+src/methods/distilbert_lp_ft/
 src/methods/distilbert_partial/
 src/methods/distilbert_random_init/
 ```
@@ -98,6 +100,23 @@ For Hugging Face Trainer methods, reuse `src.methods.hf_common` for:
 - metrics
 - model-selection summary
 - GPU and memory metadata
+- runtime cost fields such as training hours and GPU-hours
+
+For Hugging Face sequence-classification fine-tuning methods, also reuse
+`src.methods.hf_sequence_classification` for the standard lifecycle instead of
+copying `distilbert_full/train.py`:
+
+- output directory validation and overwrite cleanup
+- W&B initialization and config update
+- HateXplain loading/tokenization with the shared split policy
+- model/tokenizer/data-collator setup
+- Trainer construction
+- runtime, failure, metrics, predictions, and result-file writing
+- final model artifact path recording under `result_summary.json.artifacts.model`
+
+Your method package should still own the decisions that make the method unique.
+For example, LP+FT owns its two stages and freeze/unfreeze helpers, while full
+FT owns the one-stage learning rate/epoch config.
 
 ## Step 4: Use The Shared Data Policy
 
@@ -117,6 +136,9 @@ dataset builder may already have removed some undecided examples.
 
 Classical baselines can vectorize the shared text differently, but they should
 not silently clean or rewrite the dataset text before comparison.
+Use `src/methods/tfidf_logreg/` as the current classical-method example: it has
+its own sklearn pipeline but still follows the shared split, output, W&B, and
+final-only test contracts.
 
 ## Step 5: Write Standard Results
 

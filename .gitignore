@@ -32,6 +32,7 @@ Abstract.txt
 deep-research-report-setup.md
 hyperparameter_policy.md
 hyperparameter_policy.txt
+docs/*_ZH.md
 
 # OS
 .DS_Store

@@ -57,10 +57,19 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         self.assertEqual(len(commands), 2)
         self.assertIn("--trial_id", commands[0])
-        self.assertIn("distilbert_full_tuning__full_ft__trial001", commands[0])
-        self.assertIn("outputs/hpo/distilbert_full_tuning__full_ft__trial002", commands[1])
+        first_command = " ".join(commands[0])
+        second_command = " ".join(commands[1])
+        self.assertIn("distilbert_full_tuning__full_ft__hpo42__trial001", first_command)
+        self.assertIn(
+            "outputs/hpo/distilbert_full_tuning__full_ft__hpo42__trial002",
+            second_command,
+        )
+        self.assertRegex(first_command, r"--trial_id [^ ]+__[0-9a-f]{12}")
+        self.assertRegex(first_command, r"--output_dir [^ ]+__[0-9a-f]{12}")
         self.assertIn("--optim", commands[0])
         self.assertIn("adamw_torch", commands[0])
+        self.assertIn("--hpo_time_cap_gpu_hours", commands[0])
+        self.assertIn("2", commands[0])
         self.assertIn("--mixed_precision", commands[0])
         self.assertIn("bf16", commands[0])
         self.assertIn("--overwrite_output_dir", commands[0])
@@ -91,8 +100,77 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("--search_stage", commands[0])
         self.assertIn("final", commands[0])
         self.assertIn("--run_test", commands[0])
+        self.assertIn("--hpo_trial_cap", commands[0])
+        self.assertIn("3", commands[0])
+        self.assertIn("--hpo_time_cap_gpu_hours", commands[0])
+        self.assertIn("2", commands[0])
         self.assertIn("--seed", commands[1])
         self.assertIn("43", commands[1])
+
+    def test_bilstm_launcher_rejects_wandb_model_upload(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.get_config = lambda: {
+            "experiment": "bilstm_smoke",
+            "overrides": {},
+            "use_wandb": True,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "end",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "none",
+        }
+
+        with self.assertRaisesRegex(ValueError, "model artifacts locally only"):
+            launcher.build_command()
+
+    def test_tfidf_launcher_rejects_wandb_model_upload(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.get_config = lambda: {
+            "experiment": "tfidf_logreg_smoke",
+            "overrides": {},
+            "use_wandb": True,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "end",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "none",
+        }
+
+        with self.assertRaisesRegex(ValueError, "model artifacts locally only"):
+            launcher.build_command()
+
+    def test_launcher_direct_final_rejects_sample_policy_override(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_final_seed42",
+            "overrides": {"data_fraction": 0.5},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "search_space": "full_ft",
+            "seed_run_stage": "none",
+        }
+
+        with self.assertRaisesRegex(ValueError, "data_fraction"):
+            launcher.build_command()
 
     def test_trial_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)
@@ -116,6 +194,82 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             launcher.build_trial_commands()
+
+    def test_trial_commands_reject_quick_base(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_quick",
+            "overrides": {},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "suggest_trials": 1,
+            "search_space": "full_ft",
+            "hpo_seed": 42,
+            "trial_output_root": "outputs/hpo",
+        }
+
+        with self.assertRaisesRegex(ValueError, "tuning experiment"):
+            launcher.build_trial_commands()
+
+    def test_trial_commands_reject_fp16_alias_override(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_full_tuning",
+            "overrides": {"fp16": True},
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 1,
+            "search_space": "full_ft",
+            "hpo_seed": 42,
+            "trial_output_root": "outputs/hpo",
+        }
+
+        with self.assertRaisesRegex(ValueError, "mixed_precision=fp16"):
+            launcher.build_trial_commands()
+
+    def test_lp_ft_seed_commands_reject_batch_size_alias_override(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.registry = load_experiment_registry()
+        launcher.search_config = load_hpo_config()
+        launcher.get_config = lambda: {
+            "experiment": "distilbert_lp_ft_tuning",
+            "overrides": {
+                "stage1_head_learning_rate": 0.0001,
+                "stage1_epochs": 5,
+                "stage2_learning_rate": 2e-5,
+                "stage2_epochs": 2,
+                "batch_size": 16,
+            },
+            "use_wandb": False,
+            "wandb_entity": "",
+            "wandb_project": "hate-speech-ft",
+            "wandb_group": None,
+            "wandb_tags": None,
+            "wandb_mode": "online",
+            "wandb_log_model": "false",
+            "overwrite_output_dir": False,
+            "suggest_trials": 0,
+            "seed_run_stage": "final",
+            "seed_output_root": "outputs/final",
+        }
+
+        with self.assertRaisesRegex(ValueError, "per_device_train_batch_size"):
+            launcher.build_seed_run_commands()
 
     def test_seed_run_commands_reject_smoke_base(self):
         launcher = object.__new__(ExperimentLauncher)
@@ -162,6 +316,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         commands = launcher.build_seed_run_commands()
 
+        self.assertEqual(len(commands), 3)
         self.assertIn("outputs/confirm", " ".join(commands[0]))
 
     def test_run_dispatches_to_trial_commands_when_trials_are_requested(self):
@@ -177,6 +332,20 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.run_seed_run_commands = lambda: ["seed-result"]
 
         self.assertEqual(launcher.run(), ["seed-result"])
+
+    def test_run_rejects_trials_and_seed_runs_together(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 1, "seed_run_stage": "confirm"}
+
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            launcher.run()
+
+    def test_preview_rejects_trials_and_seed_runs_together(self):
+        launcher = object.__new__(ExperimentLauncher)
+        launcher.get_config = lambda: {"suggest_trials": 1, "seed_run_stage": "final"}
+
+        with self.assertRaisesRegex(ValueError, "Set Trials to 0"):
+            launcher.preview_command()
 
     def test_build_aggregate_command_uses_widget_settings(self):
         launcher = object.__new__(ExperimentLauncher)

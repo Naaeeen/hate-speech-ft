@@ -20,6 +20,8 @@ DEFAULT_METRICS = (
     "test_precision_macro",
     "test_recall_macro",
     "training_time_sec",
+    "training_time_hours",
+    "gpu_hours",
     "peak_memory_reserved_mb",
     "trainable_params",
     "total_params",
@@ -101,6 +103,7 @@ def flatten_summary_record(
     runtime = payload.get("runtime") or {}
     model_selection = payload.get("model_selection") or {}
     prediction_artifacts = (payload.get("artifacts") or {}).get("predictions") or {}
+    model_artifacts = (payload.get("artifacts") or {}).get("model") or {}
     error = payload.get("error") or {}
     trainable_params = config.get("trainable_params")
     total_params = config.get("total_params")
@@ -132,6 +135,7 @@ def flatten_summary_record(
         "best_step": model_selection.get("best_step"),
         "eval_predictions_path": prediction_artifacts.get("eval"),
         "test_predictions_path": prediction_artifacts.get("test"),
+        "model_artifacts": model_artifacts,
         "training_time_sec": _metric_value(payload, "training_time_sec"),
         "trainable_params": trainable_params,
         "total_params": total_params,
