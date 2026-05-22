@@ -57,6 +57,9 @@ Direct runs also protect `search_stage`, `trial_id`, `config_hash`, HPO
 accounting fields, and `run_test`; final-stage direct runs additionally protect
 seed and sample-policy fields. Use `Seed runs=confirm/final` for multi-seed or
 final test runs instead of changing those fields manually.
+Direct `tuning` and `final` runs get an automatic `config_hash` in their
+`trial_id`, `output_dir`, and default W&B group. Smoke and quick runs keep
+their short catalog identities for setup checks.
 Leave `Overwrite output` off for normal work. Turn it on only when you want to
 replace a previous local run in the same directory. When it is enabled, the
 method runner clears managed summaries, prediction files, checkpoints, and saved

@@ -196,6 +196,10 @@ The `config_hash` is computed from `configs/search_spaces.json`'
 `config_hash_keys` for the selected search space. Those keys should represent
 the method-effective config, so TF-IDF hashes TF-IDF knobs instead of unrelated
 Transformer-only defaults.
+Direct catalog runs for `tuning` and `final` stages also receive a generated
+`config_hash`; their default `trial_id`, `output_dir`, and W&B group include
+that hash so manual one-off tuning/final checks do not collapse into the same
+aggregate bucket.
 If `configs/search_spaces.json` defines `time_caps_gpu_hours` for the search
 space, generated trial commands also include `hpo_time_cap_gpu_hours` so the
 allocated time budget is recorded with each run. The current code records this

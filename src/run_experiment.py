@@ -257,7 +257,7 @@ def main() -> int:
             return 0
 
         config_hash_keys = None
-        if spec.stage == "final":
+        if spec.stage in {"tuning", "final"}:
             search_config = load_hpo_config(args.search_config)
             search_space_name = args.search_space or default_search_space_name(spec.method)
             config_hash_keys = get_config_hash_keys(search_config, search_space_name)

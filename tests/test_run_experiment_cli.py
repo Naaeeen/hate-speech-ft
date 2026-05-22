@@ -214,6 +214,32 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn(config_hash.group(1), output_dir.group(1))
         self.assertIn(config_hash.group(1), trial_id.group(1))
 
+    def test_direct_tuning_output_dir_and_wandb_group_are_isolated_by_config_hash(self):
+        completed = self.run_cli(
+            "--experiment",
+            "frozen_distilbert_tuning",
+            "--dry_run",
+            "--set",
+            "head_learning_rate=0.0003",
+            "--use_wandb",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        config_hash = re.search(r"--config_hash ([0-9a-f]+)", completed.stdout)
+        output_dir = re.search(r"--output_dir ([^ ]+)", completed.stdout)
+        trial_id = re.search(r"--trial_id ([^ ]+)", completed.stdout)
+        self.assertIsNotNone(config_hash)
+        self.assertIsNotNone(output_dir)
+        self.assertIsNotNone(trial_id)
+        self.assertIn(config_hash.group(1), output_dir.group(1))
+        self.assertIn(config_hash.group(1), trial_id.group(1))
+        self.assertIn(
+            f"--wandb_group frozen-backbone-tuning-{config_hash.group(1)}",
+            completed.stdout,
+        )
+
     def test_seed_run_hash_matches_hpo_hash_for_same_fixed_config(self):
         hpo = self.run_cli(
             "--experiment",

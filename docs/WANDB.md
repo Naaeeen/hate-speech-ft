@@ -115,6 +115,9 @@ and `config_hash` in the run identity; generated confirm and final seed runs
 include the selected config hash. The current runner includes `trial_id` in the
 auto-generated W&B run name, so repeated runs of the same method are easier to
 separate in the dashboard.
+Direct `tuning` and `final` catalog runs also get an automatic config hash, and
+the default W&B group includes it. Smoke and quick runs keep short setup
+identities.
 
 Use the repo to generate trial commands instead of hand-writing them:
 

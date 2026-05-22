@@ -231,7 +231,7 @@ class ExperimentLauncher:
         if config.get("overwrite_output_dir"):
             overrides["overwrite_output_dir"] = True
         config_hash_keys = None
-        if spec.stage == "final":
+        if spec.stage in {"tuning", "final"}:
             search_space_name = config.get("search_space") or default_search_space_name(
                 spec.method
             )

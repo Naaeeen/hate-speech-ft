@@ -305,7 +305,7 @@ def _with_default_config_hash(
     *,
     hash_keys: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
-    if args.get("config_hash") or args.get("search_stage") != "final":
+    if args.get("config_hash") or args.get("search_stage") not in {"tuning", "confirm", "final"}:
         return args
     hash_payload = build_config_hash_payload(args, hash_keys=hash_keys)
     return add_config_hash_to_generated_identity(
