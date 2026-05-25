@@ -37,6 +37,37 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--mixed_precision bf16", completed.stdout)
         self.assertNotIn("--mixed_precision none", completed.stdout)
         self.assertIn("--hpo_time_cap_gpu_hours 2", completed.stdout)
+        self.assertIn("--search_method random_search", completed.stdout)
+        self.assertIn("--search_space_name full_ft", completed.stdout)
+
+    def test_direct_tuning_run_records_search_provenance_without_user_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--dry_run",
+            "--search_space",
+            "full_ft",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_method catalog_run", completed.stdout)
+        self.assertIn("--search_space_name full_ft", completed.stdout)
+
+    def test_direct_run_rejects_user_search_provenance_override(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_full_tuning",
+            "--dry_run",
+            "--set",
+            "search_space_name=other",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("search_space_name", completed.stderr)
 
     def test_hpo_rejects_output_dir_override_with_clear_error(self):
         completed = self.run_cli(

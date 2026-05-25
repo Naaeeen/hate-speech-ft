@@ -18,6 +18,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--search_stage", type=str, default="smoke")
     parser.add_argument("--trial_id", type=str, default=None)
     parser.add_argument("--config_hash", type=str, default=None)
+    parser.add_argument("--search_method", type=str, default=None)
+    parser.add_argument("--search_space_name", type=str, default=None)
     parser.add_argument("--hpo_seed", type=int, default=None)
     parser.add_argument("--hpo_trial_cap", type=int, default=None)
     parser.add_argument("--hpo_time_cap_gpu_hours", type=float, default=None)

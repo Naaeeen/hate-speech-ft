@@ -194,11 +194,32 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
             output_dir="outputs/setup-failure",
             seed=42,
             data_fraction_seed=99,
+            data_fraction=None,
+            max_train_samples=None,
+            max_eval_samples=None,
+            max_test_samples=None,
+            max_length=128,
+            learning_rate=2e-5,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
+            num_train_epochs=3,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            logging_strategy="steps",
+            logging_steps=20,
+            eval_steps=None,
+            save_steps=500,
+            save_total_limit=2,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_f1_macro",
+            lower_is_better=False,
+            no_save_final_model=False,
             fp16=False,
             mixed_precision="bf16",
             gradient_checkpointing=True,
             class_weighting="balanced",
             early_stopping_patience=2,
+            early_stopping_threshold=0.001,
             optim="adamw_torch",
             lr_scheduler_type="linear",
             max_grad_norm=1.0,
@@ -220,6 +241,10 @@ class RunDistilbertExperimentConfigTests(unittest.TestCase):
         self.assertIs(config["global_switches"]["weighted_ce"], True)
         self.assertEqual(config["training_policy"]["class_weighting"], "balanced")
         self.assertIs(config["output_safety"]["overwrite_output_dir"], False)
+        self.assertEqual(config["hyperparameters"]["learning_rate"], 2e-5)
+        self.assertEqual(config["hyperparameters"]["batch_size"], 8)
+        self.assertEqual(config["hyperparameters"]["epochs"], 3)
+        self.assertEqual(config["hyperparameters"]["mixed_precision"], "bf16")
 
     def test_test_evaluation_policy_blocks_non_final_runs(self):
         from src.methods.distilbert_full.train import validate_test_evaluation_policy

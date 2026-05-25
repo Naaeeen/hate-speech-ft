@@ -176,6 +176,7 @@ def main() -> int:
                 seeds=get_seed_policy(search_config, seed_stage),
                 output_root=output_root,
                 search_stage=seed_stage,
+                search_space_name=search_space_name,
                 fixed_overrides=shared_fixed_command_overrides(search_config),
                 trial_cap=get_trial_cap(search_config, search_space_name),
                 time_cap_gpu_hours=get_time_cap_gpu_hours(
@@ -224,6 +225,7 @@ def main() -> int:
                 hpo_seed=args.hpo_seed,
                 output_root=args.trial_output_root,
                 search_stage="smoke" if spec.stage == "smoke" else "tuning",
+                search_space_name=search_space_name,
                 trial_cap=get_trial_cap(search_config, search_space_name),
                 time_cap_gpu_hours=get_time_cap_gpu_hours(
                     search_config,
@@ -262,10 +264,17 @@ def main() -> int:
             search_space_name = args.search_space or default_search_space_name(spec.method)
             config_hash_keys = get_config_hash_keys(search_config, search_space_name)
         validate_direct_run_overrides(spec, overrides)
+        command_overrides = dict(overrides)
+        if spec.stage in {"tuning", "final"}:
+            command_overrides.setdefault(
+                "search_method",
+                "manual" if spec.stage == "final" else "catalog_run",
+            )
+            command_overrides.setdefault("search_space_name", search_space_name)
         command = build_experiment_command(
             spec,
             repo_root=REPO_ROOT,
-            overrides=overrides,
+            overrides=command_overrides,
             use_wandb=args.use_wandb,
             wandb_entity=args.wandb_entity,
             wandb_project=args.wandb_project,

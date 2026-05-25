@@ -180,11 +180,18 @@ finishes, aggregate local files and compare them with W&B tables:
 ```bash
 python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
+  --write_pareto_csvs \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
   --metric training_time_sec \
   --metric best_epoch
 ```
+
+`--write_pareto_csvs` writes `hpo_runs.csv`, `final_runs.csv`, and
+`method_summary.csv` beside the aggregate JSON. Use those local CSVs for
+random-search HPO budget and Pareto tables; use W&B to inspect run-level
+curves, logs, and dashboard comparisons. Direct catalog/manual tuning runs stay
+visible in W&B and aggregate JSON, but they are not counted as HPO budget rows.
 
 For seed-run suggestions, the launcher uses the effective stage in W&B metadata:
 confirmation commands use confirm tags/groups, and final commands use final

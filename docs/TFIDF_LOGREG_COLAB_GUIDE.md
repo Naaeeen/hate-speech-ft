@@ -248,6 +248,8 @@ The UI does not execute automatically. You run separate notebook cells to:
 | `Agg output` | Output JSON file for aggregation. | Leave blank to write `aggregate_summary.json` under `Agg input`. |
 | `Group by` | Fields used to group summaries. | Default `method search_stage config_hash` is good for HPO. For final reporting, `method config_hash` is also useful. |
 | `Metrics` | Comma-separated metrics to summarize. | For HPO/confirmation use `eval_f1_macro,training_time_sec`. For final add `test_f1_macro,test_accuracy`. |
+| `Pareto CSVs` | Also writes `hpo_runs.csv`, `final_runs.csv`, and `method_summary.csv`. | Keep checked for real HPO/final batches. These files are easier to use for report tables and Pareto plots than raw JSON. |
+| `CSV dir` | Optional output directory for the Pareto CSV files. Blank writes them beside `Agg output`. | Leave blank for normal work, or set a report folder such as `/content/drive/MyDrive/hate_speech_ft/outputs/pareto/tfidf_logreg_001`. |
 
 Important: do not put `output_dir`, `trial_id`, `search_stage`, `config_hash`,
 `hpo_seed`, or `run_test` in `Overrides` for HPO or final seed generation. The
@@ -408,6 +410,9 @@ groups[:5]
 Expected result:
 
 - `aggregate_summary.json` is written.
+- If `Pareto CSVs` is checked, `hpo_runs.csv`, `final_runs.csv`, and
+  `method_summary.csv` are also written. For HPO aggregation, inspect
+  `hpo_runs.csv` first.
 - `groups[:5]` shows the first groups in the aggregator's stable group-key
   order, not necessarily the top validation-F1 candidates.
 - For each candidate, inspect:
@@ -599,6 +604,43 @@ Expected result:
 - Mean/std/min/max across final seeds.
 - `test_f1_macro` is the main final performance metric.
 - `training_time_sec` is the final model cost metric for TF-IDF.
+- If `Pareto CSVs` is checked, `final_runs.csv` contains one row per final
+  seed, including failed final seeds with blank metrics and error fields.
+  `method_summary.csv` contains the final mean/std row used for method
+  comparison and Pareto analysis, plus completed/failed final-seed counts.
+
+For final Pareto reporting, check these columns:
+
+```text
+final_runs.csv:
+method, seed, status, selected_hyperparams_json, test_macro_f1, test_precision,
+test_recall, test_accuracy, final_train_time_s, peak_gpu_memory_mb,
+gpu_type, trainable_params, total_params
+
+method_summary.csv:
+method, test_macro_f1_mean, test_macro_f1_std,
+final_train_time_mean_s, final_train_time_std_s,
+peak_gpu_memory_mean_mb, trainable_params, total_params,
+completed_hpo_trials, failed_hpo_trials, actual_hpo_time_s,
+hpo_gpu_type, final_gpu_type, selected_hyperparams_json, pareto_status,
+completed_final_seeds, failed_final_seeds
+```
+
+`actual_hpo_time_s` in `method_summary.csv` is random-search tuning-trial time
+only, filtered to the same method/search space/HPO seed as the final config.
+The old TF-IDF search-space alias `tfidf_lr` is normalized to `tfidf_logreg`
+when results are aggregated. If you also ran confirmation seeds, use the
+aggregate JSON top-level `hpo_total_training_time_sec` field when you want
+random-search tuning plus confirmation selection cost.
+
+If a final run is missing `config_hash`, it is kept as a separate
+`missing_config_hash:*` row and marked `insufficient_data`; do not use that row
+for the Pareto frontier until the final run is regenerated through the launcher.
+
+For TF-IDF, `gpu_type` is normally `cpu` and `gpu_hours` is blank because
+scikit-learn logistic regression does not use the Colab GPU. Use wall-clock
+training time plus trainable/total parameter count for TF-IDF efficiency
+reporting.
 
 ## Local Output Files
 

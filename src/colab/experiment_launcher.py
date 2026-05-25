@@ -8,6 +8,7 @@ from typing import Any
 from src.experiments.aggregate_results import (
     build_aggregate_report,
     write_aggregate_report,
+    write_pareto_csvs,
 )
 from src.experiments.hpo import (
     DEFAULT_SEARCH_SPACE_PATH,
@@ -147,6 +148,16 @@ class ExperimentLauncher:
             description="Agg output",
             layout=widgets.Layout(width="620px"),
         )
+        self.write_pareto_csvs = widgets.Checkbox(
+            value=True,
+            description="Pareto CSVs",
+        )
+        self.pareto_csv_dir = widgets.Text(
+            value="",
+            placeholder="blank writes beside aggregate JSON",
+            description="CSV dir",
+            layout=widgets.Layout(width="520px"),
+        )
         self.aggregate_group_by = widgets.Text(
             value="method search_stage config_hash",
             description="Group by",
@@ -170,6 +181,7 @@ class ExperimentLauncher:
                 widgets.HBox([self.seed_run_stage, self.seed_output_root]),
                 widgets.HBox([self.aggregate_input, self.aggregate_group_by]),
                 widgets.HBox([self.aggregate_output, self.aggregate_metrics]),
+                widgets.HBox([self.write_pareto_csvs, self.pareto_csv_dir]),
             ]
         )
 
@@ -232,6 +244,8 @@ class ExperimentLauncher:
             or f"{aggregate_input.rstrip('/')}/aggregate_summary.json",
             "group_by": group_by or ["method", "search_stage", "config_hash"],
             "metrics": metrics or ["eval_f1_macro", "training_time_sec"],
+            "write_pareto_csvs": bool(self.write_pareto_csvs.value),
+            "pareto_csv_dir": self.pareto_csv_dir.value or None,
         }
 
     def build_command(self) -> list[str]:
@@ -241,6 +255,7 @@ class ExperimentLauncher:
         if config.get("overwrite_output_dir"):
             overrides["overwrite_output_dir"] = True
         config_hash_keys = None
+        search_space_name = None
         if spec.stage in {"tuning", "final"}:
             search_space_name = config.get("search_space") or default_search_space_name(
                 spec.method
@@ -250,9 +265,16 @@ class ExperimentLauncher:
                 search_space_name,
             )
         validate_direct_run_overrides(spec, overrides)
+        command_overrides = dict(overrides)
+        if search_space_name is not None:
+            command_overrides.setdefault(
+                "search_method",
+                "manual" if spec.stage == "final" else "catalog_run",
+            )
+            command_overrides.setdefault("search_space_name", search_space_name)
         return build_experiment_command(
             spec,
-            overrides=overrides,
+            overrides=command_overrides,
             use_wandb=config["use_wandb"],
             wandb_entity=config["wandb_entity"],
             wandb_project=config["wandb_project"],
@@ -298,6 +320,7 @@ class ExperimentLauncher:
             n_trials=n_trials,
             hpo_seed=int(config["hpo_seed"]),
             output_root=config["trial_output_root"],
+            search_space_name=search_space_name,
             trial_cap=get_trial_cap(self.search_config, search_space_name),
             time_cap_gpu_hours=get_time_cap_gpu_hours(
                 self.search_config,
@@ -351,6 +374,7 @@ class ExperimentLauncher:
             output_root=config["seed_output_root"]
             or f"/content/drive/MyDrive/hate_speech_ft/outputs/{seed_stage}",
             search_stage=seed_stage,
+            search_space_name=search_space_name,
             fixed_overrides=shared_fixed_command_overrides(self.search_config),
             trial_cap=get_trial_cap(self.search_config, search_space_name),
             time_cap_gpu_hours=get_time_cap_gpu_hours(
@@ -434,6 +458,10 @@ class ExperimentLauncher:
         ]
         for metric in config["metrics"]:
             command.extend(["--metric", metric])
+        if config["write_pareto_csvs"]:
+            command.append("--write_pareto_csvs")
+            if config["pareto_csv_dir"]:
+                command.extend(["--csv_dir", config["pareto_csv_dir"]])
         return command
 
     def preview_aggregate_command(self) -> str:
@@ -450,6 +478,10 @@ class ExperimentLauncher:
         )
         output_path = write_aggregate_report(config["output"], report)
         print(f"Wrote aggregate report: {output_path}")
+        if config["write_pareto_csvs"]:
+            csv_dir = config["pareto_csv_dir"] or str(Path(config["output"]).parent)
+            for csv_path in write_pareto_csvs(csv_dir, report):
+                print(f"Wrote Pareto CSV: {csv_path}")
         print(
             f"Runs: {report['total_runs']} "
             f"completed={report['completed_runs']} failed={report['failed_runs']}"

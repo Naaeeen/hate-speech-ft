@@ -49,6 +49,8 @@ COMMON_DEFAULTS = {
     "search_stage": "smoke",
     "trial_id": "method_template_manual",
     "config_hash": None,
+    "search_method": None,
+    "search_space_name": None,
     "hpo_seed": None,
     "hpo_trial_cap": None,
     "hpo_time_cap_gpu_hours": None,
@@ -128,6 +130,18 @@ def add_common_method_arguments(
     )
     _add_argument_if_missing(parser, "--trial_id", type=str, default=values["trial_id"])
     _add_argument_if_missing(parser, "--config_hash", type=str, default=values["config_hash"])
+    _add_argument_if_missing(
+        parser,
+        "--search_method",
+        type=str,
+        default=values["search_method"],
+    )
+    _add_argument_if_missing(
+        parser,
+        "--search_space_name",
+        type=str,
+        default=values["search_space_name"],
+    )
     _add_argument_if_missing(parser, "--hpo_seed", type=int, default=values["hpo_seed"])
     _add_argument_if_missing(
         parser,
@@ -444,6 +458,8 @@ def build_common_experiment_config(
         "search_stage": getattr(args, "search_stage", None),
         "trial_id": getattr(args, "trial_id", None),
         "config_hash": getattr(args, "config_hash", None),
+        "search_method": getattr(args, "search_method", None),
+        "search_space_name": getattr(args, "search_space_name", None),
         "hpo_seed": getattr(args, "hpo_seed", None),
         "hpo_trial_cap": getattr(args, "hpo_trial_cap", None),
         "hpo_time_cap_gpu_hours": getattr(args, "hpo_time_cap_gpu_hours", None),

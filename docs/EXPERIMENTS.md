@@ -419,6 +419,7 @@ Example for final seed reporting:
 ```bash
 python src/aggregate_results.py outputs/final \
   --output outputs/final/aggregate_summary.json \
+  --write_pareto_csvs \
   --group_by method config_hash \
   --metric eval_f1_macro \
   --metric test_f1_macro \
@@ -426,6 +427,19 @@ python src/aggregate_results.py outputs/final \
   --metric best_epoch \
   --metric trainable_pct
 ```
+
+Add `--write_pareto_csvs` when the report should also create analysis tables
+beside the aggregate JSON:
+
+```text
+hpo_runs.csv        # one random-search tuning trial per row, including failed/OOM trials
+final_runs.csv      # one final seed per row, including failed final seeds
+method_summary.csv  # one selected final config per method/config hash
+```
+
+Use `--csv_dir outputs/pareto` to place those CSV files somewhere else. The
+Colab `ExperimentLauncher` has the same option through the `Pareto CSVs`
+checkbox and `CSV dir` field.
 
 The `std` field is sample standard deviation when at least two completed runs
 exist in the group. Failed runs are counted in the group but excluded from
@@ -436,11 +450,51 @@ errors. Flattened records also carry model-selection fields such as
 when they are present.
 Aggregate reports also write `total_training_time_sec`,
 `total_training_time_hours`, `hpo_total_training_time_sec`, and
-`hpo_total_training_time_hours`. The HPO total includes tuning and confirmation
-runs, so selection cost can be reported without silently dropping failed runs
-that recorded partial runtime. Group records include `total_training_time_sec`
-and `total_training_time_hours`. `best_epoch` is included in the default metric
+`hpo_total_training_time_hours`. The HPO total includes runs explicitly marked
+as random-search tuning or confirmation runs, so direct catalog tuning runs do
+not inflate search-budget reporting. Failed HPO runs that recorded partial
+runtime are still counted. Group records include `total_training_time_sec` and
+`total_training_time_hours`. `best_epoch` is included in the default metric
 list, so mean/std/min/max gives the best-epoch mean/range.
+
+For Pareto analysis, use the CSVs as follows:
+
+- `hpo_runs.csv` records random-search HPO budget and search cost:
+  `search_method`,
+  `search_space`, `hpo_seed`, training seed, trial cap, GPU-hour cap,
+  sampled hyperparameters, validation macro-F1, status, failed/OOM flag,
+  training time, GPU hours, peak memory, GPU type, and parameter counts.
+- `final_runs.csv` records one final seed row, including failed final seeds:
+  method, config hash, seed, status, failed/OOM flag, selected
+  hyperparameters, validation macro-F1, test macro-F1, test
+  precision/recall/accuracy, per-class test F1, final training time, GPU
+  hours, peak memory, GPU type, trainable/total parameters, prediction path,
+  model artifact metadata, and error fields when a final seed fails.
+- `method_summary.csv` aggregates final seeds into mean/std fields for
+  test metrics, final training time, and peak memory. It also carries
+  HPO completed/failed/OOM counts, actual HPO training time, HPO GPU hours,
+  HPO/final GPU types, trial/time caps, best validation macro-F1,
+  selected HPO trial id/path for the matching config hash, selected
+  hyperparameters, best-epoch mean/range, final completed/failed seed counts,
+  and a basic Pareto status. If a final config has no matching completed HPO
+  trial with the same `config_hash`, the selected HPO fields are blank so the
+  missing linkage is visible instead of silently borrowing another config's
+  validation score. If a final run is missing `config_hash`, it gets a
+  uniqueness-preserving `missing_config_hash:*` id and `pareto_status` is
+  `insufficient_data` so it is not used as a frontier point.
+
+In `method_summary.csv`, `actual_hpo_time_s` and `actual_hpo_gpu_hours` are
+random-search tuning-trial totals for the same method, canonical search space,
+and HPO seed as the final config. Legacy TF-IDF alias `tfidf_lr` is normalized
+to `tfidf_logreg` during aggregation. The top-level JSON fields
+`hpo_total_training_time_sec` and `hpo_total_training_time_hours` include both
+random-search tuning and confirmation runs for full selection-cost reporting.
+
+The main Pareto plot should use `method_summary.csv` from final runs:
+maximize `test_macro_f1_mean`, minimize `final_train_time_mean_s`,
+`peak_gpu_memory_mean_mb`, and `trainable_params`. Keep `hpo_runs.csv` as
+separate budget/fairness evidence instead of mixing search cost into the main
+final-model frontier.
 
 ## Adding A New Method
 

@@ -166,6 +166,28 @@ Saved local model artifacts are surfaced from `result_summary.json` under
 The default aggregate metrics are validation macro-F1, training time, and
 `best_epoch`; the report also writes total training time in seconds/hours.
 
+Leave `Pareto CSVs` checked when you want report-ready tables. The launcher then
+writes these files beside `Agg output`, unless `CSV dir` is filled:
+
+```text
+hpo_runs.csv
+final_runs.csv
+method_summary.csv
+```
+
+Use `hpo_runs.csv` for random-search budget reporting, `final_runs.csv` for per-seed
+raw values including failed final seeds, and `method_summary.csv` for Pareto
+plots and final method comparison. The CSVs include search method, search space,
+trial/time caps, completed/failed/OOM counts, validation/test metrics, training
+time, GPU hours, GPU type, peak memory, trainable/total parameters, selected
+hyperparameters, and best-epoch summaries where available.
+`method_summary.csv` uses random-search tuning-trial totals for HPO cost,
+filtered to the same method/search space/HPO seed as the final config. The
+aggregate JSON top-level HPO total includes random-search tuning plus
+confirmation. If a final config hash does not match a completed HPO trial,
+selected HPO score fields are left blank. Final runs without `config_hash` are
+kept isolated as `missing_config_hash:*` rows and marked `insufficient_data`.
+
 ## Old DistilBERT-Only Launcher
 
 The old DistilBERT-only W&B launcher was removed. New notebook work should use

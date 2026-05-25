@@ -35,6 +35,8 @@ DIRECT_RUN_PROTECTED_OVERRIDE_KEYS = {
     "search_stage",
     "trial_id",
     "config_hash",
+    "search_method",
+    "search_space_name",
     "hpo_seed",
     "hpo_trial_cap",
     "hpo_time_cap_gpu_hours",

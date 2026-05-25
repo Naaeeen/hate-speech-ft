@@ -13,6 +13,7 @@ from src.experiments.aggregate_results import (
     DEFAULT_METRICS,
     build_aggregate_report,
     write_aggregate_report,
+    write_pareto_csvs,
 )
 
 
@@ -45,6 +46,19 @@ def parse_args():
             "runtime, parameter, and best_epoch metrics."
         ),
     )
+    parser.add_argument(
+        "--write_pareto_csvs",
+        action="store_true",
+        help="Also write hpo_runs.csv, final_runs.csv, and method_summary.csv.",
+    )
+    parser.add_argument(
+        "--csv_dir",
+        default=None,
+        help=(
+            "Directory for Pareto CSV files. Defaults to the aggregate JSON "
+            "output directory."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -58,6 +72,11 @@ def main() -> int:
     )
     output_path = write_aggregate_report(args.output, report)
     print(f"Wrote aggregate report: {output_path}")
+    if args.write_pareto_csvs:
+        csv_dir = Path(args.csv_dir) if args.csv_dir else output_path.parent
+        csv_paths = write_pareto_csvs(csv_dir, report)
+        for csv_path in csv_paths:
+            print(f"Wrote Pareto CSV: {csv_path}")
     print(
         f"Runs: {report['total_runs']} "
         f"completed={report['completed_runs']} failed={report['failed_runs']} "

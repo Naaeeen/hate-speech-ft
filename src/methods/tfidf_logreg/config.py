@@ -75,6 +75,8 @@ def build_experiment_config(
         "search_stage": args.search_stage,
         "trial_id": args.trial_id,
         "config_hash": args.config_hash,
+        "search_method": getattr(args, "search_method", None),
+        "search_space_name": getattr(args, "search_space_name", None),
         "hpo_seed": args.hpo_seed,
         "hpo_trial_cap": getattr(args, "hpo_trial_cap", None),
         "hpo_time_cap_gpu_hours": getattr(args, "hpo_time_cap_gpu_hours", None),

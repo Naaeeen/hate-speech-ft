@@ -61,6 +61,8 @@ class HpoTests(unittest.TestCase):
 
         self.assertEqual(len(trials), 2)
         self.assertEqual(trials[0]["search_stage"], "tuning")
+        self.assertEqual(trials[0]["search_method"], "random_search")
+        self.assertEqual(trials[0]["search_space_name"], "full_ft")
         self.assertEqual(trials[0]["hpo_seed"], 123)
         self.assertEqual(trials[0]["optim"], "adamw_torch")
         self.assertIn("config_hash", trials[0])
@@ -152,8 +154,11 @@ class HpoTests(unittest.TestCase):
             seeds=[42],
             output_root="outputs/final",
             search_stage="final",
+            search_space_name="full_ft",
         )
 
+        self.assertEqual(runs[0]["search_method"], "random_search")
+        self.assertEqual(runs[0]["search_space_name"], "full_ft")
         self.assertEqual(runs[0]["data_fraction"], 1.0)
         self.assertIsNone(runs[0]["max_train_samples"])
         self.assertIsNone(runs[0]["max_eval_samples"])

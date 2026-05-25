@@ -454,6 +454,7 @@ After running several trials or final seeds, aggregate local summaries:
 ```bash
 python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
+  --write_pareto_csvs \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
   --metric training_time_sec \
@@ -465,9 +466,18 @@ For final test reporting, include `--metric test_f1_macro` and group by the
 fields that define the fixed config, usually `method config_hash`.
 Aggregate reports also include `total_training_time_sec`,
 `total_training_time_hours`, `hpo_total_training_time_sec`, and
-`hpo_total_training_time_hours`. The default aggregation metrics include
+`hpo_total_training_time_hours`. HPO totals include only runs explicitly marked
+as random-search tuning or confirmation runs, so manual/catalog tuning commands
+do not inflate the search budget. The default aggregation metrics include
 `best_epoch`, which reports mean/std/min/max and can be used as the best-epoch
 mean/range.
+With `--write_pareto_csvs`, aggregation also writes `hpo_runs.csv`,
+`final_runs.csv`, and `method_summary.csv`. These tables are the recommended
+surface for Pareto analysis: use `final_runs.csv` for raw per-seed values,
+`method_summary.csv` for final method means/stds and Pareto axes, and
+`hpo_runs.csv` for random-search HPO budget/fairness reporting. Final runs that
+are missing `config_hash` are kept isolated with a `missing_config_hash:*` id
+and marked `insufficient_data` for Pareto status.
 
 ## Direct Method Runners
 

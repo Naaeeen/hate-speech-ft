@@ -34,6 +34,8 @@ class MethodCommonTests(unittest.TestCase):
 
         self.assertEqual(args.method, "lora")
         self.assertEqual(args.trial_id, "lora_manual")
+        self.assertIsNone(args.search_method)
+        self.assertIsNone(args.search_space_name)
         self.assertIsNone(args.hpo_time_cap_gpu_hours)
         self.assertEqual(args.output_dir, "outputs/lora_manual")
         self.assertEqual(args.dataset_name, "Hate-speech-CNERG/hatexplain")
@@ -66,6 +68,8 @@ class MethodCommonTests(unittest.TestCase):
         args.tokenizer_name = "distilbert-base-uncased"
         args.hpo_trial_cap = 6
         args.hpo_time_cap_gpu_hours = 2.0
+        args.search_method = "random_search"
+        args.search_space_name = "lora"
 
         config = build_common_experiment_config(
             args,
@@ -78,6 +82,8 @@ class MethodCommonTests(unittest.TestCase):
         self.assertEqual(config["tokenizer_name"], "distilbert-base-uncased")
         self.assertEqual(config["hpo_trial_cap"], 6)
         self.assertEqual(config["hpo_time_cap_gpu_hours"], 2.0)
+        self.assertEqual(config["search_method"], "random_search")
+        self.assertEqual(config["search_space_name"], "lora")
         self.assertEqual(config["hyperparameters"]["learning_rate"], 3e-4)
         self.assertEqual(config["hyperparameters"]["lora_r"], 8)
         self.assertEqual(config["checkpoint_policy"]["final_model_source"], "best_checkpoint")

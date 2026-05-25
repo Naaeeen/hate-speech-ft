@@ -14,6 +14,8 @@ DEFAULT_SEARCH_SPACE_PATH = REPO_ROOT / "configs" / "search_spaces.json"
 TRIAL_METADATA_KEYS = {
     "search_stage",
     "trial_id",
+    "search_method",
+    "search_space_name",
     "hpo_seed",
     "hpo_trial_cap",
     "hpo_time_cap_gpu_hours",
@@ -26,6 +28,8 @@ TRIAL_METADATA_KEYS = {
 PROTECTED_USER_OVERRIDE_KEYS = {
     "search_stage",
     "trial_id",
+    "search_method",
+    "search_space_name",
     "hpo_seed",
     "hpo_trial_cap",
     "hpo_time_cap_gpu_hours",
@@ -366,6 +370,8 @@ def build_trial_overrides(
     hpo_seed: int,
     output_root: str,
     search_stage: str = "tuning",
+    search_method: str = "random_search",
+    search_space_name: str | None = None,
     trial_cap: int | None = None,
     time_cap_gpu_hours: float | None = None,
     allow_over_cap: bool = False,
@@ -380,6 +386,7 @@ def build_trial_overrides(
 
     trials = []
     method_part = default_search_space_name(method)
+    search_space_label = search_space_name or method_part
     combinations = enumerate_search_space(search_space)
     if n_trials > len(combinations):
         raise ValueError(
@@ -411,6 +418,8 @@ def build_trial_overrides(
             {
                 "search_stage": search_stage,
                 "trial_id": trial_id,
+                "search_method": search_method,
+                "search_space_name": search_space_label,
                 "hpo_seed": hpo_seed,
                 "hpo_trial_cap": trial_cap,
                 "hpo_time_cap_gpu_hours": time_cap_gpu_hours,
@@ -429,6 +438,8 @@ def build_seed_run_overrides(
     seeds: list[int],
     output_root: str,
     search_stage: str,
+    search_method: str = "random_search",
+    search_space_name: str | None = None,
     fixed_overrides: dict[str, Any] | None = None,
     trial_cap: int | None = None,
     time_cap_gpu_hours: float | None = None,
@@ -437,6 +448,7 @@ def build_seed_run_overrides(
         raise ValueError("--suggest_seed_runs supports only confirm or final.")
 
     method_part = default_search_space_name(method)
+    search_space_label = search_space_name or method_part
     fixed_overrides = dict(fixed_overrides or {})
     seed_runs = []
     for seed in seeds:
@@ -444,6 +456,8 @@ def build_seed_run_overrides(
         overrides = {
             **fixed_overrides,
             "search_stage": search_stage,
+            "search_method": search_method,
+            "search_space_name": search_space_label,
             "seed": seed,
             "data_fraction": 1.0,
             "max_train_samples": None,

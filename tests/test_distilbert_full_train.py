@@ -47,11 +47,17 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
                 "6",
                 "--hpo_time_cap_gpu_hours",
                 "2.0",
+                "--search_method",
+                "random_search",
+                "--search_space_name",
+                "full_ft",
             ]
         )
 
         self.assertEqual(args.hpo_trial_cap, 6)
         self.assertEqual(args.hpo_time_cap_gpu_hours, 2.0)
+        self.assertEqual(args.search_method, "random_search")
+        self.assertEqual(args.search_space_name, "full_ft")
 
     def test_build_fixed_label_maps_uses_hatexplain_class_order(self):
         id2label, label2id, num_labels = build_fixed_label_maps()

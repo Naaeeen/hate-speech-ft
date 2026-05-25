@@ -190,8 +190,8 @@ experiments are for test reporting only. The CLI blocks quick/final bases and
 blocks smoke bases unless `--allow_smoke_hpo` is passed for a command-shape
 test; the Colab launcher requires a tuning base.
 HPO trial identity fields are launcher-managed: do not set `output_dir`,
-`trial_id`, `search_stage`, `hpo_seed`, `hpo_trial_cap`,
-`hpo_time_cap_gpu_hours`, or `config_hash` through `--set`.
+`trial_id`, `search_stage`, `search_method`, `search_space_name`, `hpo_seed`,
+`hpo_trial_cap`, `hpo_time_cap_gpu_hours`, or `config_hash` through `--set`.
 Use `--trial_output_root` or edit the catalog/search-space config instead.
 The time cap is recorded in generated commands and run configs; it is not
 currently enforced as an automatic kill switch.
