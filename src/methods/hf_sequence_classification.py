@@ -15,6 +15,7 @@ from src.experiments.results import (
 from src.methods.common import (
     clear_existing_run_artifacts,
     validate_output_dir_for_run,
+    validate_sample_selection_args,
     validate_test_evaluation_policy,
 )
 from src.methods.hf_common import (
@@ -38,7 +39,13 @@ from src.methods.transformer_data import (
     find_split_name,
     resolve_eval_split_name,
 )
-from src.utils.wandb_config import WandbSettings, finish_wandb_run, init_wandb_run
+from src.utils.wandb_config import (
+    WandbSettings,
+    finish_wandb_run,
+    init_wandb_run,
+    log_wandb_best_effort,
+    update_wandb_config_best_effort,
+)
 
 
 @dataclass(frozen=True)
@@ -149,13 +156,8 @@ def initialize_hf_run(
         print(f"Cannot start run: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
 
-    if args.overwrite_output_dir:
-        removed_artifacts = clear_existing_run_artifacts(args.output_dir)
-        if removed_artifacts:
-            preview = ", ".join(path.name for path in removed_artifacts[:8])
-            print(f"Cleared existing run artifacts from {args.output_dir}: {preview}")
-
     os.makedirs(args.output_dir, exist_ok=True)
+    setattr(args, "_run_artifacts_prepared", False)
     gpu_type = get_gpu_type()
     precision_policy = initial_precision_policy(args)
     experiment_config = build_setup_failure_config_fn(
@@ -183,6 +185,7 @@ def start_hf_run(
         precision_policy=precision_policy,
         gpu_type=setup.gpu_type,
     )
+    validate_sample_selection_args(args)
     validate_test_evaluation_policy(
         search_stage=args.search_stage,
         run_test=args.run_test,
@@ -190,6 +193,20 @@ def start_hf_run(
     validate_checkpoint_policy(args)
     wandb_run = init_wandb_run(setup.wandb_settings, config=experiment_config)
     return precision_policy, experiment_config, wandb_run
+
+
+def prepare_hf_output_dir(args: Any) -> None:
+    validate_output_dir_for_run(
+        args.output_dir,
+        overwrite=args.overwrite_output_dir,
+    )
+    if args.overwrite_output_dir:
+        removed_artifacts = clear_existing_run_artifacts(args.output_dir)
+        if removed_artifacts:
+            preview = ", ".join(path.name for path in removed_artifacts[:8])
+            print(f"Cleared existing run artifacts from {args.output_dir}: {preview}")
+    os.makedirs(args.output_dir, exist_ok=True)
+    setattr(args, "_run_artifacts_prepared", True)
 
 
 def prepare_hf_classification_run(
@@ -441,8 +458,7 @@ def write_config_snapshot(
 ) -> Path:
     resolved_config_path = write_resolved_config(output_dir, experiment_config)
     print(f"Resolved config: {resolved_config_path}")
-    if wandb_run is not None:
-        wandb_run.config.update(experiment_config, allow_val_change=True)
+    update_wandb_config_best_effort(wandb_run, experiment_config)
     return resolved_config_path
 
 
@@ -484,22 +500,47 @@ def save_final_model(
         return {}
 
     print(f"\nSaving final model and tokenizer from {model_source}...")
+    output_path = Path(output_dir)
+    before = _snapshot_direct_files(output_path)
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)
-    output_path = Path(output_dir)
     artifact_names = (
         "model.safetensors",
+        "adapter_model.safetensors",
+        "adapter_model.bin",
+        "adapter_config.json",
         "pytorch_model.bin",
         "config.json",
         "training_args.bin",
         "tokenizer.json",
         "tokenizer_config.json",
         "special_tokens_map.json",
+        "vocab.txt",
+        "vocab.json",
+        "merges.txt",
+        "spiece.model",
+        "sentencepiece.bpe.model",
+        "added_tokens.json",
     )
-    return {
+    artifacts = {
         name: output_path / name
         for name in artifact_names
         if (output_path / name).exists()
+    }
+    for name, signature in _snapshot_direct_files(output_path).items():
+        if before.get(name) != signature:
+            artifacts[name] = output_path / name
+    return dict(sorted(artifacts.items()))
+
+
+def _snapshot_direct_files(output_dir: str | Path) -> dict[str, tuple[int, int]]:
+    output_path = Path(output_dir)
+    if not output_path.exists():
+        return {}
+    return {
+        child.name: (child.stat().st_mtime_ns, child.stat().st_size)
+        for child in output_path.iterdir()
+        if child.is_file()
     }
 
 
@@ -578,22 +619,24 @@ def write_failure_summary(
     error: Exception,
     runtime_metrics: dict[str, Any],
     wandb_run,
+    clear_existing_artifacts: bool = True,
 ) -> Path:
     failure_path = write_failure_file(
         args.output_dir,
         config=config,
         error=error,
         runtime_metrics=runtime_metrics,
+        clear_existing_artifacts=clear_existing_artifacts,
     )
-    if wandb_run is not None:
-        wandb_run.log(
-            {
-                "status": "failed",
-                "failure_phase": runtime_metrics.get("failure_phase"),
-                "error_type": type(error).__name__,
-                "error_message": str(error),
-            }
-        )
+    log_wandb_best_effort(
+        wandb_run,
+        {
+            "status": "failed",
+            "failure_phase": runtime_metrics.get("failure_phase"),
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+        },
+    )
     print(f"\nFailure summary: {failure_path}")
     return failure_path
 
@@ -621,6 +664,7 @@ def finish_failed_setup_run(
         error=error,
         runtime_metrics=runtime_metrics,
         wandb_run=wandb_run,
+        clear_existing_artifacts=bool(getattr(args, "_run_artifacts_prepared", False)),
     )
     finish_wandb_run(wandb_run)
 
@@ -649,6 +693,7 @@ def finish_failed_train_run(
         error=error,
         runtime_metrics=runtime_metrics,
         wandb_run=wandb_run,
+        clear_existing_artifacts=True,
     )
 
 
@@ -665,11 +710,7 @@ def write_success_outputs(
     model_artifact_paths: dict[str, Path] | None = None,
     extra_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
-    if wandb_run is not None:
-        wandb_run.log(runtime_metrics)
-        wandb_run.log({"model_selection": model_selection})
-
-    return write_result_files(
+    result_paths = write_result_files(
         args.output_dir,
         config=config,
         eval_metrics=eval_metrics,
@@ -680,6 +721,12 @@ def write_success_outputs(
         artifact_paths=model_artifact_paths,
         extra_metrics=extra_metrics,
     )
+    log_wandb_best_effort(
+        wandb_run,
+        runtime_metrics,
+        {"model_selection": model_selection},
+    )
+    return result_paths
 
 
 def print_run_report(

@@ -92,9 +92,11 @@ def write_failure_file(
     config: dict[str, Any],
     error: BaseException,
     runtime_metrics: dict[str, Any] | None = None,
+    clear_existing_artifacts: bool = True,
 ) -> Path:
     output_path = Path(output_dir)
-    clear_existing_run_artifacts(output_path)
+    if clear_existing_artifacts:
+        clear_existing_run_artifacts(output_path)
     return write_json(
         output_path / "failure_summary.json",
         {

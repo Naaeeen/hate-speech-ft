@@ -31,6 +31,9 @@ The notebook should not contain method implementation logic. Put method code in:
 ```text
 src/methods/distilbert_full/train.py
 src/methods/distilbert_lp_ft/train.py
+src/methods/frozen_distilbert/train.py
+src/methods/distilbert_lora/train.py
+src/methods/distilbert_efficient_head/train.py
 src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
 src/methods/<method>/train.py
@@ -62,9 +65,10 @@ When `Trials > 0`, do not put `output_dir`, `trial_id`, `search_stage`,
 `hpo_seed`, or `config_hash` in the override box. Trial identity is generated
 from the selected experiment, search space, HPO seed, and Trial root.
 Select a tuning experiment such as `distilbert_full_tuning`,
-`distilbert_lp_ft_tuning`, `tfidf_logreg_tuning`, or `bilstm_tuning`; the Colab
-launcher rejects smoke/quick/final bases so setup caps are not mislabeled as
-HPO.
+`distilbert_lp_ft_tuning`, `frozen_distilbert_tuning`, `distilbert_lora_tuning`,
+`distilbert_efficient_head_tuning`, `tfidf_logreg_tuning`, or `bilstm_tuning`;
+the Colab launcher rejects smoke/quick/final bases so setup caps are not
+mislabeled as HPO.
 The generated `config_hash` uses the selected search space's `config_hash_keys`,
 so it follows the method's effective hyperparameters instead of unrelated
 defaults from other method families.

@@ -27,6 +27,13 @@ class FakeModel:
     def parameters(self):
         return [parameter for _, parameter in self.items]
 
+    def state_dict(self):
+        return {
+            "distilbert.transformer.layer.0.attention.q_lin.weight": object(),
+            "pre_classifier.weight": object(),
+            "classifier.bias": object(),
+        }
+
 
 class DistilbertLoraTrainTests(unittest.TestCase):
     def test_parse_module_names_accepts_json_and_csv(self):
@@ -63,6 +70,18 @@ class DistilbertLoraTrainTests(unittest.TestCase):
             peft_utils.parse_module_names(args.modules_to_save),
             ["pre_classifier", "classifier"],
         )
+
+    def test_lora_rejects_modules_to_save_without_full_head_before_training(self):
+        from src.methods.distilbert_lora import training
+
+        context = type("FakeContext", (), {"model": FakeModel()})()
+        args = type("FakeArgs", (), {"modules_to_save": "classifier"})()
+
+        with patch.object(training, "apply_lora_to_model") as apply_lora:
+            with self.assertRaisesRegex(ValueError, "pre_classifier"):
+                training.apply_lora_to_context(context, args)
+
+        apply_lora.assert_not_called()
 
     def test_lora_main_uses_shared_hf_workflow_and_peft_model(self):
         import src.methods.distilbert_lora.train as lora_train

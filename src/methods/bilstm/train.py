@@ -38,7 +38,12 @@ from src.methods.hf_common import (  # noqa: E402
     get_peak_memory_mb,
     get_peak_memory_reserved_mb,
 )
-from src.utils.wandb_config import finish_wandb_run, init_wandb_run  # noqa: E402
+from src.utils.wandb_config import (  # noqa: E402
+    finish_wandb_run,
+    init_wandb_run,
+    log_wandb_best_effort,
+    update_wandb_config_best_effort,
+)
 
 
 def _validate_startup_args(args, output_dir: Path) -> None:
@@ -128,6 +133,7 @@ def main() -> None:
     gpu_type = get_gpu_type()
     resolved_device = "unknown"
     wandb_run = None
+    run_artifacts_prepared = False
     config = build_experiment_config(
         args,
         gpu_type=gpu_type,
@@ -139,8 +145,6 @@ def main() -> None:
     except ValueError as exc:
         print(f"Cannot start run: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
-
-    _prepare_output_dir(args, output_dir)
 
     try:
         wandb_run = init_wandb_run(resolve_wandb_settings(args), config=config)
@@ -217,9 +221,10 @@ def main() -> None:
             class_weights=class_weights,
             setup_complete=True,
         )
+        _prepare_output_dir(args, output_dir)
+        run_artifacts_prepared = True
         write_resolved_config(output_dir, config)
-        if wandb_run is not None:
-            wandb_run.config.update(config, allow_val_change=True)
+        update_wandb_config_best_effort(wandb_run, config)
 
         model_path = save_final_model(
             output_dir,
@@ -260,15 +265,6 @@ def main() -> None:
             best_step=result["model_selection"]["best_step"],
             best_checkpoint=result["model_selection"]["best_checkpoint"],
         )
-        if wandb_run is not None:
-            for record in result["history"]:
-                wandb_run.log(record)
-            wandb_run.log(result["eval_metrics"])
-            if result["test_metrics"] is not None:
-                wandb_run.log(result["test_metrics"])
-            wandb_run.log(runtime_metrics)
-            wandb_run.log({"model_selection": model_selection})
-
         result_paths = write_result_files(
             output_dir=output_dir,
             config=config,
@@ -280,6 +276,14 @@ def main() -> None:
             artifact_paths=model_artifact_paths,
             extra_metrics={"history": result["history"]},
             status="completed",
+        )
+        log_wandb_best_effort(
+            wandb_run,
+            *result["history"],
+            result["eval_metrics"],
+            *([result["test_metrics"]] if result["test_metrics"] is not None else []),
+            runtime_metrics,
+            {"model_selection": model_selection},
         )
         _print_result_report(
             output_dir=output_dir,
@@ -305,16 +309,17 @@ def main() -> None:
             config=config,
             error=exc,
             runtime_metrics=runtime_metrics,
+            clear_existing_artifacts=run_artifacts_prepared,
         )
-        if wandb_run is not None:
-            wandb_run.log(
-                {
-                    "status": "failed",
-                    "failure_phase": runtime_metrics["failure_phase"],
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                }
-            )
+        log_wandb_best_effort(
+            wandb_run,
+            {
+                "status": "failed",
+                "failure_phase": runtime_metrics["failure_phase"],
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            },
+        )
         print(f"\nFailure summary: {output_dir / 'failure_summary.json'}")
         raise
     finally:

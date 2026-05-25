@@ -10,6 +10,8 @@ from src.methods.hf_sequence_classification import (
     HfLibraries,
     build_runtime_metrics,
     initialize_hf_run,
+    prepare_hf_output_dir,
+    save_final_model,
     save_final_predictions,
     write_success_outputs,
 )
@@ -28,6 +30,26 @@ class FakeTrainer:
             predictions=[[0.8, 0.1, 0.1] for _ in labels],
             label_ids=labels,
         )
+
+
+class FakeSaveTrainer:
+    def save_model(self, output_dir):
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        (output_path / "adapter_model.safetensors").write_text(
+            "adapter",
+            encoding="utf-8",
+        )
+        (output_path / "adapter_model.bin").write_text("adapter", encoding="utf-8")
+        (output_path / "adapter_config.json").write_text("{}", encoding="utf-8")
+        (output_path / "training_args.bin").write_text("args", encoding="utf-8")
+
+
+class FakeSaveTokenizer:
+    def save_pretrained(self, output_dir):
+        output_path = Path(output_dir)
+        (output_path / "tokenizer_config.json").write_text("{}", encoding="utf-8")
+        (output_path / "vocab.txt").write_text("[PAD]\n[UNK]\n", encoding="utf-8")
 
 
 def build_context(output_dir, *, search_stage="final", run_test=True):
@@ -98,9 +120,14 @@ class HfSequenceClassificationWorkflowTests(unittest.TestCase):
                 resolve_wandb_settings_fn=lambda _: WandbSettings(enabled=False),
             )
 
-            self.assertFalse(stale_result.exists())
+            self.assertTrue(stale_result.exists())
             self.assertTrue(note.exists())
             self.assertEqual(setup.experiment_config["output_dir"], str(output_dir))
+
+            prepare_hf_output_dir(args)
+
+            self.assertFalse(stale_result.exists())
+            self.assertTrue(note.exists())
 
     def test_initialize_hf_run_records_gpu_type(self):
         with TemporaryDirectory() as tmp:
@@ -158,6 +185,23 @@ class HfSequenceClassificationWorkflowTests(unittest.TestCase):
             self.assertEqual(paths, {})
             self.assertEqual(trainer.predicted_datasets, [])
 
+    def test_save_final_model_reports_peft_adapter_artifacts(self):
+        with TemporaryDirectory() as tmp:
+            paths = save_final_model(
+                FakeSaveTrainer(),
+                FakeSaveTokenizer(),
+                output_dir=tmp,
+                no_save_final_model=False,
+                model_source="unit-test adapter",
+            )
+
+            self.assertIn("adapter_model.safetensors", paths)
+            self.assertIn("adapter_model.bin", paths)
+            self.assertIn("adapter_config.json", paths)
+            self.assertIn("training_args.bin", paths)
+            self.assertIn("tokenizer_config.json", paths)
+            self.assertIn("vocab.txt", paths)
+
     def test_write_success_outputs_logs_wandb_and_writes_result_files(self):
         with TemporaryDirectory() as tmp:
             output_dir = Path(tmp)
@@ -186,6 +230,27 @@ class HfSequenceClassificationWorkflowTests(unittest.TestCase):
             self.assertEqual(metrics_payload["stage1"]["stage1_eval_f1_macro"], 0.4)
             wandb_run.log.assert_any_call(runtime_metrics)
             wandb_run.log.assert_any_call({"model_selection": model_selection})
+
+    def test_write_success_outputs_keeps_local_results_when_wandb_log_fails(self):
+        with TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            args = argparse.Namespace(output_dir=str(output_dir))
+            wandb_run = Mock()
+            wandb_run.log.side_effect = RuntimeError("wandb unavailable")
+
+            paths = write_success_outputs(
+                args,
+                config={"method": "unit-test"},
+                eval_metrics={"eval_f1_macro": 0.5},
+                test_metrics=None,
+                runtime_metrics={"training_time_sec": 1.25, "status": "completed"},
+                model_selection={"best_metric": 0.5},
+                prediction_paths={},
+                wandb_run=wandb_run,
+            )
+
+            self.assertTrue(paths["summary"].is_file())
+            self.assertFalse((output_dir / "failure_summary.json").exists())
 
     def test_runtime_metrics_records_shared_switches_and_memory(self):
         args = argparse.Namespace(gradient_checkpointing=True)

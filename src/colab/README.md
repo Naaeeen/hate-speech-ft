@@ -63,15 +63,19 @@ their short catalog identities for setup checks.
 Leave `Overwrite output` off for normal work. Turn it on only when you want to
 replace a previous local run in the same directory. When it is enabled, the
 method runner clears managed summaries, prediction files, checkpoints, and saved
-model/tokenizer files before the replacement run starts.
+model/tokenizer files only after startup validation and method setup have
+succeeded, so a setup failure does not delete the previous completed run.
 
 ## HPO Trial Suggestions
 
 Set `Trials` to a positive number and optionally set `Search` to a search-space
-name such as `full_ft`, `lp_ft`, `tfidf_logreg`, `bilstm`, or `lora`. Use a tuning
-experiment such as `distilbert_full_tuning`, `distilbert_lp_ft_tuning`, or
-`tfidf_logreg_tuning`, or `bilstm_tuning`; smoke experiments are intentionally
-blocked for HPO because they use tiny sample caps.
+name such as `full_ft`, `lp_ft`, `frozen_backbone`, `lora`,
+`efficient_head_ft`, `tfidf_logreg`, or `bilstm`. Use a tuning experiment such
+as `distilbert_full_tuning`, `distilbert_lp_ft_tuning`,
+`frozen_distilbert_tuning`, `distilbert_lora_tuning`,
+`distilbert_efficient_head_tuning`, `tfidf_logreg_tuning`, or
+`bilstm_tuning`; smoke experiments are intentionally blocked for HPO because
+they use tiny sample caps.
 
 The notebook's normal preview and run cells dispatch to trial mode when
 `Trials > 0`. You can also call:

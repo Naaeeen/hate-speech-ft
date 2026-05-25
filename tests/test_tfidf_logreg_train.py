@@ -108,6 +108,12 @@ class FakeWandbRun:
         self.finished = True
 
 
+class FailingWandbRun(FakeWandbRun):
+    def log(self, payload):
+        super().log({"attempted": payload})
+        raise RuntimeError("wandb unavailable")
+
+
 class TfidfLogregTrainTests(unittest.TestCase):
     def test_parse_args_sets_tfidf_defaults(self):
         with patch.object(sys, "argv", ["train.py"]):
@@ -161,6 +167,13 @@ class TfidfLogregTrainTests(unittest.TestCase):
             args = tfidf_args.parse_args()
 
         with self.assertRaisesRegex(ValueError, "local model artifacts only"):
+            train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
+
+    def test_rejects_invalid_data_fraction_before_dataset_load(self):
+        with patch.object(sys, "argv", ["train.py", "--data_fraction", "0"]):
+            args = tfidf_args.parse_args()
+
+        with self.assertRaisesRegex(ValueError, "data_fraction"):
             train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
 
     def test_classification_metrics_use_shared_key_names(self):
@@ -262,6 +275,48 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 (output_dir / "test_predictions.json").as_posix(),
             )
 
+    def test_success_outputs_survive_wandb_log_failure(self):
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            fake_run = FailingWandbRun()
+            dataset = FakeDataset()
+
+            def fake_load_dataset(_name):
+                return dataset
+
+            fake_libraries = (
+                fake_load_dataset,
+                fake_dump,
+                FakeTfidfVectorizer,
+                FakeLogisticRegression,
+                FakePipeline,
+            )
+            argv = [
+                "train.py",
+                "--search_stage",
+                "tuning",
+                "--trial_id",
+                "tfidf_wandb_success_failure",
+                "--output_dir",
+                str(output_dir),
+                "--use_wandb",
+                "--wandb_mode",
+                "disabled",
+            ]
+
+            with (
+                patch.object(sys, "argv", argv),
+                patch.object(train, "load_libraries", return_value=fake_libraries),
+                patch.object(train, "init_wandb_run", return_value=fake_run),
+                patch.object(train, "get_gpu_type", return_value="cpu"),
+            ):
+                train.main()
+
+            self.assertTrue((output_dir / "result_summary.json").is_file())
+            self.assertFalse((output_dir / "failure_summary.json").exists())
+            self.assertTrue((output_dir / "model.joblib").is_file())
+            self.assertTrue(fake_run.finished)
+
     def test_wandb_starts_before_dataset_load_failures(self):
         with TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
@@ -304,6 +359,47 @@ class TfidfLogregTrainTests(unittest.TestCase):
             self.assertTrue(
                 any(log.get("status") == "failed" for log in fake_run.logs)
             )
+
+    def test_overwrite_preserves_previous_outputs_when_setup_fails_before_commit(self):
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            stale_summary = output_dir / "result_summary.json"
+            stale_summary.write_text('{"status": "completed"}', encoding="utf-8")
+            stale_model = output_dir / "model.joblib"
+            stale_model.write_text("old model", encoding="utf-8")
+
+            def failing_load_dataset(_name):
+                raise RuntimeError("dataset unavailable")
+
+            fake_libraries = (
+                failing_load_dataset,
+                fake_dump,
+                FakeTfidfVectorizer,
+                FakeLogisticRegression,
+                FakePipeline,
+            )
+            argv = [
+                "train.py",
+                "--search_stage",
+                "tuning",
+                "--trial_id",
+                "tfidf_setup_failure",
+                "--output_dir",
+                str(output_dir),
+                "--overwrite_output_dir",
+            ]
+
+            with (
+                patch.object(sys, "argv", argv),
+                patch.object(train, "load_libraries", return_value=fake_libraries),
+                patch.object(train, "get_gpu_type", return_value="cpu"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    train.main()
+
+            self.assertTrue(stale_summary.exists())
+            self.assertTrue(stale_model.exists())
+            self.assertTrue((output_dir / "failure_summary.json").is_file())
 
 
 if __name__ == "__main__":

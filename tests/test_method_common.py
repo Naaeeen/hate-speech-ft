@@ -11,6 +11,7 @@ from src.methods.common import (
     build_training_policy,
     find_existing_run_artifacts,
     validate_output_dir_for_run,
+    validate_sample_selection_args,
     validate_test_evaluation_policy,
 )
 
@@ -134,6 +135,21 @@ class MethodCommonTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "not a directory"):
                 validate_output_dir_for_run(output_path, overwrite=False)
+
+    def test_sample_selection_validation_rejects_invalid_caps(self):
+        args = self.parse_args("--data_fraction", "0")
+        with self.assertRaisesRegex(ValueError, "data_fraction"):
+            validate_sample_selection_args(args)
+
+        args = self.parse_args("--data_fraction", "1.1")
+        with self.assertRaisesRegex(ValueError, "data_fraction"):
+            validate_sample_selection_args(args)
+
+        args = self.parse_args("--max_train_samples", "0")
+        with self.assertRaisesRegex(ValueError, "max_train_samples"):
+            validate_sample_selection_args(args)
+
+        validate_sample_selection_args(self.parse_args("--data_fraction", "1"))
 
     def test_test_evaluation_policy_allows_only_final_stage(self):
         with self.assertRaises(ValueError):

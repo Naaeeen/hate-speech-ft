@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from src.experiments.results import write_json
+from src.methods.common import validate_sample_selection_args
 
 
 def parse_ngram_range(value: str | Sequence[int]) -> tuple[int, int]:
@@ -52,6 +53,7 @@ def load_libraries():
 
 
 def validate_classical_args(args: argparse.Namespace, ngram_range: tuple[int, int]) -> None:
+    validate_sample_selection_args(args)
     if args.min_df < 1:
         raise ValueError("--min_df must be >= 1.")
     if args.max_features is not None and args.max_features < 1:
@@ -70,11 +72,6 @@ def validate_classical_args(args: argparse.Namespace, ngram_range: tuple[int, in
         )
     if ngram_range[0] > ngram_range[1]:
         raise ValueError("Invalid --ngram_range.")
-    for option_name in ("max_train_samples", "max_eval_samples", "max_test_samples"):
-        value = getattr(args, option_name)
-        if value is not None and value < 1:
-            raise ValueError(f"--{option_name} must be >= 1 when provided.")
-
 
 def build_pipeline(
     *,

@@ -8,6 +8,9 @@ Current status:
 - `src/run_experiment.py` is the preferred entry point for listed experiments.
 - `src/methods/distilbert_full/train.py` and
   `src/methods/distilbert_lp_ft/train.py`,
+  `src/methods/frozen_distilbert/train.py`,
+  `src/methods/distilbert_lora/train.py`,
+  `src/methods/distilbert_efficient_head/train.py`,
   `src/methods/tfidf_logreg/train.py`, and `src/methods/bilstm/train.py`
   support direct W&B usage.
 - Enable W&B with `--use_wandb`.
@@ -26,7 +29,9 @@ Colab workflow:
 3. Run setup cells.
 4. In the experiment launcher widget, choose:
   - Experiment: for example `distilbert_full_smoke`,
-    `distilbert_lp_ft_smoke`, `tfidf_logreg_smoke`, or `bilstm_smoke`
+    `distilbert_lp_ft_smoke`, `frozen_distilbert_smoke`,
+    `distilbert_lora_smoke`,
+    `distilbert_efficient_head_smoke`, `tfidf_logreg_smoke`, or `bilstm_smoke`
    - Mode: `online`, `offline`, or `disabled`
    - Entity: your team or username
    - Project: `hate-speech-ft`
@@ -258,6 +263,10 @@ prediction file paths when `eval_predictions.json` or `test_predictions.json`
 exist.
 When a method saves a local final model, the same summary records those paths
 under `artifacts.model`; this is the local source of truth even when
-`wandb_log_model=false`.
+`wandb_log_model=false`. Transformer full-model runs usually record
+`model.safetensors` or `pytorch_model.bin`; PEFT runs such as LoRA may record
+`adapter_model.safetensors`, `adapter_model.bin`, and `adapter_config.json`
+instead. Hugging Face tokenizer files such as `tokenizer_config.json` and
+`vocab.txt` are also recorded when saved.
 Use local aggregate reports for HPO cost accounting: they include total training
 time in seconds/hours and summarize `best_epoch` by mean/std/min/max.

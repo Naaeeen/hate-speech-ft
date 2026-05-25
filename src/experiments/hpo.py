@@ -5,7 +5,7 @@ import random
 import hashlib
 import re
 from itertools import product
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 
@@ -61,6 +61,13 @@ def load_hpo_config(path: str | Path = DEFAULT_SEARCH_SPACE_PATH) -> dict[str, A
 
 def default_search_space_name(method: str) -> str:
     return method.replace("-", "_")
+
+
+def build_child_output_dir(output_root: str, child_name: str) -> str:
+    root = str(output_root).rstrip("/\\")
+    if "\\" in root or re.match(r"^[A-Za-z]:", root):
+        return str(PureWindowsPath(root) / child_name)
+    return str(PurePosixPath(root) / child_name)
 
 
 def _choose_value(rng: random.Random, spec: Any) -> Any:
@@ -408,7 +415,7 @@ def build_trial_overrides(
                 "hpo_trial_cap": trial_cap,
                 "hpo_time_cap_gpu_hours": time_cap_gpu_hours,
                 "config_hash": config_hash,
-                "output_dir": f"{output_root.rstrip('/')}/{trial_id}",
+                "output_dir": build_child_output_dir(output_root, trial_id),
             }
         )
         trials.append(add_config_hash_to_generated_identity(overrides))
@@ -445,7 +452,7 @@ def build_seed_run_overrides(
             "trial_id": trial_id,
             "hpo_trial_cap": trial_cap,
             "hpo_time_cap_gpu_hours": time_cap_gpu_hours,
-            "output_dir": f"{output_root.rstrip('/')}/{trial_id}",
+            "output_dir": build_child_output_dir(output_root, trial_id),
         }
         if search_stage == "final":
             overrides["run_test"] = True

@@ -1,4 +1,5 @@
 import unittest
+from pathlib import PurePosixPath, PureWindowsPath
 
 from src.experiments.hpo import (
     build_config_hash,
@@ -67,6 +68,33 @@ class HpoTests(unittest.TestCase):
         self.assertIn("hpo123", trials[0]["trial_id"])
         self.assertIn("trial001", trials[0]["trial_id"])
         self.assertTrue(trials[0]["output_dir"].endswith(trials[0]["trial_id"]))
+
+    def test_build_trial_overrides_uses_native_root_separator_style(self):
+        trials = build_trial_overrides(
+            base_experiment_id="distilbert_full_tuning",
+            method="full-ft",
+            search_space={"learning_rate": [1e-5]},
+            n_trials=1,
+            hpo_seed=123,
+            output_root=r"C:\runs\hpo\\",
+        )
+
+        output_dir = trials[0]["output_dir"]
+        self.assertEqual(PureWindowsPath(output_dir).name, trials[0]["trial_id"])
+        self.assertNotIn("\\/", output_dir)
+
+        posix_runs = build_seed_run_overrides(
+            base_experiment_id="distilbert_full_tuning",
+            method="full-ft",
+            seeds=[42],
+            output_root="/content/outputs/final/",
+            search_stage="final",
+        )
+        self.assertEqual(
+            PurePosixPath(posix_runs[0]["output_dir"]).name,
+            posix_runs[0]["trial_id"],
+        )
+        self.assertNotIn("//", posix_runs[0]["output_dir"].replace("://", ":/"))
 
     def test_build_trial_overrides_enforces_caps(self):
         with self.assertRaises(ValueError):

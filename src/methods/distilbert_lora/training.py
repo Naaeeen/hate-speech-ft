@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import argparse
 
-from src.methods.peft_utils import apply_lora_to_model, replace_context_model
+from src.methods.peft_utils import (
+    apply_lora_to_model,
+    replace_context_model,
+    validate_modules_to_save_cover_classification_head,
+)
 from src.utils.wandb_config import (
     WandbSettings,
     build_wandb_run_name,
@@ -11,6 +15,10 @@ from src.utils.wandb_config import (
 
 
 def apply_lora_to_context(context, args: argparse.Namespace):
+    validate_modules_to_save_cover_classification_head(
+        context.model,
+        args.modules_to_save,
+    )
     return replace_context_model(context, apply_lora_to_model(context.model, args))
 
 

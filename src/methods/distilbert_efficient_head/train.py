@@ -32,6 +32,7 @@ from src.methods.hf_sequence_classification import (
     finish_failed_setup_run,
     finish_failed_train_run,
     initialize_hf_run,
+    prepare_hf_output_dir,
     prepare_hf_classification_run,
     print_run_report,
     reset_peak_memory_stats,
@@ -41,7 +42,7 @@ from src.methods.hf_sequence_classification import (
     write_config_snapshot,
     write_success_outputs,
 )
-from src.utils.wandb_config import finish_wandb_run
+from src.utils.wandb_config import finish_wandb_run, log_wandb_best_effort
 
 
 def _prefixed_metrics(prefix: str, metrics: dict[str, Any]) -> dict[str, Any]:
@@ -112,6 +113,7 @@ def main() -> None:
             stage2_trainable_params=stage2_trainable_params,
             total_params=total_params,
         )
+        prepare_hf_output_dir(args)
         write_config_snapshot(args.output_dir, experiment_config, wandb_run)
 
         stage1_args = build_stage_training_arguments(
@@ -221,8 +223,10 @@ def main() -> None:
                 "stage2_training_time_sec": stage2_training_time_sec,
             },
         )
-        if wandb_run is not None:
-            wandb_run.log(_prefixed_metrics("stage1", stage1_eval_metrics))
+        log_wandb_best_effort(
+            wandb_run,
+            _prefixed_metrics("stage1", stage1_eval_metrics),
+        )
         result_paths = write_success_outputs(
             args,
             config=experiment_config,

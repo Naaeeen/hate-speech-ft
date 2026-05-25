@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -177,6 +178,29 @@ def init_wandb_run(
     return wandb.init(**init_kwargs)
 
 
+def update_wandb_config_best_effort(run, config: dict[str, Any]) -> None:
+    if run is None:
+        return
+    try:
+        run.config.update(config, allow_val_change=True)
+    except Exception as exc:  # pragma: no cover - defensive around remote logging
+        print(f"Warning: W&B config update failed: {exc}", file=sys.stderr)
+
+
+def log_wandb_best_effort(run, *payloads: dict[str, Any]) -> None:
+    if run is None:
+        return
+    for payload in payloads:
+        try:
+            run.log(payload)
+        except Exception as exc:  # pragma: no cover - defensive around remote logging
+            print(f"Warning: W&B logging failed: {exc}", file=sys.stderr)
+            return
+
+
 def finish_wandb_run(run) -> None:
     if run is not None:
-        run.finish()
+        try:
+            run.finish()
+        except Exception as exc:  # pragma: no cover - defensive around remote logging
+            print(f"Warning: W&B finish failed: {exc}", file=sys.stderr)

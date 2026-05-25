@@ -22,11 +22,20 @@ RUN_ARTIFACT_NAMES = {
     "model.pt",
     "finalmodel.pt",
     "model.safetensors",
+    "adapter_model.safetensors",
+    "adapter_model.bin",
+    "adapter_config.json",
     "model.joblib",
     "pytorch_model.bin",
     "tokenizer.json",
     "tokenizer_config.json",
     "special_tokens_map.json",
+    "vocab.txt",
+    "vocab.json",
+    "merges.txt",
+    "spiece.model",
+    "sentencepiece.bpe.model",
+    "added_tokens.json",
     "tokenizer",
     "stage1_linear_probe",
     "stage1_lora_head",
@@ -496,6 +505,17 @@ def validate_output_dir_for_run(output_dir: str | Path, *, overwrite: bool) -> N
             f"({preview}). Use a unique --output_dir for a new experiment run, "
             "or pass --overwrite_output_dir only when intentionally replacing artifacts."
         )
+
+
+def validate_sample_selection_args(args: argparse.Namespace) -> None:
+    data_fraction = getattr(args, "data_fraction", None)
+    if data_fraction is not None and not 0 < data_fraction <= 1:
+        raise ValueError("--data_fraction must be in the interval (0, 1].")
+
+    for option_name in ("max_train_samples", "max_eval_samples", "max_test_samples"):
+        value = getattr(args, option_name, None)
+        if value is not None and value < 1:
+            raise ValueError(f"--{option_name} must be >= 1 when provided.")
 
 
 def validate_test_evaluation_policy(*, search_stage: str, run_test: bool) -> None:

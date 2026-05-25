@@ -288,6 +288,11 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             output_dir = Path(tmp)
             (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
             (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
+            (output_dir / "adapter_model.safetensors").write_text(
+                "adapter",
+                encoding="utf-8",
+            )
+            (output_dir / "adapter_model.bin").write_text("adapter", encoding="utf-8")
             (output_dir / "checkpoint-1").mkdir()
             (output_dir / "stage1_linear_probe").mkdir()
             (output_dir / "stage1_lora_head").mkdir()
@@ -296,6 +301,8 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
 
             self.assertIn(output_dir / "result_summary.json", artifacts)
             self.assertIn(output_dir / "test_predictions.json", artifacts)
+            self.assertIn(output_dir / "adapter_model.safetensors", artifacts)
+            self.assertIn(output_dir / "adapter_model.bin", artifacts)
             self.assertIn(output_dir / "checkpoint-1", artifacts)
             self.assertIn(output_dir / "stage1_linear_probe", artifacts)
             self.assertIn(output_dir / "stage1_lora_head", artifacts)
@@ -317,6 +324,12 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             output_dir = Path(tmp)
             (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
             (output_dir / "model.safetensors").write_text("model", encoding="utf-8")
+            (output_dir / "adapter_model.safetensors").write_text(
+                "adapter",
+                encoding="utf-8",
+            )
+            (output_dir / "adapter_model.bin").write_text("adapter", encoding="utf-8")
+            (output_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
             (output_dir / "training_args.bin").write_text("args", encoding="utf-8")
             (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
             checkpoint = output_dir / "checkpoint-1"
@@ -336,6 +349,9 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             self.assertEqual(
                 {path.name for path in removed},
                 {
+                    "adapter_config.json",
+                    "adapter_model.bin",
+                    "adapter_model.safetensors",
                     "checkpoint-1",
                     "model.safetensors",
                     "result_summary.json",
@@ -349,6 +365,9 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             self.assertFalse(stage1_lora_dir.exists())
             self.assertFalse(stage_dir.exists())
             self.assertFalse((output_dir / "model.safetensors").exists())
+            self.assertFalse((output_dir / "adapter_model.safetensors").exists())
+            self.assertFalse((output_dir / "adapter_model.bin").exists())
+            self.assertFalse((output_dir / "adapter_config.json").exists())
             self.assertFalse((output_dir / "training_args.bin").exists())
             self.assertTrue(note.exists())
 

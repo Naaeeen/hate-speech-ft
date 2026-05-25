@@ -27,11 +27,30 @@ distilbert_full_smoke            ready
 distilbert_full_quick            ready
 distilbert_full_tuning           ready
 distilbert_full_final_seed42     ready
+frozen_distilbert_smoke          ready
+frozen_distilbert_quick          ready
+frozen_distilbert_tuning         ready
+frozen_distilbert_final_seed42   ready
 distilbert_lp_ft_smoke           ready
+distilbert_lp_ft_quick           ready
 distilbert_lp_ft_tuning          ready
-tfidf_logreg_tuning              ready
+distilbert_lp_ft_final_seed42    ready
+distilbert_lora_smoke            ready
+distilbert_lora_quick            ready
 distilbert_lora_tuning           ready
+distilbert_lora_final_seed42     ready
+distilbert_efficient_head_smoke  ready
+distilbert_efficient_head_quick  ready
 distilbert_efficient_head_tuning ready
+distilbert_efficient_head_final_seed42 ready
+tfidf_logreg_smoke               ready
+tfidf_logreg_quick               ready
+tfidf_logreg_tuning              ready
+tfidf_logreg_final_seed42        ready
+bilstm_smoke                     ready
+bilstm_quick                     ready
+bilstm_tuning                    ready
+bilstm_final_seed42              ready
 ...
 ```
 

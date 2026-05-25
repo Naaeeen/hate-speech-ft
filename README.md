@@ -478,6 +478,8 @@ method scripts are:
 src/methods/distilbert_full/train.py
 src/methods/frozen_distilbert/train.py
 src/methods/distilbert_lp_ft/train.py
+src/methods/distilbert_lora/train.py
+src/methods/distilbert_efficient_head/train.py
 src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
 ```
@@ -684,11 +686,16 @@ mixed_precision=none
 
 During Hugging Face fine-tuning, checkpoints are written under
 `output_dir/checkpoint-*`. At the end, `trainer.save_model(output_dir)` writes
-the final model files directly into `output_dir`. Bi-LSTM uses the same
-checkpoint directory convention but saves the final torch artifact as
-`output_dir/model.pt` plus `output_dir/tokenizer/`. When
-`load_best_model_at_end=true`, the final saved neural model is the best
-validation checkpoint; otherwise it is the last training state.
+the final model files directly into `output_dir`. Full-model methods usually
+write `model.safetensors` or `pytorch_model.bin`; PEFT methods such as LoRA may
+write adapter artifacts such as `adapter_model.safetensors`, `adapter_model.bin`, and
+`adapter_config.json`. Tokenizer artifacts such as `tokenizer_config.json` and
+`vocab.txt` are recorded beside the model when Hugging Face writes them.
+Bi-LSTM uses the same checkpoint directory convention but
+saves the final torch artifact as `output_dir/model.pt` plus
+`output_dir/tokenizer/`. When `load_best_model_at_end=true`, the final saved
+neural model is the best validation checkpoint; otherwise it is the last
+training state.
 
 Hugging Face Trainer methods can also upload model artifacts when
 `--wandb_log_model end` or `--wandb_log_model checkpoint` is used. Bi-LSTM
@@ -761,6 +768,8 @@ python -m py_compile \
   src/methods/distilbert_full/train.py \
   src/methods/frozen_distilbert/train.py \
   src/methods/distilbert_lp_ft/train.py \
+  src/methods/distilbert_lora/train.py \
+  src/methods/distilbert_efficient_head/train.py \
   src/methods/tfidf_logreg/train.py \
   src/methods/bilstm/train.py \
   src/run_experiment.py \

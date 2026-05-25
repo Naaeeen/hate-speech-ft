@@ -118,6 +118,25 @@ class ResultRecordingTests(unittest.TestCase):
             self.assertFalse(stale_test_predictions.exists())
             self.assertTrue((output_dir / "failure_summary.json").exists())
 
+    def test_failure_can_preserve_existing_artifacts_for_uncommitted_setup_failure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            stale_summary = output_dir / "result_summary.json"
+            stale_summary.write_text("{}", encoding="utf-8")
+            stale_model = output_dir / "model.safetensors"
+            stale_model.write_text("model", encoding="utf-8")
+
+            write_failure_file(
+                output_dir,
+                config={"trial_id": "trial001"},
+                error=RuntimeError("setup failed before overwrite"),
+                clear_existing_artifacts=False,
+            )
+
+            self.assertTrue(stale_summary.exists())
+            self.assertTrue(stale_model.exists())
+            self.assertTrue((output_dir / "failure_summary.json").exists())
+
     def test_json_writer_serializes_paths_and_dataclasses(self):
         @dataclass
         class Payload:

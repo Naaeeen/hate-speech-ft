@@ -204,6 +204,40 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
             self.assertIn("git_commit", summary["config"])
             self.assertIn("split_accounting_policy", summary["config"])
 
+    def test_overwrite_preserves_previous_outputs_when_setup_fails_before_commit(self):
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            stale_summary = output_dir / "result_summary.json"
+            stale_summary.write_text('{"status": "completed"}', encoding="utf-8")
+            stale_model = output_dir / "model.pt"
+            stale_model.write_text("old model", encoding="utf-8")
+
+            def failing_load_dataset(_name):
+                raise RuntimeError("dataset unavailable")
+
+            argv = [
+                "train.py",
+                "--search_stage",
+                "tuning",
+                "--trial_id",
+                "bilstm_setup_failure",
+                "--output_dir",
+                str(output_dir),
+                "--overwrite_output_dir",
+            ]
+
+            with (
+                patch.object(sys, "argv", argv),
+                patch.object(bilstm_train, "get_gpu_type", return_value="cpu"),
+                patch.object(bilstm_train, "load_dataset_library", return_value=failing_load_dataset),
+            ):
+                with self.assertRaises(Exception):
+                    bilstm_train.main()
+
+            self.assertTrue(stale_summary.exists())
+            self.assertTrue(stale_model.exists())
+            self.assertTrue((output_dir / "failure_summary.json").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -32,6 +32,7 @@ from src.methods.hf_sequence_classification import (
     finish_failed_setup_run,
     finish_failed_train_run,
     initialize_hf_run,
+    prepare_hf_output_dir,
     prepare_hf_classification_run,
     print_run_report,
     reset_peak_memory_stats,
@@ -77,6 +78,7 @@ def main() -> None:
             trainable_params=trainable_params,
             total_params=total_params,
         )
+        prepare_hf_output_dir(args)
         write_config_snapshot(args.output_dir, experiment_config, wandb_run)
 
         training_args = build_hf_training_arguments_from_args(
