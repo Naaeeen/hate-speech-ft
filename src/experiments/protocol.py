@@ -39,9 +39,9 @@ EXPECTED_METHODS = (
     ExpectedMethod("frozen-backbone", "frozen_backbone", 6, catalog_stage="tuning"),
     ExpectedMethod("partial-ft", "partial_ft", 6),
     ExpectedMethod("full-ft", "full_ft", 3, catalog_stage="tuning"),
-    ExpectedMethod("lora", "lora", 6),
+    ExpectedMethod("lora", "lora", 6, catalog_stage="tuning"),
     ExpectedMethod("lp-ft", "lp_ft", 4, catalog_stage="tuning"),
-    ExpectedMethod("efficient-head-ft", "efficient_head_ft", 4),
+    ExpectedMethod("efficient-head-ft", "efficient_head_ft", 4, catalog_stage="tuning"),
 )
 
 REQUIRED_SHARED_FIXED = {
@@ -99,6 +99,7 @@ REQUIRED_SEARCH_SPACE_KEYS = {
     },
     "efficient_head_ft": {
         "stage1_learning_rate",
+        "stage1_epochs",
         "stage1_target_modules",
         "stage1_modules_to_save",
         "stage1_lora_r",

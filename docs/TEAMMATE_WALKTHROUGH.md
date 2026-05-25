@@ -2,7 +2,7 @@
 
 This is a fictional example of how a teammate should use the repo. The teammate
 is called Sam. Sam wants to verify the repo, run one tracked smoke experiment,
-try one parameter change, and then prepare a future LoRA experiment entry.
+try one parameter change, and then prepare a future experiment entry.
 
 ## 1. Sam Checks The Repo
 
@@ -30,7 +30,8 @@ distilbert_full_final_seed42     ready
 distilbert_lp_ft_smoke           ready
 distilbert_lp_ft_tuning          ready
 tfidf_logreg_tuning              ready
-lora_distilbert_template         planned
+distilbert_lora_tuning           ready
+distilbert_efficient_head_tuning ready
 ...
 ```
 
@@ -224,9 +225,11 @@ python src/run_experiment.py --experiment distilbert_full_lr3e5_train128 --dry_r
 python -m unittest discover -v
 ```
 
-## 6. Sam Prepares A Future LoRA Method
+## 6. Sam Prepares A Future Method
 
-Sam wants to implement LoRA later. Sam does not edit the full fine-tuning script.
+LoRA and Aaron's efficient-head method are now ready examples. If Sam wants to
+implement a different method later, Sam does not edit the full fine-tuning
+script.
 
 Sam first copies the method template:
 
@@ -237,12 +240,12 @@ src/methods/_template/
 to:
 
 ```text
-src/methods/distilbert_lora/train.py
+src/methods/<new_method>/train.py
 ```
 
 The copied `train.py` should keep the `src.methods.common` helpers for shared
 arguments, tracking config, output safety, and final/test policy checks. Sam
-then implements only the LoRA-specific model setup and training logic.
+then implements only the method-specific model setup and training logic.
 
 Sam reads:
 
@@ -250,7 +253,7 @@ Sam reads:
 src/methods/README.md
 ```
 
-Sam implements the LoRA script so it accepts shared arguments such as:
+Sam implements the new script so it accepts shared arguments such as:
 
 ```text
 --method
@@ -266,16 +269,16 @@ Sam implements the LoRA script so it accepts shared arguments such as:
 Then Sam updates `configs/experiments.json`:
 
 ```json
-"lora_distilbert_template": {
+"new_method_smoke": {
   "status": "ready",
-  "script": "src/methods/distilbert_lora/train.py"
+  "script": "src/methods/<new_method>/train.py"
 }
 ```
 
 Sam runs a dry-run first:
 
 ```bash
-python src/run_experiment.py --experiment lora_distilbert_template --dry_run
+python src/run_experiment.py --experiment new_method_smoke --dry_run
 ```
 
 If the dry-run works, Sam runs a smoke test.

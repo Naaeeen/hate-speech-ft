@@ -189,6 +189,29 @@ python src/run_experiment.py \
   --hpo_seed 42
 ```
 
+DistilBERT LoRA uses the same shared HF pipeline, with PEFT-owned adapter
+configuration under the method package:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lora_tuning \
+  --suggest_trials 4 \
+  --search_space lora \
+  --hpo_seed 42
+```
+
+Aaron's efficient-head FT workflow uses stage-1 LoRA to train a better
+classification head, then transfers only that head into a fresh pretrained
+backbone for full fine-tuning:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_efficient_head_tuning \
+  --suggest_trials 4 \
+  --search_space efficient_head_ft \
+  --hpo_seed 42
+```
+
 Each suggested command gets a `trial_id` and `output_dir` that include the HPO
 seed, trial index, and final `config_hash`. This prevents separate HPO batches
 and selected configs from sharing the same default output paths.
@@ -457,6 +480,10 @@ Ready now:
 - `frozen_distilbert_quick`
 - `frozen_distilbert_tuning`
 - `frozen_distilbert_final_seed42`
+- `distilbert_lora_smoke`
+- `distilbert_lora_quick`
+- `distilbert_lora_tuning`
+- `distilbert_lora_final_seed42`
 - `tfidf_logreg_smoke`
 - `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
@@ -465,13 +492,15 @@ Ready now:
 - `bilstm_quick`
 - `bilstm_tuning`
 - `bilstm_final_seed42`
+- `distilbert_efficient_head_smoke`
+- `distilbert_efficient_head_quick`
+- `distilbert_efficient_head_tuning`
+- `distilbert_efficient_head_final_seed42`
 
 Templates for later scripts:
 
 - `random_init_distilbert_template`
 - `partial_distilbert_template`
-- `lora_distilbert_template`
-- `efficient_head_ft_template`
 
 ## Capability Contract
 

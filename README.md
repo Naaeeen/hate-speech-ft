@@ -91,6 +91,10 @@ Ready now:
 - `frozen_distilbert_quick`
 - `frozen_distilbert_tuning`
 - `frozen_distilbert_final_seed42`
+- `distilbert_lora_smoke`
+- `distilbert_lora_quick`
+- `distilbert_lora_tuning`
+- `distilbert_lora_final_seed42`
 - `tfidf_logreg_smoke`
 - `tfidf_logreg_quick`
 - `tfidf_logreg_tuning`
@@ -99,13 +103,15 @@ Ready now:
 - `bilstm_quick`
 - `bilstm_tuning`
 - `bilstm_final_seed42`
+- `distilbert_efficient_head_smoke`
+- `distilbert_efficient_head_quick`
+- `distilbert_efficient_head_tuning`
+- `distilbert_efficient_head_final_seed42`
 
 Planned templates exist for:
 
 - `random_init_distilbert_template`
 - `partial_distilbert_template`
-- `lora_distilbert_template`
-- `efficient_head_ft_template`
 
 `planned` means the experiment is documented in the catalog, but the method
 script is not implemented yet. The generic runner will not silently run a
@@ -140,6 +146,8 @@ src/
     distilbert_full/            # ready DistilBERT full-FT method
     frozen_distilbert/          # ready frozen-backbone DistilBERT method
     distilbert_lp_ft/           # ready DistilBERT linear-probe + full-FT method
+    distilbert_lora/            # ready DistilBERT LoRA PEFT method
+    distilbert_efficient_head/  # ready LoRA-head-transfer + full-FT method
     tfidf_logreg/               # ready TF-IDF + Logistic Regression baseline
     bilstm/                     # ready Bi-LSTM from-scratch baseline
     hf_sequence_classification.py # shared HF fine-tuning workflow helper
@@ -308,6 +316,27 @@ python src/run_experiment.py \
   --experiment frozen_distilbert_tuning \
   --suggest_trials 4 \
   --search_space frozen_backbone \
+  --hpo_seed 42
+```
+
+For DistilBERT LoRA HPO, use the LoRA tuning base and `lora` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_lora_tuning \
+  --suggest_trials 4 \
+  --search_space lora \
+  --hpo_seed 42
+```
+
+For Aaron's efficient-head FT workflow, use the efficient-head tuning base and
+`efficient_head_ft` search space:
+
+```bash
+python src/run_experiment.py \
+  --experiment distilbert_efficient_head_tuning \
+  --suggest_trials 4 \
+  --search_space efficient_head_ft \
   --hpo_seed 42
 ```
 
@@ -684,6 +713,7 @@ Examples:
 src/methods/tfidf_logreg/train.py
 src/methods/bilstm/train.py
 src/methods/distilbert_lora/train.py
+src/methods/distilbert_efficient_head/train.py
 ```
 
 Start by copying:

@@ -749,6 +749,140 @@ class RunExperimentCliTests(unittest.TestCase):
             completed.stdout,
         )
 
+    def test_lora_smoke_preview_uses_peft_method_script(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_lora_smoke",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("src/methods/distilbert_lora/train.py", completed.stdout)
+        self.assertIn("--method lora", completed.stdout)
+        self.assertIn("--target_modules", completed.stdout)
+        self.assertIn("q_lin", completed.stdout)
+        self.assertIn("k_lin", completed.stdout)
+        self.assertIn("v_lin", completed.stdout)
+        self.assertIn("--lora_r 8", completed.stdout)
+        self.assertIn("--max_train_samples 64", completed.stdout)
+
+    def test_lora_hpo_uses_tuning_base_and_search_space(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_lora_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "lora",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_stage tuning", completed.stdout)
+        self.assertIn("--hpo_trial_cap 6", completed.stdout)
+        self.assertIn("--target_modules", completed.stdout)
+        self.assertIn("--lora_alpha", completed.stdout)
+        self.assertIn("distilbert_lora_tuning__lora__hpo42__trial001", completed.stdout)
+
+    def test_lora_direct_final_hash_matches_seed_generated_final_hash(self):
+        direct = self.run_cli(
+            "--experiment",
+            "distilbert_lora_final_seed42",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+        generated = self.run_cli(
+            "--experiment",
+            "distilbert_lora_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        self.assertEqual(generated.stdout.count("--search_stage final"), 3)
+        self.assertEqual(generated.stdout.count("--run_test"), 3)
+        direct_hash = re.search(r"--config_hash ([0-9a-f]+)", direct.stdout)
+        generated_hash = re.search(r"--config_hash ([0-9a-f]+)", generated.stdout)
+        self.assertIsNotNone(direct_hash)
+        self.assertIsNotNone(generated_hash)
+        self.assertEqual(direct_hash.group(1), generated_hash.group(1))
+
+    def test_efficient_head_smoke_preview_uses_two_stage_peft_script(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_efficient_head_smoke",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("src/methods/distilbert_efficient_head/train.py", completed.stdout)
+        self.assertIn("--method efficient-head-ft", completed.stdout)
+        self.assertIn("--stage1_target_modules", completed.stdout)
+        self.assertIn("q_lin", completed.stdout)
+        self.assertIn("k_lin", completed.stdout)
+        self.assertIn("v_lin", completed.stdout)
+        self.assertIn("--stage2_learning_rate 2e-05", completed.stdout)
+        self.assertIn("--max_train_samples 64", completed.stdout)
+
+    def test_efficient_head_hpo_uses_tuning_base_and_search_space(self):
+        completed = self.run_cli(
+            "--experiment",
+            "distilbert_efficient_head_tuning",
+            "--suggest_trials",
+            "1",
+            "--search_space",
+            "efficient_head_ft",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--search_stage tuning", completed.stdout)
+        self.assertIn("--hpo_trial_cap 4", completed.stdout)
+        self.assertIn("--stage1_lora_r", completed.stdout)
+        self.assertIn("--stage1_lora_alpha", completed.stdout)
+        self.assertIn("--stage2_learning_rate", completed.stdout)
+        self.assertIn(
+            "distilbert_efficient_head_tuning__efficient_head_ft__hpo42__trial001",
+            completed.stdout,
+        )
+
+    def test_efficient_head_direct_final_hash_matches_seed_generated_final_hash(self):
+        direct = self.run_cli(
+            "--experiment",
+            "distilbert_efficient_head_final_seed42",
+            "--dry_run",
+            "--python",
+            "python",
+        )
+        generated = self.run_cli(
+            "--experiment",
+            "distilbert_efficient_head_tuning",
+            "--suggest_seed_runs",
+            "final",
+            "--python",
+            "python",
+        )
+
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        self.assertEqual(generated.stdout.count("--search_stage final"), 3)
+        self.assertEqual(generated.stdout.count("--run_test"), 3)
+        direct_hash = re.search(r"--config_hash ([0-9a-f]+)", direct.stdout)
+        generated_hash = re.search(r"--config_hash ([0-9a-f]+)", generated.stdout)
+        self.assertIsNotNone(direct_hash)
+        self.assertIsNotNone(generated_hash)
+        self.assertEqual(direct_hash.group(1), generated_hash.group(1))
+
     def test_frozen_distilbert_final_seed_hash_matches_hpo_hash(self):
         hpo = self.run_cli(
             "--experiment",

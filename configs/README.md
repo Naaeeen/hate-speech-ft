@@ -264,13 +264,20 @@ frozen_distilbert_smoke
 frozen_distilbert_quick
 frozen_distilbert_tuning
 frozen_distilbert_final_seed42
+distilbert_lora_smoke
+distilbert_lora_quick
+distilbert_lora_tuning
+distilbert_lora_final_seed42
+distilbert_efficient_head_smoke
+distilbert_efficient_head_quick
+distilbert_efficient_head_tuning
+distilbert_efficient_head_final_seed42
 tfidf_logreg_smoke
 tfidf_logreg_tuning
 tfidf_logreg_final_seed42
 bilstm_smoke
 bilstm_tuning
 bilstm_final_seed42
-lora_distilbert_template
 random_init_distilbert_template
 ```
 

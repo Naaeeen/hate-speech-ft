@@ -290,6 +290,7 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
             (output_dir / "checkpoint-1").mkdir()
             (output_dir / "stage1_linear_probe").mkdir()
+            (output_dir / "stage1_lora_head").mkdir()
 
             artifacts = find_existing_run_artifacts(output_dir)
 
@@ -297,6 +298,7 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             self.assertIn(output_dir / "test_predictions.json", artifacts)
             self.assertIn(output_dir / "checkpoint-1", artifacts)
             self.assertIn(output_dir / "stage1_linear_probe", artifacts)
+            self.assertIn(output_dir / "stage1_lora_head", artifacts)
             with self.assertRaisesRegex(ValueError, "already contains run artifacts"):
                 validate_output_dir_for_run(output_dir, overwrite=False)
             validate_output_dir_for_run(output_dir, overwrite=True)
@@ -320,6 +322,9 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             checkpoint = output_dir / "checkpoint-1"
             checkpoint.mkdir()
             (checkpoint / "trainer_state.json").write_text("{}", encoding="utf-8")
+            stage1_lora_dir = output_dir / "stage1_lora_head"
+            stage1_lora_dir.mkdir()
+            (stage1_lora_dir / "trainer_state.json").write_text("{}", encoding="utf-8")
             stage_dir = output_dir / "stage2_full_ft"
             stage_dir.mkdir()
             (stage_dir / "trainer_state.json").write_text("{}", encoding="utf-8")
@@ -334,12 +339,14 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
                     "checkpoint-1",
                     "model.safetensors",
                     "result_summary.json",
+                    "stage1_lora_head",
                     "stage2_full_ft",
                     "test_predictions.json",
                     "training_args.bin",
                 },
             )
             self.assertFalse(checkpoint.exists())
+            self.assertFalse(stage1_lora_dir.exists())
             self.assertFalse(stage_dir.exists())
             self.assertFalse((output_dir / "model.safetensors").exists())
             self.assertFalse((output_dir / "training_args.bin").exists())

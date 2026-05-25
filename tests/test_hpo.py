@@ -408,6 +408,53 @@ class HpoTests(unittest.TestCase):
             "none",
         )
 
+    def test_lora_final_defaults_are_hpo_reachable(self):
+        from src.experiments.registry import load_experiment_registry
+
+        hpo_config = load_hpo_config()
+        final_args = load_experiment_registry().get("distilbert_lora_final_seed42").args
+        keys = [
+            "target_modules",
+            "modules_to_save",
+            "lora_r",
+            "lora_alpha",
+            "lora_dropout",
+            "learning_rate",
+        ]
+
+        self.assertIn(
+            {key: final_args[key] for key in keys},
+            [{key: combo[key] for key in keys} for combo in enumerate_search_space(
+                hpo_config["search_spaces"]["lora"]
+            )],
+        )
+
+    def test_efficient_head_final_defaults_are_hpo_reachable(self):
+        from src.experiments.registry import load_experiment_registry
+
+        hpo_config = load_hpo_config()
+        final_args = load_experiment_registry().get(
+            "distilbert_efficient_head_final_seed42"
+        ).args
+        keys = [
+            "stage1_target_modules",
+            "stage1_modules_to_save",
+            "stage1_learning_rate",
+            "stage1_epochs",
+            "stage1_lora_r",
+            "stage1_lora_alpha",
+            "stage1_lora_dropout",
+            "stage2_learning_rate",
+            "stage2_epochs",
+        ]
+
+        self.assertIn(
+            {key: final_args[key] for key in keys},
+            [{key: combo[key] for key in keys} for combo in enumerate_search_space(
+                hpo_config["search_spaces"]["efficient_head_ft"]
+            )],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

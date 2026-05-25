@@ -25,7 +25,8 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("distilbert_full_tuning", ready_ids)
         self.assertIn("tfidf_logreg_tuning", ready_ids)
         self.assertIn("frozen_distilbert_tuning", ready_ids)
-        self.assertIn("lora_distilbert_template", all_ids)
+        self.assertIn("distilbert_lora_tuning", ready_ids)
+        self.assertIn("distilbert_efficient_head_tuning", ready_ids)
 
     def test_build_ready_experiment_command_includes_common_and_wandb_args(self):
         spec = self.registry.get("distilbert_full_smoke")
@@ -121,7 +122,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertNotIn("mixed_precision", tfidf_spec.args)
         self.assertNotIn("gradient_checkpointing", tfidf_spec.args)
 
-        lora_spec = self.registry.get("lora_distilbert_template")
+        lora_spec = self.registry.get("distilbert_lora_tuning")
         self.assertEqual(lora_spec.args["mixed_precision"], "none")
         self.assertEqual(lora_spec.args["optim"], "adamw_torch")
 
@@ -139,7 +140,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertRegex(command[hash_index + 1], r"^[0-9a-f]{12}$")
 
     def test_missing_planned_script_is_not_runnable(self):
-        spec = self.registry.get("lora_distilbert_template")
+        spec = self.registry.get("partial_distilbert_template")
 
         with self.assertRaises(FileNotFoundError):
             build_experiment_command(spec, repo_root=self.repo_root)

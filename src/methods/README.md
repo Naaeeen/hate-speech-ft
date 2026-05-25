@@ -10,8 +10,12 @@ _template/          copyable starter for a new method
 distilbert_full/    ready DistilBERT full fine-tuning method
 frozen_distilbert/  ready frozen-backbone DistilBERT method
 distilbert_lp_ft/   ready DistilBERT linear probing + full fine-tuning method
+distilbert_lora/    ready DistilBERT LoRA parameter-efficient method
+distilbert_efficient_head/
+                    ready LoRA-head-transfer + full fine-tuning method
 tfidf_logreg/       ready TF-IDF + Logistic Regression baseline
 bilstm/             ready Bi-LSTM from-scratch baseline
+peft_utils.py       PEFT/LoRA and classification-head transfer helpers
 common.py           method-agnostic CLI/config/output policy helpers
 hf_common.py        Hugging Face Trainer helpers shared by Transformer methods
 hf_sequence_classification.py
@@ -26,6 +30,7 @@ New methods should use their own package:
 src/methods/tfidf_logreg/
 src/methods/bilstm/
 src/methods/distilbert_lora/
+src/methods/distilbert_efficient_head/
 src/methods/frozen_distilbert/
 ```
 
@@ -109,6 +114,17 @@ method-owned trainability helper in `src/methods/frozen_distilbert/training.py`.
 That helper freezes the DistilBERT backbone and leaves only the classification
 head trainable; the shared HF workflow still owns tokenization, Trainer setup,
 W&B, checkpoints, predictions, and result JSON files.
+
+DistilBERT LoRA keeps PEFT adapter setup in `src/methods/distilbert_lora/` and
+uses `src/methods/peft_utils.py` for target-module parsing and LoRA wrapping.
+It follows the same HF lifecycle as full FT after the model has been wrapped.
+
+Efficient-head FT keeps Aaron's two-stage policy in
+`src/methods/distilbert_efficient_head/`: stage 1 trains LoRA adapters plus the
+classification head, then stage 2 reloads a fresh pretrained backbone, copies
+only the trained classification-head weights, and fully fine-tunes all
+parameters. The stage transition is method-owned; data, W&B, checkpoint policy,
+final-only test evaluation, and output files stay shared.
 
 TF-IDF + Logistic Regression keeps its vectorizer, sklearn estimator, classical
 metrics, and prediction writer inside `src/methods/tfidf_logreg/`. It still uses

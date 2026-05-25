@@ -230,6 +230,7 @@
       "stage1_target_modules",
       "stage1_modules_to_save",
       "stage1_learning_rate",
+      "stage1_epochs",
       "stage1_lora_r",
       "stage1_lora_alpha",
       "stage1_lora_dropout",
@@ -284,12 +285,16 @@
       "learning_rate": [0.00001, 0.00002, 0.00003]
     },
     "lora": {
-      "target_modules": [["q_lin", "v_lin"], ["q_lin", "k_lin", "v_lin", "out_lin"]],
+      "target_modules": [
+        ["q_lin", "v_lin"],
+        ["q_lin", "k_lin", "v_lin"],
+        ["q_lin", "k_lin", "v_lin", "out_lin"]
+      ],
       "modules_to_save": [["pre_classifier", "classifier"]],
       "lora_r": [4, 8, 16],
       "lora_alpha_rule": "alpha = 2 * r",
       "lora_dropout": [0.0, 0.1],
-      "learning_rate": [0.00005, 0.0001, 0.0002]
+      "learning_rate": [0.00005, 0.0001, 0.0002, 0.0003]
     },
     "lp_ft": {
       "stage1_head_learning_rate": [0.0001, 0.001],
@@ -298,14 +303,15 @@
       "stage2_epochs": [2, 3]
     },
     "efficient_head_ft": {
-      "stage1_target_modules": [["q_lin", "v_lin"]],
+      "stage1_target_modules": [["q_lin", "k_lin", "v_lin"]],
       "stage1_modules_to_save": [["pre_classifier", "classifier"]],
-      "stage1_learning_rate": [0.0001, 0.0002],
+      "stage1_learning_rate": [0.0001, 0.0002, 0.0003],
+      "stage1_epochs": [5],
       "stage1_lora_r": [4, 8],
       "stage1_lora_alpha_rule": "alpha = 2 * r",
       "stage1_lora_dropout": [0.0, 0.1],
       "stage2_learning_rate": [0.00001, 0.00002],
-      "stage2_epochs": [2, 3]
+      "stage2_epochs": [2, 3, 5]
     }
   }
 }

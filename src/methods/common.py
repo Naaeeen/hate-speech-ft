@@ -29,6 +29,7 @@ RUN_ARTIFACT_NAMES = {
     "special_tokens_map.json",
     "tokenizer",
     "stage1_linear_probe",
+    "stage1_lora_head",
     "stage2_full_ft",
     "lp_checkpoints",
     "ft_checkpoints",
