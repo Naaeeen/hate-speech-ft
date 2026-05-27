@@ -455,6 +455,7 @@ After running several trials or final seeds, aggregate local summaries:
 python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
   --write_pareto_csvs \
+  --write_prediction_analysis \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
   --metric training_time_sec \
@@ -478,6 +479,24 @@ surface for Pareto analysis: use `final_runs.csv` for raw per-seed values,
 `hpo_runs.csv` for random-search HPO budget/fairness reporting. Final runs that
 are missing `config_hash` are kept isolated with a `missing_config_hash:*` id
 and marked `insufficient_data` for Pareto status.
+
+With `--write_prediction_analysis`, aggregation also exports diagnostics from
+saved prediction files:
+
+```text
+prediction_analysis/prediction_analysis.json
+prediction_analysis/confusion_matrices.csv
+prediction_analysis/auroc_summary.csv
+prediction_analysis/error_examples.csv
+```
+
+These files are post-processing artifacts. They use the existing
+`eval_predictions.json` and `test_predictions.json` paths recorded in
+`result_summary.json`, so they do not rerun training or reload models. AUROC is
+reported only when prediction rows contain scores (`probabilities` or
+`logits`); otherwise the AUROC CSV records why it was unavailable. Use
+`--prediction_analysis_dir PATH` and `--max_error_examples N` to customize the
+diagnostic output.
 
 ## Direct Method Runners
 
@@ -664,6 +683,8 @@ paths when prediction files are produced. The prediction files include sample
 ids, text, gold labels, predicted labels, and model scores for inspection
 (`logits` for Transformer methods, class probabilities for TF-IDF).
 Bi-LSTM prediction files also store class probabilities.
+Aggregating with `--write_prediction_analysis` converts those prediction files
+into confusion matrices, optional AUROC summaries, and capped error examples.
 When a method saves a local final model, `result_summary.json` also records the
 saved files under `artifacts.model` so the model used for a metric can be traced
 without inspecting the directory by hand.

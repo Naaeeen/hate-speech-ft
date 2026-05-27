@@ -250,6 +250,9 @@ The UI does not execute automatically. You run separate notebook cells to:
 | `Metrics` | Comma-separated metrics to summarize. | For HPO/confirmation use `eval_f1_macro,training_time_sec`. For final add `test_f1_macro,test_accuracy`. |
 | `Pareto CSVs` | Also writes `hpo_runs.csv`, `final_runs.csv`, and `method_summary.csv`. | Keep checked for real HPO/final batches. These files are easier to use for report tables and Pareto plots than raw JSON. |
 | `CSV dir` | Optional output directory for the Pareto CSV files. Blank writes them beside `Agg output`. | Leave blank for normal work, or set a report folder such as `/content/drive/MyDrive/hate_speech_ft/outputs/pareto/tfidf_logreg_001`. |
+| `Prediction analysis` | Also derives confusion matrices, AUROC summaries, and error examples from saved prediction files. | Keep checked for final aggregation. HPO-only folders usually have no prediction files, so the diagnostics may be empty there. |
+| `Diag dir` | Optional output folder for prediction diagnostics. Blank writes `prediction_analysis/` beside `Agg output`. | Leave blank for normal work, or set a report folder if you want diagnostics separated from Pareto CSVs. |
+| `Error examples` | Maximum misclassified examples exported per prediction file. | Use `50` for normal inspection; increase only if you need more qualitative examples. |
 
 Important: do not put `output_dir`, `trial_id`, `search_stage`, `config_hash`,
 `hpo_seed`, or `run_test` in `Overrides` for HPO or final seed generation. The
@@ -608,6 +611,8 @@ Expected result:
   seed, including failed final seeds with blank metrics and error fields.
   `method_summary.csv` contains the final mean/std row used for method
   comparison and Pareto analysis, plus completed/failed final-seed counts.
+- If `Prediction analysis` is checked, a diagnostics folder is written with
+  confusion matrices, optional AUROC, and capped error examples.
 
 For final Pareto reporting, check these columns:
 
@@ -641,6 +646,20 @@ For TF-IDF, `gpu_type` is normally `cpu` and `gpu_hours` is blank because
 scikit-learn logistic regression does not use the Colab GPU. Use wall-clock
 training time plus trainable/total parameter count for TF-IDF efficiency
 reporting.
+
+Prediction diagnostics are derived from final prediction files:
+
+```text
+prediction_analysis/prediction_analysis.json
+prediction_analysis/confusion_matrices.csv
+prediction_analysis/auroc_summary.csv
+prediction_analysis/error_examples.csv
+```
+
+Use `confusion_matrices.csv` to inspect hate/offensive/normal confusions.
+Use `error_examples.csv` to manually inspect representative mistakes. AUROC is
+optional: `auroc_summary.csv` reports one-vs-rest AUROC when prediction rows
+contain class probabilities; otherwise it records why AUROC was unavailable.
 
 ## Local Output Files
 
@@ -698,6 +717,9 @@ Prediction rows include:
 - class probabilities
 
 Use these files for error analysis after final runs.
+Aggregation can now automate the first pass of that error analysis through the
+`Prediction analysis` checkbox. It does not retrain the model; it only reads
+the saved prediction files.
 
 ## W&B Result Inspection
 

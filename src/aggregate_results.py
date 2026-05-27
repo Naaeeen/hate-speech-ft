@@ -15,6 +15,7 @@ from src.experiments.aggregate_results import (
     write_aggregate_report,
     write_pareto_csvs,
 )
+from src.experiments.prediction_analysis import write_prediction_analysis_artifacts
 
 
 def parse_args():
@@ -59,6 +60,28 @@ def parse_args():
             "output directory."
         ),
     )
+    parser.add_argument(
+        "--write_prediction_analysis",
+        action="store_true",
+        help=(
+            "Also derive confusion matrices, AUROC summaries, and error examples "
+            "from saved eval/test prediction files."
+        ),
+    )
+    parser.add_argument(
+        "--prediction_analysis_dir",
+        default=None,
+        help=(
+            "Directory for prediction diagnostics. Defaults to a "
+            "prediction_analysis directory beside the aggregate JSON output."
+        ),
+    )
+    parser.add_argument(
+        "--max_error_examples",
+        type=int,
+        default=50,
+        help="Maximum misclassified examples to export per prediction file.",
+    )
     return parser.parse_args()
 
 
@@ -77,6 +100,19 @@ def main() -> int:
         csv_paths = write_pareto_csvs(csv_dir, report)
         for csv_path in csv_paths:
             print(f"Wrote Pareto CSV: {csv_path}")
+    if args.write_prediction_analysis:
+        analysis_dir = (
+            Path(args.prediction_analysis_dir)
+            if args.prediction_analysis_dir
+            else output_path.parent / "prediction_analysis"
+        )
+        analysis_paths = write_prediction_analysis_artifacts(
+            analysis_dir,
+            report,
+            max_error_examples=args.max_error_examples,
+        )
+        for analysis_path in analysis_paths.values():
+            print(f"Wrote prediction analysis: {analysis_path}")
     print(
         f"Runs: {report['total_runs']} "
         f"completed={report['completed_runs']} failed={report['failed_runs']} "

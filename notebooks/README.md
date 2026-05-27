@@ -23,6 +23,9 @@ The notebook should:
    `configs/search_spaces.json`. HPO previews must use a `*_tuning`
    experiment; smoke/quick/final entries are not valid Colab HPO bases.
 9. Aggregate finished run summaries with `launcher.aggregate_results()`.
+10. Optionally export prediction diagnostics from saved prediction files:
+    confusion matrices, AUROC summaries when scores are available, and capped
+    error examples.
 
 ## Do Not Put Training Logic Here
 
@@ -100,6 +103,21 @@ Aggregate reports include total training time in seconds/hours and summarize
 when the selected search space has an allocated GPU-hour cap.
 Confirmation/final seed previews also include the configured HPO caps when
 available, so final summaries preserve the search-budget context.
+The launcher also exposes `Prediction analysis`, `Diag dir`, and
+`Error examples`. Keep `Prediction analysis` checked for final aggregation when
+you want post-hoc diagnostics. It reads `eval_predictions.json` and
+`test_predictions.json` paths already recorded in `result_summary.json`, so it
+does not rerun training or evaluation. The diagnostics folder contains:
+
+```text
+prediction_analysis.json
+confusion_matrices.csv
+auroc_summary.csv
+error_examples.csv
+```
+
+AUROC is optional: it is written when prediction rows have `probabilities` or
+`logits`; otherwise the AUROC CSV records the reason it was unavailable.
 
 ## W&B Secret
 

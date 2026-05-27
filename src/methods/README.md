@@ -96,6 +96,9 @@ Every completed method run should write `resolved_config.json`, `metrics.json`,
 per-sample outputs should also write `eval_predictions.json`; final runs with
 `--run_test` should write `test_predictions.json` and store those paths in
 `result_summary.json`.
+Those prediction files are the source for shared post-hoc diagnostics:
+`src/experiments/prediction_analysis.py` can derive confusion matrices,
+optional AUROC summaries, and error examples without rerunning the method.
 When a method saves a local final model, pass those paths to
 `write_result_files()` so `result_summary.json.artifacts.model` identifies the
 model artifact behind the recorded metrics.

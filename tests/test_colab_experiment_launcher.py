@@ -356,6 +356,9 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.aggregate_metrics = ValueBox("eval_f1_macro,training_time_sec")
         launcher.write_pareto_csvs = ValueBox(True)
         launcher.pareto_csv_dir = ValueBox("outputs/pareto")
+        launcher.write_prediction_analysis = ValueBox(True)
+        launcher.prediction_analysis_dir = ValueBox("outputs/diagnostics")
+        launcher.max_error_examples = ValueBox(12)
 
         command = launcher.build_aggregate_command()
 
@@ -367,6 +370,11 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("--write_pareto_csvs", command)
         self.assertIn("--csv_dir", command)
         self.assertIn("outputs/pareto", command)
+        self.assertIn("--write_prediction_analysis", command)
+        self.assertIn("--prediction_analysis_dir", command)
+        self.assertIn("outputs/diagnostics", command)
+        self.assertIn("--max_error_examples", command)
+        self.assertIn("12", command)
 
     def test_aggregate_defaults_follow_trial_output_root(self):
         launcher = object.__new__(ExperimentLauncher)
@@ -379,6 +387,9 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.aggregate_metrics = ValueBox("eval_f1_macro,training_time_sec")
         launcher.write_pareto_csvs = ValueBox(True)
         launcher.pareto_csv_dir = ValueBox("")
+        launcher.write_prediction_analysis = ValueBox(False)
+        launcher.prediction_analysis_dir = ValueBox("")
+        launcher.max_error_examples = ValueBox(50)
 
         config = launcher.get_aggregate_config()
 
@@ -388,6 +399,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
             "outputs/custom_hpo/aggregate_summary.json",
         )
         self.assertTrue(config["write_pareto_csvs"])
+        self.assertFalse(config["write_prediction_analysis"])
 
     def test_aggregate_defaults_follow_active_seed_output_root(self):
         launcher = object.__new__(ExperimentLauncher)
@@ -400,12 +412,18 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         launcher.aggregate_metrics = ValueBox("eval_f1_macro,test_f1_macro")
         launcher.write_pareto_csvs = ValueBox(False)
         launcher.pareto_csv_dir = ValueBox("")
+        launcher.write_prediction_analysis = ValueBox(True)
+        launcher.prediction_analysis_dir = ValueBox("")
+        launcher.max_error_examples = ValueBox(20)
 
         config = launcher.get_aggregate_config()
 
         self.assertEqual(config["input"], "outputs/final")
         self.assertEqual(config["output"], "outputs/final/aggregate_summary.json")
         self.assertFalse(config["write_pareto_csvs"])
+        self.assertTrue(config["write_prediction_analysis"])
+        self.assertEqual(config["prediction_analysis_dir"], None)
+        self.assertEqual(config["max_error_examples"], 20)
 
     def test_aggregate_results_writes_report_from_widget_settings(self):
         with TemporaryDirectory() as tmp:
@@ -435,6 +453,9 @@ class ColabExperimentLauncherTests(unittest.TestCase):
             launcher.aggregate_metrics = ValueBox("eval_f1_macro,training_time_sec")
             launcher.write_pareto_csvs = ValueBox(True)
             launcher.pareto_csv_dir = ValueBox(str(root / "pareto"))
+            launcher.write_prediction_analysis = ValueBox(True)
+            launcher.prediction_analysis_dir = ValueBox(str(root / "diagnostics"))
+            launcher.max_error_examples = ValueBox(5)
 
             with patch("builtins.print"):
                 report = launcher.aggregate_results()
@@ -442,6 +463,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
             self.assertEqual(report["total_runs"], 1)
             self.assertTrue((root / "aggregate_summary.json").is_file())
             self.assertTrue((root / "pareto" / "hpo_runs.csv").is_file())
+            self.assertTrue((root / "diagnostics" / "prediction_analysis.json").is_file())
 
 
 if __name__ == "__main__":

@@ -108,6 +108,26 @@ class ResultAggregationTests(unittest.TestCase):
 
         self.assertEqual(args.group_by, ["method", "search_stage", "config_hash"])
 
+    def test_aggregate_cli_accepts_prediction_analysis_options(self):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "aggregate_results.py",
+                "outputs/final",
+                "--write_prediction_analysis",
+                "--prediction_analysis_dir",
+                "outputs/diagnostics",
+                "--max_error_examples",
+                "12",
+            ],
+        ):
+            args = parse_aggregate_cli_args()
+
+        self.assertTrue(args.write_prediction_analysis)
+        self.assertEqual(args.prediction_analysis_dir, "outputs/diagnostics")
+        self.assertEqual(args.max_error_examples, 12)
+
     def test_discovers_completed_and_failed_summary_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

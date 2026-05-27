@@ -14,6 +14,9 @@ TF-IDF, Bi-LSTM, or any other method.
   files for method runners.
 - `aggregate_results.py`: reads local run summaries and builds grouped
   mean/std reports.
+- `prediction_analysis.py`: derives confusion matrices, AUROC summaries, and
+  error examples from saved `eval_predictions.json` / `test_predictions.json`
+  files without rerunning a model.
 - `../run_experiment.py`: CLI entry point for listing, dry-running, and running
   catalog experiments.
 - `../aggregate_results.py`: CLI entry point for aggregation.
@@ -93,6 +96,7 @@ After a batch finishes, aggregate local summaries:
 python src/aggregate_results.py outputs/hpo \
   --output outputs/hpo/aggregate_summary.json \
   --write_pareto_csvs \
+  --write_prediction_analysis \
   --group_by method search_stage config_hash \
   --metric eval_f1_macro \
   --metric training_time_sec
@@ -122,6 +126,24 @@ With `--write_pareto_csvs`, the aggregator also writes:
 Use `--csv_dir PATH` when those CSVs should not be written beside the aggregate
 JSON. The Colab launcher exposes the same behavior through `Pareto CSVs` and
 `CSV dir`.
+With `--write_prediction_analysis`, the aggregator also reads prediction
+artifact paths from final summaries and writes diagnostic files. This is a
+post-processing step: it never loads a model, changes training, or touches the
+test split before final runs.
+
+- `prediction_analysis/prediction_analysis.json`: per-run analysis payloads and
+  skipped files with reasons.
+- `prediction_analysis/confusion_matrices.csv`: one count row per true/predicted
+  label pair for each analyzed split/run.
+- `prediction_analysis/auroc_summary.csv`: optional one-vs-rest AUROC when
+  prediction rows contain `probabilities` or `logits`; otherwise it records why
+  AUROC was unavailable.
+- `prediction_analysis/error_examples.csv`: capped misclassified examples for
+  qualitative error analysis.
+
+Use `--prediction_analysis_dir PATH` to choose a different diagnostics folder,
+and `--max_error_examples N` to control how many errors are exported per
+prediction file.
 `method_summary.csv` reports random-search tuning-trial HPO time/counts for the
 same method, canonical search space, and HPO seed as the final config. The
 aggregate JSON top-level `hpo_total_training_time_*` fields include

@@ -10,6 +10,7 @@ from src.experiments.aggregate_results import (
     write_aggregate_report,
     write_pareto_csvs,
 )
+from src.experiments.prediction_analysis import write_prediction_analysis_artifacts
 from src.experiments.hpo import (
     DEFAULT_SEARCH_SPACE_PATH,
     build_seed_run_overrides,
@@ -158,6 +159,20 @@ class ExperimentLauncher:
             description="CSV dir",
             layout=widgets.Layout(width="520px"),
         )
+        self.write_prediction_analysis = widgets.Checkbox(
+            value=True,
+            description="Prediction analysis",
+        )
+        self.prediction_analysis_dir = widgets.Text(
+            value="",
+            placeholder="blank writes prediction_analysis beside aggregate JSON",
+            description="Diag dir",
+            layout=widgets.Layout(width="520px"),
+        )
+        self.max_error_examples = widgets.IntText(
+            value=50,
+            description="Error examples",
+        )
         self.aggregate_group_by = widgets.Text(
             value="method search_stage config_hash",
             description="Group by",
@@ -182,6 +197,13 @@ class ExperimentLauncher:
                 widgets.HBox([self.aggregate_input, self.aggregate_group_by]),
                 widgets.HBox([self.aggregate_output, self.aggregate_metrics]),
                 widgets.HBox([self.write_pareto_csvs, self.pareto_csv_dir]),
+                widgets.HBox(
+                    [
+                        self.write_prediction_analysis,
+                        self.prediction_analysis_dir,
+                        self.max_error_examples,
+                    ]
+                ),
             ]
         )
 
@@ -246,6 +268,18 @@ class ExperimentLauncher:
             "metrics": metrics or ["eval_f1_macro", "training_time_sec"],
             "write_pareto_csvs": bool(self.write_pareto_csvs.value),
             "pareto_csv_dir": self.pareto_csv_dir.value or None,
+            "write_prediction_analysis": bool(
+                getattr(getattr(self, "write_prediction_analysis", None), "value", False)
+            ),
+            "prediction_analysis_dir": getattr(
+                getattr(self, "prediction_analysis_dir", None),
+                "value",
+                "",
+            )
+            or None,
+            "max_error_examples": int(
+                getattr(getattr(self, "max_error_examples", None), "value", 50) or 0
+            ),
         }
 
     def build_command(self) -> list[str]:
@@ -462,6 +496,13 @@ class ExperimentLauncher:
             command.append("--write_pareto_csvs")
             if config["pareto_csv_dir"]:
                 command.extend(["--csv_dir", config["pareto_csv_dir"]])
+        if config["write_prediction_analysis"]:
+            command.append("--write_prediction_analysis")
+            if config["prediction_analysis_dir"]:
+                command.extend(
+                    ["--prediction_analysis_dir", config["prediction_analysis_dir"]]
+                )
+            command.extend(["--max_error_examples", str(config["max_error_examples"])])
         return command
 
     def preview_aggregate_command(self) -> str:
@@ -482,6 +523,17 @@ class ExperimentLauncher:
             csv_dir = config["pareto_csv_dir"] or str(Path(config["output"]).parent)
             for csv_path in write_pareto_csvs(csv_dir, report):
                 print(f"Wrote Pareto CSV: {csv_path}")
+        if config["write_prediction_analysis"]:
+            analysis_dir = (
+                config["prediction_analysis_dir"]
+                or str(Path(config["output"]).parent / "prediction_analysis")
+            )
+            for analysis_path in write_prediction_analysis_artifacts(
+                analysis_dir,
+                report,
+                max_error_examples=config["max_error_examples"],
+            ).values():
+                print(f"Wrote prediction analysis: {analysis_path}")
         print(
             f"Runs: {report['total_runs']} "
             f"completed={report['completed_runs']} failed={report['failed_runs']}"
