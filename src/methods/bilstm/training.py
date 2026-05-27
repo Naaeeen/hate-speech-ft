@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 from src.experiments.results import write_json
 from src.methods.bilstm.data import BiLSTMSplit
 from src.methods.bilstm.dataset import HateXplainBiLSTMDataset
+from src.methods.bilstm.history import append_epoch_history
 from src.methods.bilstm.model import BiLSTMClassifier
 
 if TYPE_CHECKING:
@@ -533,9 +534,13 @@ def run_training(
             device=device,
             split_name="eval",
         )
-        eval_metrics["train_loss"] = train_loss
-        eval_metrics["epoch"] = epoch
-        history.append(dict(eval_metrics))
+        eval_metrics = append_epoch_history(
+            history,
+            eval_metrics=eval_metrics,
+            train_loss=train_loss,
+            epoch=epoch,
+            global_step=global_step,
+        )
 
         print(
             f"epoch={epoch} train_loss={train_loss:.4f} "

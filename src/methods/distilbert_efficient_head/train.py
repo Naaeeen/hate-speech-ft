@@ -42,14 +42,11 @@ from src.methods.hf_sequence_classification import (
     write_config_snapshot,
     write_success_outputs,
 )
-from src.utils.wandb_config import finish_wandb_run, log_wandb_best_effort
-
-
-def _prefixed_metrics(prefix: str, metrics: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key if key.startswith(f"{prefix}_") else f"{prefix}_{key}": value
-        for key, value in metrics.items()
-    }
+from src.methods.staged_wandb import (
+    disable_hf_wandb_reporting,
+    log_stage_trainer_history,
+)
+from src.utils.wandb_config import finish_wandb_run
 
 
 def _merge_stage_model_selection(
@@ -116,6 +113,7 @@ def main() -> None:
         prepare_hf_output_dir(args)
         write_config_snapshot(args.output_dir, experiment_config, wandb_run)
 
+        stage_wandb_settings = disable_hf_wandb_reporting(setup.wandb_settings)
         stage1_args = build_stage_training_arguments(
             stage1_context.libraries.training_args_cls,
             args=args,
@@ -123,7 +121,7 @@ def main() -> None:
             learning_rate=args.stage1_learning_rate,
             num_train_epochs=args.stage1_epochs,
             precision_policy=precision_policy,
-            wandb_settings=setup.wandb_settings,
+            wandb_settings=stage_wandb_settings,
         )
         stage2_args = build_stage_training_arguments(
             stage1_context.libraries.training_args_cls,
@@ -132,7 +130,7 @@ def main() -> None:
             learning_rate=args.stage2_learning_rate,
             num_train_epochs=args.stage2_epochs,
             precision_policy=precision_policy,
-            wandb_settings=setup.wandb_settings,
+            wandb_settings=stage_wandb_settings,
         )
         stage1_trainer = build_hf_trainer(
             stage1_context,
@@ -171,6 +169,12 @@ def main() -> None:
             metric_for_best_model=args.metric_for_best_model,
             greater_is_better=not args.lower_is_better,
         )
+        log_stage_trainer_history(
+            wandb_run,
+            stage1_trainer,
+            stage="stage1",
+            extra_metrics=stage1_eval_metrics,
+        )
 
         print("\nStage 2: full fine-tuning fresh backbone with transferred head...")
         stage2_context = build_stage2_context(stage1_trainer.model, base_context, args)
@@ -187,6 +191,7 @@ def main() -> None:
         synchronize_cuda()
         stage2_training_time_sec = time.perf_counter() - stage2_start_time
         training_time_sec = time.perf_counter() - train_start_time
+        log_stage_trainer_history(wandb_run, stage2_trainer, stage="stage2")
 
         metrics, test_metrics = evaluate_validation_and_optional_test(
             stage2_trainer,
@@ -222,10 +227,6 @@ def main() -> None:
                 "stage1_training_time_sec": stage1_training_time_sec,
                 "stage2_training_time_sec": stage2_training_time_sec,
             },
-        )
-        log_wandb_best_effort(
-            wandb_run,
-            _prefixed_metrics("stage1", stage1_eval_metrics),
         )
         result_paths = write_success_outputs(
             args,

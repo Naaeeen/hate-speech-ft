@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from src.methods import peft_utils
+from src.utils.wandb_config import WandbSettings
 
 
 class FakeTensor:
@@ -174,7 +175,7 @@ class DistilbertEfficientHeadTrainTests(unittest.TestCase):
                     "bf16": False,
                 },
                 "experiment_config": {"setup_complete": False},
-                "wandb_settings": object(),
+                "wandb_settings": WandbSettings(enabled=True, project="unit-test"),
             },
         )()
         trainers = [FakeTrainer("stage1"), FakeTrainer("stage2")]
@@ -214,7 +215,7 @@ class DistilbertEfficientHeadTrainTests(unittest.TestCase):
             eh_train,
             "build_stage_training_arguments",
             side_effect=["stage1_args", "stage2_args"],
-        ), patch.object(
+        ) as build_stage_training_arguments, patch.object(
             eh_train,
             "build_hf_trainer",
             side_effect=trainers,
@@ -264,6 +265,10 @@ class DistilbertEfficientHeadTrainTests(unittest.TestCase):
         save_final_predictions.assert_called_once()
         self.assertIs(save_final_predictions.call_args.args[1], trainers[1])
         write_success_outputs.assert_called_once()
+        self.assertEqual(build_stage_training_arguments.call_count, 2)
+        for call_args in build_stage_training_arguments.call_args_list:
+            self.assertFalse(call_args.kwargs["wandb_settings"].enabled)
+            self.assertEqual(call_args.kwargs["wandb_settings"].project, "unit-test")
 
 
 if __name__ == "__main__":

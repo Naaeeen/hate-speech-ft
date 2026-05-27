@@ -261,6 +261,48 @@ class ResultAggregationTests(unittest.TestCase):
             "outputs/tfidf_seed42/test_predictions.json",
         )
 
+    def test_flatten_summary_record_preserves_two_stage_metrics(self):
+        payload = completed_summary(
+            trial_id="lpft_seed42",
+            seed=42,
+            eval_f1=0.61,
+            test_f1=0.58,
+        )
+        payload["config"]["method"] = "lp-ft"
+        payload["metrics"]["stage1"] = {
+            "stage1_eval_f1_macro": 0.57,
+            "stage1_eval_loss": 0.8,
+        }
+        payload["model_selection"].update(
+            {
+                "stage1_best_metric": 0.57,
+                "stage1_best_epoch": 3,
+                "stage1_best_step": 300,
+                "stage1_best_model_checkpoint": "outputs/lpft/stage1/checkpoint-300",
+                "stage2_best_metric": 0.61,
+                "stage2_best_epoch": 2,
+                "stage2_best_step": 200,
+            }
+        )
+
+        record = flatten_summary_record(
+            payload,
+            Path("outputs/lpft_seed42/result_summary.json"),
+        )
+
+        self.assertEqual(record["stage1_eval_f1_macro"], 0.57)
+        self.assertEqual(record["stage1_eval_loss"], 0.8)
+        self.assertEqual(record["stage1_best_metric"], 0.57)
+        self.assertEqual(record["stage1_best_epoch"], 3)
+        self.assertEqual(record["stage1_best_step"], 300)
+        self.assertEqual(
+            record["stage1_best_model_checkpoint"],
+            "outputs/lpft/stage1/checkpoint-300",
+        )
+        self.assertEqual(record["stage2_best_metric"], 0.61)
+        self.assertEqual(record["stage2_best_epoch"], 2)
+        self.assertEqual(record["stage2_best_step"], 200)
+
     def test_aggregate_records_computes_mean_std_and_failure_counts(self):
         records = [
             flatten_summary_record(completed_summary(
@@ -411,13 +453,19 @@ class ResultAggregationTests(unittest.TestCase):
     def test_write_pareto_csvs_exports_hpo_final_and_method_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            write_json(root / "trial1" / "result_summary.json", completed_summary(
+            trial1_payload = completed_summary(
                 trial_id="trial1",
                 seed=42,
                 eval_f1=0.60,
                 trainable_params=100,
                 total_params=1000,
-            ))
+            )
+            trial1_payload["metrics"]["stage1"] = {
+                "stage1_eval_f1_macro": 0.55,
+                "stage1_eval_loss": 0.9,
+            }
+            trial1_payload["model_selection"]["stage1_best_epoch"] = 2
+            write_json(root / "trial1" / "result_summary.json", trial1_payload)
             write_json(
                 root / "trial2" / "failure_summary.json",
                 {
@@ -439,14 +487,29 @@ class ResultAggregationTests(unittest.TestCase):
                     "error": {"type": "RuntimeError", "message": "CUDA out of memory"},
                 },
             )
-            write_json(root / "seed42" / "result_summary.json", completed_summary(
+            seed42_payload = completed_summary(
                 trial_id="seed42",
                 seed=42,
                 eval_f1=0.62,
                 test_f1=0.58,
                 trainable_params=100,
                 total_params=1000,
-            ))
+            )
+            seed42_payload["metrics"]["stage1"] = {
+                "stage1_eval_f1_macro": 0.56,
+                "stage1_eval_loss": 0.85,
+            }
+            seed42_payload["model_selection"].update(
+                {
+                    "stage1_best_metric": 0.56,
+                    "stage1_best_epoch": 3,
+                    "stage1_best_step": 300,
+                    "stage2_best_metric": 0.62,
+                    "stage2_best_epoch": 2,
+                    "stage2_best_step": 200,
+                }
+            )
+            write_json(root / "seed42" / "result_summary.json", seed42_payload)
             write_json(root / "seed43" / "result_summary.json", completed_summary(
                 trial_id="seed43",
                 seed=43,
@@ -490,6 +553,8 @@ class ResultAggregationTests(unittest.TestCase):
             self.assertEqual(hpo_rows[0]["search_method"], "random_search")
             self.assertEqual(hpo_rows[0]["search_space"], "full_ft")
             self.assertEqual(hpo_rows[0]["eval_time_s"], "1.25")
+            self.assertEqual(hpo_rows[0]["stage1_eval_f1_macro"], "0.55")
+            self.assertEqual(hpo_rows[0]["stage1_best_epoch"], "2")
             self.assertEqual(hpo_rows[1]["status"], "failed")
             self.assertEqual(hpo_rows[1]["failed_oom"], "True")
 
@@ -501,6 +566,9 @@ class ResultAggregationTests(unittest.TestCase):
             self.assertEqual(final_rows[0]["status"], "completed")
             self.assertEqual(final_rows[0]["test_macro_f1"], "0.58")
             self.assertEqual(final_rows[0]["peak_gpu_memory_mb"], "1234.0")
+            self.assertEqual(final_rows[0]["stage1_eval_f1_macro"], "0.56")
+            self.assertEqual(final_rows[0]["stage1_best_epoch"], "3")
+            self.assertEqual(final_rows[0]["stage2_best_epoch"], "2")
             self.assertIn("learning_rate", final_rows[0]["selected_hyperparams_json"])
             self.assertEqual(final_rows[2]["status"], "failed")
             self.assertEqual(final_rows[2]["error_type"], "RuntimeError")

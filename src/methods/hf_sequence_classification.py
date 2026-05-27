@@ -641,6 +641,24 @@ def write_failure_summary(
     return failure_path
 
 
+def _wandb_metric_key(key: str) -> str:
+    if key.startswith("eval_predictions_"):
+        return f"eval/predictions_{key.removeprefix('eval_predictions_')}"
+    if key.startswith("test_predictions_"):
+        return f"test/predictions_{key.removeprefix('test_predictions_')}"
+    if key.startswith("eval_"):
+        return f"eval/{key.removeprefix('eval_')}"
+    if key.startswith("test_"):
+        return f"test/{key.removeprefix('test_')}"
+    return key
+
+
+def _wandb_metric_payload(metrics: dict[str, Any] | None) -> dict[str, Any]:
+    if not metrics:
+        return {}
+    return {_wandb_metric_key(key): value for key, value in metrics.items()}
+
+
 def finish_failed_setup_run(
     args: Any,
     *,
@@ -723,6 +741,8 @@ def write_success_outputs(
     )
     log_wandb_best_effort(
         wandb_run,
+        _wandb_metric_payload(eval_metrics),
+        _wandb_metric_payload(test_metrics),
         runtime_metrics,
         {"model_selection": model_selection},
     )

@@ -191,11 +191,30 @@ def log_wandb_best_effort(run, *payloads: dict[str, Any]) -> None:
     if run is None:
         return
     for payload in payloads:
+        if not payload:
+            continue
         try:
             run.log(payload)
         except Exception as exc:  # pragma: no cover - defensive around remote logging
             print(f"Warning: W&B logging failed: {exc}", file=sys.stderr)
             return
+
+
+def define_wandb_metric_best_effort(
+    run,
+    name: str,
+    *,
+    step_metric: str | None = None,
+) -> None:
+    if run is None:
+        return
+    try:
+        if step_metric is None:
+            run.define_metric(name)
+        else:
+            run.define_metric(name, step_metric=step_metric)
+    except Exception as exc:  # pragma: no cover - defensive around remote logging
+        print(f"Warning: W&B define_metric failed: {exc}", file=sys.stderr)
 
 
 def finish_wandb_run(run) -> None:

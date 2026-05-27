@@ -11,6 +11,7 @@ from src.experiments.results import write_json
 from src.methods.bilstm import args as bilstm_args
 from src.methods.bilstm import config as bilstm_config
 from src.methods.bilstm import train as bilstm_train
+from src.methods.bilstm.history import append_epoch_history
 
 
 class BiLSTMTrainEntryTests(unittest.TestCase):
@@ -69,6 +70,50 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
         self.assertEqual(cpu_runtime["device"], "cpu")
         self.assertIsNone(cpu_runtime["gpu_hours"])
         self.assertAlmostEqual(cuda_runtime["gpu_hours"], 60.0 / 3600)
+
+    def test_epoch_history_records_explicit_global_step_for_wandb_axes(self):
+        history = []
+
+        record = append_epoch_history(
+            history,
+            eval_metrics={"eval_f1_macro": 0.5},
+            train_loss=0.7,
+            epoch=2,
+            global_step=128,
+        )
+
+        self.assertEqual(record["global_step"], 128)
+        self.assertEqual(record["epoch"], 2)
+        self.assertEqual(record["train_loss"], 0.7)
+        self.assertEqual(record["eval_f1_macro"], 0.5)
+        self.assertEqual(history, [record])
+
+    def test_bilstm_wandb_metrics_use_global_step_axis(self):
+        class FakeRun:
+            def __init__(self):
+                self.calls = []
+
+            def define_metric(self, *args, **kwargs):
+                self.calls.append((args, kwargs))
+
+        run = FakeRun()
+
+        bilstm_train._define_bilstm_wandb_metrics(run)
+
+        self.assertIn((("global_step",), {}), run.calls)
+        self.assertIn((("train_loss",), {"step_metric": "global_step"}), run.calls)
+        self.assertIn((("eval_*",), {"step_metric": "global_step"}), run.calls)
+
+    def test_bilstm_final_metric_payload_includes_global_step_for_wandb_axis(self):
+        payload = bilstm_train._with_wandb_global_step(
+            {"eval_f1_macro": 0.5},
+            global_step=128,
+        )
+
+        self.assertEqual(payload, {"eval_f1_macro": 0.5, "global_step": 128})
+        self.assertIsNone(
+            bilstm_train._with_wandb_global_step(None, global_step=128)
+        )
 
     def test_final_main_writes_standard_artifacts_with_fake_training_stack(self):
         with TemporaryDirectory() as temp_dir:

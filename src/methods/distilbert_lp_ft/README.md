@@ -88,6 +88,12 @@ output_dir/stage2_full_ft/
 
 The final saved model/tokenizer are written directly under `output_dir`.
 
+W&B logging keeps the two stages separate. Stage Trainer auto-reporting is
+disabled to avoid repeated non-monotonic `train/global_step` curves. Use
+`stage1/train/*` with `stage1/global_step` for the linear-probe phase and
+`stage2/train/*` with `stage2/global_step` for the full-finetuning phase. Final
+validation/test metrics still appear as normal `eval/*` and `test/*` metrics.
+
 ## Shared HF Workflow
 
 `train.py` intentionally stays small. It delegates repeated Hugging Face

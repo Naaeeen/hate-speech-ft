@@ -193,6 +193,32 @@ random-search HPO budget and Pareto tables; use W&B to inspect run-level
 curves, logs, and dashboard comparisons. Direct catalog/manual tuning runs stay
 visible in W&B and aggregate JSON, but they are not counted as HPO budget rows.
 
+## Two-Stage Method Curves
+
+Two-stage methods such as DistilBERT LP+FT and DistilBERT Efficient Head run two
+separate Hugging Face `Trainer` phases inside one experiment run. Each Trainer
+has its own local global-step counter, so logging both phases as plain
+`train/loss` against `train/global_step` would create a non-monotonic x-axis and
+misleading connected curves.
+
+For those methods, the pipeline disables Hugging Face's automatic W&B reporting
+inside each stage and logs stage-scoped histories instead:
+
+```text
+stage1/train/loss
+stage1/train/learning_rate
+stage1/eval/f1_macro
+stage2/train/loss
+stage2/train/learning_rate
+stage2/eval/f1_macro
+```
+
+Use `stage1/global_step` as the x-axis for `stage1/*` charts and
+`stage2/global_step` as the x-axis for `stage2/*` charts. Final validation/test
+metrics are still logged as normal `eval/*` and `test/*` metrics after the final
+stage's selected checkpoint is loaded. Local JSON summaries remain the source of
+truth for aggregation.
+
 For seed-run suggestions, the launcher uses the effective stage in W&B metadata:
 confirmation commands use confirm tags/groups, and final commands use final
 tags/groups even when they are generated from the tuning base experiment.

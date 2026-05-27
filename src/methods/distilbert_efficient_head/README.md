@@ -19,3 +19,9 @@ python src/run_experiment.py --experiment distilbert_efficient_head_tuning --sug
 The shared pipeline owns HateXplain preprocessing, strict-majority labels,
 validation-only HPO, final-only test evaluation, W&B arguments, output safety,
 and standard result artifacts.
+
+W&B logging keeps the two stages separate. Stage Trainer auto-reporting is
+disabled to avoid repeated non-monotonic `train/global_step` curves. Use
+`stage1/train/*` with `stage1/global_step` for the LoRA-head phase and
+`stage2/train/*` with `stage2/global_step` for the full-finetuning phase. Final
+validation/test metrics still appear as normal `eval/*` and `test/*` metrics.

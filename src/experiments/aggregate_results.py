@@ -37,6 +37,20 @@ DEFAULT_METRICS = (
     "best_epoch",
 )
 
+STAGE_RUN_COLUMNS = (
+    "stage1_eval_f1_macro",
+    "stage1_eval_accuracy",
+    "stage1_eval_precision_macro",
+    "stage1_eval_recall_macro",
+    "stage1_eval_loss",
+    "stage1_best_metric",
+    "stage1_best_epoch",
+    "stage1_best_step",
+    "stage2_best_metric",
+    "stage2_best_epoch",
+    "stage2_best_step",
+)
+
 HPO_RUN_COLUMNS = (
     "method",
     "trial_id",
@@ -55,6 +69,7 @@ HPO_RUN_COLUMNS = (
     "val_recall",
     "val_accuracy",
     "best_epoch",
+    *STAGE_RUN_COLUMNS,
     "train_time_s",
     "train_time_hours",
     "gpu_hours",
@@ -86,6 +101,7 @@ FINAL_RUN_COLUMNS = (
     "test_per_class_f1_normal",
     "val_macro_f1",
     "best_epoch",
+    *STAGE_RUN_COLUMNS,
     "final_train_time_s",
     "final_train_time_hours",
     "gpu_hours",
@@ -250,6 +266,25 @@ def _is_hpo_search_record(record: dict[str, Any]) -> bool:
     return record.get("search_method") == "random_search"
 
 
+def _flatten_stage_metrics(payload: dict[str, Any]) -> dict[str, Any]:
+    metrics = payload.get("metrics") or {}
+    flattened: dict[str, Any] = {}
+    for section_name, section_metrics in metrics.items():
+        if not str(section_name).startswith("stage") or not isinstance(
+            section_metrics,
+            dict,
+        ):
+            continue
+        for key, value in section_metrics.items():
+            output_key = (
+                str(key)
+                if str(key).startswith(f"{section_name}_")
+                else f"{section_name}_{key}"
+            )
+            flattened[output_key] = value
+    return flattened
+
+
 def _hpo_budget_records(
     records: Iterable[dict[str, Any]],
     stages: set[str],
@@ -348,6 +383,15 @@ def flatten_summary_record(
         "best_val_macro_f1": best_val_macro_f1,
         "best_epoch": model_selection.get("best_epoch"),
         "best_step": model_selection.get("best_step"),
+        "stage1_best_metric": model_selection.get("stage1_best_metric"),
+        "stage1_best_epoch": model_selection.get("stage1_best_epoch"),
+        "stage1_best_step": model_selection.get("stage1_best_step"),
+        "stage1_best_model_checkpoint": model_selection.get(
+            "stage1_best_model_checkpoint"
+        ),
+        "stage2_best_metric": model_selection.get("stage2_best_metric"),
+        "stage2_best_epoch": model_selection.get("stage2_best_epoch"),
+        "stage2_best_step": model_selection.get("stage2_best_step"),
         "eval_predictions_path": prediction_artifacts.get("eval"),
         "test_predictions_path": prediction_artifacts.get("test"),
         "model_artifacts": model_artifacts,
@@ -365,6 +409,7 @@ def flatten_summary_record(
         value = _metric_value(payload, metric)
         if value is not None:
             record[metric] = value
+    record.update(_flatten_stage_metrics(payload))
     return record
 
 
@@ -561,6 +606,10 @@ def _csv_value(value: Any) -> Any:
     return value
 
 
+def _stage_row_fields(record: dict[str, Any]) -> dict[str, Any]:
+    return {column: record.get(column) for column in STAGE_RUN_COLUMNS}
+
+
 def _hpo_row(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "method": record.get("method"),
@@ -583,6 +632,7 @@ def _hpo_row(record: dict[str, Any]) -> dict[str, Any]:
         "val_recall": record.get("eval_recall_macro"),
         "val_accuracy": record.get("eval_accuracy"),
         "best_epoch": record.get("best_epoch"),
+        **_stage_row_fields(record),
         "train_time_s": record.get("training_time_sec"),
         "train_time_hours": record.get("training_time_hours"),
         "gpu_hours": record.get("gpu_hours"),
@@ -616,6 +666,7 @@ def _final_row(record: dict[str, Any]) -> dict[str, Any]:
         "test_per_class_f1_normal": record.get("test_f1_normal"),
         "val_macro_f1": record.get("eval_f1_macro"),
         "best_epoch": record.get("best_epoch"),
+        **_stage_row_fields(record),
         "final_train_time_s": record.get("training_time_sec"),
         "final_train_time_hours": record.get("training_time_hours"),
         "gpu_hours": record.get("gpu_hours"),

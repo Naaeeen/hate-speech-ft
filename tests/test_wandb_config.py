@@ -6,6 +6,7 @@ from src.utils.wandb_config import (
     WandbSettings,
     apply_wandb_environment,
     build_wandb_run_name,
+    define_wandb_metric_best_effort,
     parse_wandb_tags,
 )
 
@@ -74,6 +75,42 @@ class WandbConfigTests(unittest.TestCase):
             self.assertEqual(os.environ["WANDB_TAGS"], "smoke,colab")
             self.assertEqual(os.environ["WANDB_LOG_MODEL"], "false")
             self.assertEqual(applied["WANDB_PROJECT"], "hate-speech-ft")
+
+    def test_define_wandb_metric_best_effort_sets_step_metric(self):
+        class FakeRun:
+            def __init__(self):
+                self.calls = []
+
+            def define_metric(self, *args, **kwargs):
+                self.calls.append((args, kwargs))
+
+        run = FakeRun()
+
+        define_wandb_metric_best_effort(
+            run,
+            "train_loss",
+            step_metric="global_step",
+        )
+
+        self.assertEqual(
+            run.calls,
+            [(("train_loss",), {"step_metric": "global_step"})],
+        )
+
+    def test_log_wandb_best_effort_skips_empty_payloads(self):
+        class FakeRun:
+            def __init__(self):
+                self.calls = []
+
+            def log(self, payload):
+                self.calls.append(payload)
+
+        from src.utils.wandb_config import log_wandb_best_effort
+
+        run = FakeRun()
+        log_wandb_best_effort(run, {}, {"eval/f1_macro": 0.5})
+
+        self.assertEqual(run.calls, [{"eval/f1_macro": 0.5}])
 
 
 if __name__ == "__main__":

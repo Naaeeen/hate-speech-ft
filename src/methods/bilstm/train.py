@@ -39,6 +39,7 @@ from src.methods.hf_common import (  # noqa: E402
     get_peak_memory_reserved_mb,
 )
 from src.utils.wandb_config import (  # noqa: E402
+    define_wandb_metric_best_effort,
     finish_wandb_run,
     init_wandb_run,
     log_wandb_best_effort,
@@ -65,6 +66,33 @@ def _prepare_output_dir(args, output_dir: Path) -> None:
             preview = ", ".join(path.name for path in removed_artifacts[:8])
             print(f"Cleared existing run artifacts from {output_dir}: {preview}")
     output_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _define_bilstm_wandb_metrics(wandb_run) -> None:
+    define_wandb_metric_best_effort(wandb_run, "global_step")
+    define_wandb_metric_best_effort(
+        wandb_run,
+        "train_loss",
+        step_metric="global_step",
+    )
+    define_wandb_metric_best_effort(
+        wandb_run,
+        "eval_*",
+        step_metric="global_step",
+    )
+
+
+def _with_wandb_global_step(
+    metrics: dict[str, Any] | None,
+    *,
+    global_step: int | None,
+) -> dict[str, Any] | None:
+    if metrics is None:
+        return None
+    payload = dict(metrics)
+    if global_step is not None:
+        payload["global_step"] = global_step
+    return payload
 
 
 def _write_final_prediction_files(
@@ -148,6 +176,7 @@ def main() -> None:
 
     try:
         wandb_run = init_wandb_run(resolve_wandb_settings(args), config=config)
+        _define_bilstm_wandb_metrics(wandb_run)
         from src.methods.bilstm.training import (
             resolve_class_weights,
             resolve_device,
@@ -277,11 +306,20 @@ def main() -> None:
             extra_metrics={"history": result["history"]},
             status="completed",
         )
+        final_global_step = result["model_selection"].get("best_step")
+        eval_wandb_metrics = _with_wandb_global_step(
+            result["eval_metrics"],
+            global_step=final_global_step,
+        )
+        test_wandb_metrics = _with_wandb_global_step(
+            result["test_metrics"],
+            global_step=final_global_step,
+        )
         log_wandb_best_effort(
             wandb_run,
             *result["history"],
-            result["eval_metrics"],
-            *([result["test_metrics"]] if result["test_metrics"] is not None else []),
+            eval_wandb_metrics,
+            *([test_wandb_metrics] if test_wandb_metrics is not None else []),
             runtime_metrics,
             {"model_selection": model_selection},
         )

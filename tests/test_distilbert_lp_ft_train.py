@@ -5,6 +5,7 @@ from unittest.mock import patch
 import src.methods.distilbert_lp_ft.train as lp_train
 from src.methods.distilbert_lp_ft import args as lp_args
 from src.methods.distilbert_lp_ft import training
+from src.utils.wandb_config import WandbSettings
 
 
 class FakeParameter:
@@ -64,22 +65,6 @@ class DistilbertLpFtTrainTests(unittest.TestCase):
 
         self.assertTrue(args.load_best_model_at_end)
         self.assertEqual(args.metric_for_best_model, "eval_f1_macro")
-
-    def test_stage_metric_prefixing_does_not_double_prefix_hf_metrics(self):
-        metrics = {
-            "stage1_eval_f1_macro": 0.5,
-            "loss": 1.0,
-        }
-
-        prefixed = lp_train._prefixed_metrics("stage1", metrics)
-
-        self.assertEqual(
-            prefixed,
-            {
-                "stage1_eval_f1_macro": 0.5,
-                "stage1_loss": 1.0,
-            },
-        )
 
     def test_lp_ft_main_saves_final_outputs_from_stage2_trainer(self):
         calls = []
@@ -153,7 +138,7 @@ class DistilbertLpFtTrainTests(unittest.TestCase):
                     "bf16": False,
                 },
                 "experiment_config": {"setup_complete": False},
-                "wandb_settings": object(),
+                "wandb_settings": WandbSettings(enabled=True, project="unit-test"),
             },
         )()
         trainers = [FakeTrainer("stage1"), FakeTrainer("stage2")]
@@ -185,7 +170,7 @@ class DistilbertLpFtTrainTests(unittest.TestCase):
             lp_train,
             "build_stage_training_arguments",
             side_effect=["stage1_args", "stage2_args"],
-        ), patch.object(
+        ) as build_stage_training_arguments, patch.object(
             lp_train,
             "build_hf_trainer",
             side_effect=trainers,
@@ -227,6 +212,10 @@ class DistilbertLpFtTrainTests(unittest.TestCase):
         save_final_predictions.assert_called_once()
         self.assertIs(save_final_predictions.call_args.args[1], trainers[1])
         write_success_outputs.assert_called_once()
+        self.assertEqual(build_stage_training_arguments.call_count, 2)
+        for call_args in build_stage_training_arguments.call_args_list:
+            self.assertFalse(call_args.kwargs["wandb_settings"].enabled)
+            self.assertEqual(call_args.kwargs["wandb_settings"].project, "unit-test")
 
 
 if __name__ == "__main__":

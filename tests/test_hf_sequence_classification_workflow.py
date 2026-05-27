@@ -228,6 +228,7 @@ class HfSequenceClassificationWorkflowTests(unittest.TestCase):
                 (output_dir / "metrics.json").read_text(encoding="utf-8")
             )
             self.assertEqual(metrics_payload["stage1"]["stage1_eval_f1_macro"], 0.4)
+            wandb_run.log.assert_any_call({"eval/f1_macro": 0.5})
             wandb_run.log.assert_any_call(runtime_metrics)
             wandb_run.log.assert_any_call({"model_selection": model_selection})
 
