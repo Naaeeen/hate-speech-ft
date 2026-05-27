@@ -16,7 +16,7 @@
     "gradient_checkpointing": false,
     "class_weighting": "none",
     "seeds_search": [42],
-    "seeds_confirm": [42],
+    "seeds_confirm": [42, 43, 44],
     "seeds_final": [42, 43, 44]
   },
   "trial_caps": {
