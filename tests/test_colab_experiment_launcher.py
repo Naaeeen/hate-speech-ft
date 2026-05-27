@@ -101,9 +101,9 @@ class ColabExperimentLauncherTests(unittest.TestCase):
         self.assertIn("final", commands[0])
         self.assertIn("--run_test", commands[0])
         self.assertIn("--hpo_trial_cap", commands[0])
-        self.assertIn("3", commands[0])
+        self.assertIn("4", commands[0])
         self.assertIn("--hpo_time_cap_gpu_hours", commands[0])
-        self.assertIn("2", commands[0])
+        self.assertIn("1", commands[0])
         self.assertIn("--seed", commands[1])
         self.assertIn("43", commands[1])
 
@@ -316,7 +316,7 @@ class ColabExperimentLauncherTests(unittest.TestCase):
 
         commands = launcher.build_seed_run_commands()
 
-        self.assertEqual(len(commands), 3)
+        self.assertEqual(len(commands), 1)
         self.assertIn("outputs/confirm", " ".join(commands[0]))
 
     def test_run_dispatches_to_trial_commands_when_trials_are_requested(self):

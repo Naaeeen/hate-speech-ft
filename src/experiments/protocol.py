@@ -33,15 +33,15 @@ class ProtocolValidationReport:
 
 
 EXPECTED_METHODS = (
-    ExpectedMethod("tfidf-logreg", "tfidf_logreg", 12, catalog_stage="tuning"),
-    ExpectedMethod("bilstm", "bilstm", 8, catalog_stage="tuning"),
-    ExpectedMethod("random-init-distilbert", "random_init_distilbert", 4),
-    ExpectedMethod("frozen-backbone", "frozen_backbone", 6, catalog_stage="tuning"),
-    ExpectedMethod("partial-ft", "partial_ft", 6),
-    ExpectedMethod("full-ft", "full_ft", 3, catalog_stage="tuning"),
-    ExpectedMethod("lora", "lora", 6, catalog_stage="tuning"),
-    ExpectedMethod("lp-ft", "lp_ft", 4, catalog_stage="tuning"),
-    ExpectedMethod("efficient-head-ft", "efficient_head_ft", 4, catalog_stage="tuning"),
+    ExpectedMethod("tfidf-logreg", "tfidf_logreg", 24, catalog_stage="tuning"),
+    ExpectedMethod("bilstm", "bilstm", 20, catalog_stage="tuning"),
+    ExpectedMethod("random-init-distilbert", "random_init_distilbert", 6),
+    ExpectedMethod("frozen-backbone", "frozen_backbone", 4, catalog_stage="tuning"),
+    ExpectedMethod("partial-ft", "partial_ft", 12),
+    ExpectedMethod("full-ft", "full_ft", 4, catalog_stage="tuning"),
+    ExpectedMethod("lora", "lora", 18, catalog_stage="tuning"),
+    ExpectedMethod("lp-ft", "lp_ft", 9, catalog_stage="tuning"),
+    ExpectedMethod("efficient-head-ft", "efficient_head_ft", 10, catalog_stage="tuning"),
 )
 
 REQUIRED_SHARED_FIXED = {
@@ -53,6 +53,7 @@ REQUIRED_SHARED_FIXED = {
     "max_grad_norm": 1.0,
     "eval_strategy": "epoch",
     "save_strategy": "epoch",
+    "save_total_limit": 1,
     "load_best_model_at_end": True,
     "early_stopping_patience": 2,
     "early_stopping_threshold": 0.001,
@@ -60,7 +61,7 @@ REQUIRED_SHARED_FIXED = {
     "gradient_checkpointing": False,
     "class_weighting": "none",
     "seeds_search": [42],
-    "seeds_confirm": [42, 43, 44],
+    "seeds_confirm": [42],
     "seeds_final": [42, 43, 44],
 }
 
@@ -76,37 +77,28 @@ REQUIRED_TRANSFORMER_DEFAULTS = {
 }
 
 REQUIRED_SEARCH_SPACE_KEYS = {
-    "tfidf_logreg": {"ngram_range", "C", "min_df"},
-    "tfidf_lr": {"ngram_range", "C", "min_df"},
-    "bilstm": {"hidden_size", "dropout", "learning_rate"},
+    "tfidf_logreg": {"ngram_range", "C", "min_df", "max_df", "max_features", "sublinear_tf"},
+    "tfidf_lr": {"ngram_range", "C", "min_df", "max_df", "max_features", "sublinear_tf"},
+    "bilstm": {"embedding_size", "hidden_size", "dropout", "learning_rate"},
     "random_init_distilbert": {"learning_rate", "num_train_epochs"},
-    "frozen_backbone": {"head_learning_rate", "num_train_epochs"},
+    "frozen_backbone": {"head_learning_rate"},
     "partial_ft": {"top_k_unfrozen_layers", "learning_rate"},
     "full_ft": {"learning_rate"},
     "lora": {
         "target_modules",
-        "modules_to_save",
         "lora_r",
         "lora_alpha_rule",
-        "lora_dropout",
         "learning_rate",
     },
     "lp_ft": {
         "stage1_head_learning_rate",
-        "stage1_epochs",
         "stage2_learning_rate",
-        "stage2_epochs",
     },
     "efficient_head_ft": {
         "stage1_learning_rate",
-        "stage1_epochs",
-        "stage1_target_modules",
-        "stage1_modules_to_save",
         "stage1_lora_r",
         "stage1_lora_alpha_rule",
-        "stage1_lora_dropout",
         "stage2_learning_rate",
-        "stage2_epochs",
     },
 }
 
@@ -234,17 +226,13 @@ def _validate_trial_cap(
 def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> None:
     spaces = hpo_config.get("search_spaces") or {}
     hash_keys_by_space = hpo_config.get("config_hash_keys") or {}
-    time_caps = hpo_config.get("time_caps_gpu_hours") or {}
-    for name, cap in time_caps.items():
-        if cap is None:
-            continue
-        try:
-            cap_value = float(cap)
-        except (TypeError, ValueError):
-            errors.append(f"time_caps_gpu_hours.{name} must be numeric; found {cap!r}.")
-            continue
-        if cap_value <= 0:
-            errors.append(f"time_caps_gpu_hours.{name} must be positive; found {cap!r}.")
+    time_caps = {
+        "time_caps_gpu_hours": hpo_config.get("time_caps_gpu_hours") or {},
+        "time_caps_cpu_hours": hpo_config.get("time_caps_cpu_hours") or {},
+    }
+    for cap_group, caps in time_caps.items():
+        for name, cap in caps.items():
+            _validate_time_cap(cap_group, name, cap, errors)
 
     for name, required_keys in REQUIRED_SEARCH_SPACE_KEYS.items():
         if name not in spaces:
@@ -284,8 +272,8 @@ def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> No
     lora_space = spaces.get("lora") or {}
     _expect_equal(
         lora_space,
-        "modules_to_save",
-        [["pre_classifier", "classifier"]],
+        "lora_alpha_rule",
+        "alpha = r",
         errors,
         "search_spaces.lora",
     )
@@ -307,18 +295,28 @@ def _validate_search_spaces(hpo_config: dict[str, Any], errors: list[str]) -> No
     efficient_head_space = spaces.get("efficient_head_ft") or {}
     _expect_equal(
         efficient_head_space,
-        "stage1_modules_to_save",
-        [["pre_classifier", "classifier"]],
-        errors,
-        "search_spaces.efficient_head_ft",
-    )
-    _expect_equal(
-        efficient_head_space,
         "stage1_lora_alpha_rule",
-        "alpha = 2 * r",
+        "alpha = r",
         errors,
         "search_spaces.efficient_head_ft",
     )
+
+
+def _validate_time_cap(
+    cap_group: str,
+    name: str,
+    cap: Any,
+    errors: list[str],
+) -> None:
+    if cap is None:
+        return
+    try:
+        cap_value = float(cap)
+    except (TypeError, ValueError):
+        errors.append(f"{cap_group}.{name} must be numeric; found {cap!r}.")
+        return
+    if cap_value <= 0:
+        errors.append(f"{cap_group}.{name} must be positive; found {cap!r}.")
 
 
 def _validate_experiment_entries(

@@ -37,6 +37,17 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["lora_alpha"], 2 * first["lora_r"])
 
+    def test_sample_search_space_supports_lora_alpha_equals_rank_rule(self):
+        space = {
+            "learning_rate": [1e-5],
+            "lora_r": [4, 8],
+            "lora_alpha_rule": "alpha = r",
+        }
+
+        trial = sample_search_space(space, seed=42, trial_index=0)
+
+        self.assertEqual(trial["lora_alpha"], trial["lora_r"])
+
     def test_sample_search_space_applies_stage1_lora_rule(self):
         space = {
             "stage1_learning_rate": [1e-4],
@@ -47,6 +58,17 @@ class HpoTests(unittest.TestCase):
         trial = sample_search_space(space, seed=42, trial_index=0)
 
         self.assertEqual(trial["stage1_lora_alpha"], 2 * trial["stage1_lora_r"])
+
+    def test_sample_search_space_supports_stage1_lora_alpha_equals_rank_rule(self):
+        space = {
+            "stage1_learning_rate": [1e-4],
+            "stage1_lora_r": [4, 8],
+            "stage1_lora_alpha_rule": "alpha = r",
+        }
+
+        trial = sample_search_space(space, seed=42, trial_index=0)
+
+        self.assertEqual(trial["stage1_lora_alpha"], trial["stage1_lora_r"])
 
     def test_build_trial_overrides_adds_tracking_fields(self):
         trials = build_trial_overrides(
@@ -188,6 +210,18 @@ class HpoTests(unittest.TestCase):
 
         self.assertEqual(len(combinations), 2)
         self.assertEqual({item["stage1_lora_alpha"] for item in combinations}, {8})
+
+    def test_enumerate_search_space_supports_alpha_equals_rank_rule(self):
+        combinations = enumerate_search_space(
+            {
+                "learning_rate": [1e-4, 2e-4],
+                "lora_r": [4],
+                "lora_alpha_rule": "alpha = r",
+            }
+        )
+
+        self.assertEqual(len(combinations), 2)
+        self.assertEqual({item["lora_alpha"] for item in combinations}, {4})
 
     def test_build_config_hash_is_stable(self):
         first = build_config_hash({"b": 2, "a": 1})
@@ -432,20 +466,23 @@ class HpoTests(unittest.TestCase):
         self.assertIn("full_ft", config["search_spaces"])
         self.assertEqual(config["shared_fixed"]["class_weighting"], "none")
         self.assertEqual(config["shared_fixed"]["optim"], "adamw_torch")
-        self.assertEqual(get_trial_cap(config, "full_ft"), 3)
-        self.assertEqual(get_time_cap_gpu_hours(config, "full_ft"), 2.0)
+        self.assertEqual(get_trial_cap(config, "full_ft"), 4)
+        self.assertEqual(get_time_cap_gpu_hours(config, "full_ft"), 1.0)
         self.assertIn("learning_rate", get_config_hash_keys(config, "full_ft"))
         self.assertIn("ngram_range", get_config_hash_keys(config, "tfidf_logreg"))
         self.assertEqual(
             shared_fixed_command_overrides(config)["mixed_precision"],
             "none",
         )
+        self.assertEqual(shared_fixed_command_overrides(config)["save_total_limit"], 1)
 
     def test_lora_final_defaults_are_hpo_reachable(self):
         from src.experiments.registry import load_experiment_registry
 
         hpo_config = load_hpo_config()
-        final_args = load_experiment_registry().get("distilbert_lora_final_seed42").args
+        registry = load_experiment_registry()
+        final_args = registry.get("distilbert_lora_final_seed42").args
+        base_args = registry.get("distilbert_lora_tuning").args
         keys = [
             "target_modules",
             "modules_to_save",
@@ -457,18 +494,21 @@ class HpoTests(unittest.TestCase):
 
         self.assertIn(
             {key: final_args[key] for key in keys},
-            [{key: combo[key] for key in keys} for combo in enumerate_search_space(
-                hpo_config["search_spaces"]["lora"]
-            )],
+            [
+                {key: {**base_args, **combo}[key] for key in keys}
+                for combo in enumerate_search_space(hpo_config["search_spaces"]["lora"])
+            ],
         )
 
     def test_efficient_head_final_defaults_are_hpo_reachable(self):
         from src.experiments.registry import load_experiment_registry
 
         hpo_config = load_hpo_config()
-        final_args = load_experiment_registry().get(
+        registry = load_experiment_registry()
+        final_args = registry.get(
             "distilbert_efficient_head_final_seed42"
         ).args
+        base_args = registry.get("distilbert_efficient_head_tuning").args
         keys = [
             "stage1_target_modules",
             "stage1_modules_to_save",
@@ -483,9 +523,12 @@ class HpoTests(unittest.TestCase):
 
         self.assertIn(
             {key: final_args[key] for key in keys},
-            [{key: combo[key] for key in keys} for combo in enumerate_search_space(
-                hpo_config["search_spaces"]["efficient_head_ft"]
-            )],
+            [
+                {key: {**base_args, **combo}[key] for key in keys}
+                for combo in enumerate_search_space(
+                    hpo_config["search_spaces"]["efficient_head_ft"]
+                )
+            ],
         )
 
 

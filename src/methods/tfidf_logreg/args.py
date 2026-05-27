@@ -28,6 +28,8 @@ def parse_args() -> argparse.Namespace:
         help="Inclusive TF-IDF n-gram range, e.g. '1,2' or '[1,2]'.",
     )
     parser.add_argument("--min_df", type=int, default=2)
+    parser.add_argument("--max_df", type=float, default=1.0)
     parser.add_argument("--max_features", type=int, default=50000)
+    parser.add_argument("--sublinear_tf", action="store_true")
     parser.add_argument("--C", type=float, default=1.0)
     return parser.parse_args()

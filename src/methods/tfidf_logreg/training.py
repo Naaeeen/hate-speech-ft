@@ -56,6 +56,8 @@ def validate_classical_args(args: argparse.Namespace, ngram_range: tuple[int, in
     validate_sample_selection_args(args)
     if args.min_df < 1:
         raise ValueError("--min_df must be >= 1.")
+    if args.max_df <= 0:
+        raise ValueError("--max_df must be > 0.")
     if args.max_features is not None and args.max_features < 1:
         raise ValueError("--max_features must be >= 1.")
     if args.C <= 0:
@@ -89,7 +91,9 @@ def build_pipeline(
                 TfidfVectorizer(
                     ngram_range=ngram_range,
                     min_df=args.min_df,
+                    max_df=args.max_df,
                     max_features=args.max_features,
+                    sublinear_tf=args.sublinear_tf,
                 ),
             ),
             (

@@ -142,14 +142,29 @@ def apply_deferred_rules(
     deferred_rules: dict[str, Any],
 ) -> dict[str, Any]:
     resolved = dict(overrides)
-    if deferred_rules.get("lora_alpha_rule") == "alpha = 2 * r" and "lora_r" in resolved:
-        resolved["lora_alpha"] = 2 * int(resolved["lora_r"])
-    if (
-        deferred_rules.get("stage1_lora_alpha_rule") == "alpha = 2 * r"
-        and "stage1_lora_r" in resolved
-    ):
-        resolved["stage1_lora_alpha"] = 2 * int(resolved["stage1_lora_r"])
+    if "lora_r" in resolved:
+        lora_alpha = _resolve_alpha_rule(
+            deferred_rules.get("lora_alpha_rule"),
+            int(resolved["lora_r"]),
+        )
+        if lora_alpha is not None:
+            resolved["lora_alpha"] = lora_alpha
+    if "stage1_lora_r" in resolved:
+        stage1_lora_alpha = _resolve_alpha_rule(
+            deferred_rules.get("stage1_lora_alpha_rule"),
+            int(resolved["stage1_lora_r"]),
+        )
+        if stage1_lora_alpha is not None:
+            resolved["stage1_lora_alpha"] = stage1_lora_alpha
     return resolved
+
+
+def _resolve_alpha_rule(rule: Any, rank: int) -> int | None:
+    if rule == "alpha = 2 * r":
+        return 2 * rank
+    if rule == "alpha = r":
+        return rank
+    return None
 
 
 def merge_trial_overrides(
@@ -305,6 +320,7 @@ def shared_fixed_command_overrides(config: dict[str, Any]) -> dict[str, Any]:
         "max_grad_norm",
         "eval_strategy",
         "save_strategy",
+        "save_total_limit",
         "load_best_model_at_end",
         "early_stopping_patience",
         "early_stopping_threshold",

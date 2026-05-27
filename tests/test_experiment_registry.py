@@ -46,7 +46,7 @@ class ExperimentRegistryTests(unittest.TestCase):
         self.assertIn("--search_stage", command)
         self.assertIn("smoke", command)
         self.assertIn("--max_train_samples", command)
-        self.assertIn("64", command)
+        self.assertIn("256", command)
         self.assertIn("--use_wandb", command)
         self.assertIn("--wandb_entity", command)
         self.assertIn("hate-speech-team", command)

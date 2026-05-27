@@ -36,7 +36,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--mixed_precision bf16", completed.stdout)
         self.assertNotIn("--mixed_precision none", completed.stdout)
-        self.assertIn("--hpo_time_cap_gpu_hours 2", completed.stdout)
+        self.assertIn("--hpo_time_cap_gpu_hours 1", completed.stdout)
         self.assertIn("--search_method random_search", completed.stdout)
         self.assertIn("--search_space_name full_ft", completed.stdout)
 
@@ -153,8 +153,8 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--seed 42", completed.stdout)
         self.assertIn("--seed 43", completed.stdout)
         self.assertIn("--seed 44", completed.stdout)
-        self.assertEqual(completed.stdout.count("--hpo_trial_cap 3"), 3)
-        self.assertEqual(completed.stdout.count("--hpo_time_cap_gpu_hours 2"), 3)
+        self.assertEqual(completed.stdout.count("--hpo_trial_cap 4"), 3)
+        self.assertEqual(completed.stdout.count("--hpo_time_cap_gpu_hours 1"), 3)
         hashes = re.findall(r"--config_hash ([0-9a-f]+)", completed.stdout)
         self.assertEqual(len(hashes), 3)
         self.assertEqual(len(set(hashes)), 1)
@@ -282,13 +282,16 @@ class RunExperimentCliTests(unittest.TestCase):
             "--python",
             "python",
         )
+        learning_rate = re.search(r"--learning_rate ([0-9.eE+-]+)", hpo.stdout)
+        self.assertIsNotNone(learning_rate)
+
         final = self.run_cli(
             "--experiment",
             "distilbert_full_tuning",
             "--suggest_seed_runs",
             "final",
             "--set",
-            "learning_rate=2e-5",
+            f"learning_rate={learning_rate.group(1)}",
             "--python",
             "python",
         )
@@ -479,7 +482,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--method lp-ft", completed.stdout)
         self.assertIn("--stage1_head_learning_rate 0.0001", completed.stdout)
         self.assertIn("--stage2_learning_rate 2e-05", completed.stdout)
-        self.assertIn("--max_train_samples 64", completed.stdout)
+        self.assertIn("--max_train_samples 256", completed.stdout)
 
     def test_lp_ft_hpo_uses_tuning_base_and_search_space(self):
         completed = self.run_cli(
@@ -495,7 +498,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage tuning", completed.stdout)
-        self.assertIn("--hpo_trial_cap 4", completed.stdout)
+        self.assertIn("--hpo_trial_cap 9", completed.stdout)
         self.assertIn("--stage1_head_learning_rate", completed.stdout)
         self.assertIn("--stage2_learning_rate", completed.stdout)
         self.assertIn("distilbert_lp_ft_tuning__lp_ft__hpo42__trial001", completed.stdout)
@@ -513,7 +516,7 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("src/methods/tfidf_logreg/train.py", completed.stdout)
         self.assertIn("--method tfidf-logreg", completed.stdout)
         self.assertIn("--search_stage smoke", completed.stdout)
-        self.assertIn("--max_train_samples 64", completed.stdout)
+        self.assertIn("--max_train_samples 512", completed.stdout)
 
     def test_tfidf_hpo_uses_tuning_base_and_parseable_ngram_range(self):
         completed = self.run_cli(
@@ -529,7 +532,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage tuning", completed.stdout)
-        self.assertIn("--hpo_trial_cap 12", completed.stdout)
+        self.assertIn("--hpo_trial_cap 24", completed.stdout)
         self.assertRegex(completed.stdout, r"--ngram_range \[[0-9],[0-9]\]")
         self.assertIn("tfidf_logreg_tuning__tfidf_logreg__hpo42__trial001", completed.stdout)
 
@@ -547,12 +550,17 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertEqual(hpo.returncode, 0, hpo.stderr)
         ngram = re.search(r"--ngram_range (\[[0-9],[0-9]\])", hpo.stdout)
         min_df = re.search(r"--min_df ([0-9]+)", hpo.stdout)
+        max_df = re.search(r"--max_df ([0-9.eE+-]+)", hpo.stdout)
+        max_features = re.search(r"--max_features ([0-9]+)", hpo.stdout)
         c_value = re.search(r"--C ([0-9.eE+-]+)", hpo.stdout)
         hpo_hash = re.search(r"--config_hash ([0-9a-f]+)", hpo.stdout)
         self.assertIsNotNone(ngram)
         self.assertIsNotNone(min_df)
+        self.assertIsNotNone(max_df)
+        self.assertIsNotNone(max_features)
         self.assertIsNotNone(c_value)
         self.assertIsNotNone(hpo_hash)
+        sublinear_tf = "--sublinear_tf" in hpo.stdout
 
         final = self.run_cli(
             "--experiment",
@@ -563,6 +571,12 @@ class RunExperimentCliTests(unittest.TestCase):
             f"ngram_range={ngram.group(1)}",
             "--set",
             f"min_df={min_df.group(1)}",
+            "--set",
+            f"max_df={max_df.group(1)}",
+            "--set",
+            f"max_features={max_features.group(1)}",
+            "--set",
+            f"sublinear_tf={str(sublinear_tf).lower()}",
             "--set",
             f"C={c_value.group(1)}",
             "--python",
@@ -593,9 +607,13 @@ class RunExperimentCliTests(unittest.TestCase):
             "--set",
             "min_df=2",
             "--set",
+            "max_df=1.0",
+            "--set",
             "C=1.0",
             "--set",
             "max_features=50000",
+            "--set",
+            "sublinear_tf=true",
             "--python",
             "python",
         )
@@ -685,7 +703,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertEqual(first.stdout.count("--search_stage confirm"), 3)
+        self.assertEqual(first.stdout.count("--search_stage confirm"), 1)
         self.assertNotIn("--run_test", first.stdout)
         first_output = re.search(r"--output_dir ([^ ]+)", first.stdout)
         second_output = re.search(r"--output_dir ([^ ]+)", second.stdout)
@@ -713,8 +731,8 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("src/methods/bilstm/train.py", completed.stdout)
         self.assertIn("--method bilstm", completed.stdout)
         self.assertIn("--search_stage smoke", completed.stdout)
-        self.assertIn("--max_train_samples 64", completed.stdout)
-        self.assertIn("--max_eval_samples 64", completed.stdout)
+        self.assertIn("--max_train_samples 512", completed.stdout)
+        self.assertIn("--max_eval_samples 256", completed.stdout)
         self.assertIn("--weight_decay 0.01", completed.stdout)
         self.assertIn("--warmup_ratio 0.06", completed.stdout)
         self.assertIn("--max_grad_norm 1", completed.stdout)
@@ -735,7 +753,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage tuning", completed.stdout)
-        self.assertIn("--hpo_trial_cap 8", completed.stdout)
+        self.assertIn("--hpo_trial_cap 20", completed.stdout)
         self.assertIn("--hidden_size", completed.stdout)
         self.assertIn("--dropout", completed.stdout)
         self.assertIn("--learning_rate", completed.stdout)
@@ -754,9 +772,9 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("src/methods/frozen_distilbert/train.py", completed.stdout)
         self.assertIn("--method frozen-backbone", completed.stdout)
         self.assertIn("--search_stage smoke", completed.stdout)
-        self.assertIn("--head_learning_rate 0.0001", completed.stdout)
+        self.assertIn("--head_learning_rate 0.0003", completed.stdout)
         self.assertIn("--per_device_train_batch_size 8", completed.stdout)
-        self.assertIn("--max_train_samples 64", completed.stdout)
+        self.assertIn("--max_train_samples 256", completed.stdout)
 
     def test_frozen_distilbert_hpo_uses_tuning_base_and_search_space(self):
         completed = self.run_cli(
@@ -772,7 +790,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage tuning", completed.stdout)
-        self.assertIn("--hpo_trial_cap 6", completed.stdout)
+        self.assertIn("--hpo_trial_cap 4", completed.stdout)
         self.assertIn("--head_learning_rate", completed.stdout)
         self.assertIn("--num_train_epochs", completed.stdout)
         self.assertIn(
@@ -794,10 +812,9 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--method lora", completed.stdout)
         self.assertIn("--target_modules", completed.stdout)
         self.assertIn("q_lin", completed.stdout)
-        self.assertIn("k_lin", completed.stdout)
         self.assertIn("v_lin", completed.stdout)
         self.assertIn("--lora_r 8", completed.stdout)
-        self.assertIn("--max_train_samples 64", completed.stdout)
+        self.assertIn("--max_train_samples 256", completed.stdout)
 
     def test_lora_hpo_uses_tuning_base_and_search_space(self):
         completed = self.run_cli(
@@ -813,7 +830,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage tuning", completed.stdout)
-        self.assertIn("--hpo_trial_cap 6", completed.stdout)
+        self.assertIn("--hpo_trial_cap 18", completed.stdout)
         self.assertIn("--target_modules", completed.stdout)
         self.assertIn("--lora_alpha", completed.stdout)
         self.assertIn("distilbert_lora_tuning__lora__hpo42__trial001", completed.stdout)
@@ -859,10 +876,9 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--method efficient-head-ft", completed.stdout)
         self.assertIn("--stage1_target_modules", completed.stdout)
         self.assertIn("q_lin", completed.stdout)
-        self.assertIn("k_lin", completed.stdout)
         self.assertIn("v_lin", completed.stdout)
         self.assertIn("--stage2_learning_rate 2e-05", completed.stdout)
-        self.assertIn("--max_train_samples 64", completed.stdout)
+        self.assertIn("--max_train_samples 256", completed.stdout)
 
     def test_efficient_head_hpo_uses_tuning_base_and_search_space(self):
         completed = self.run_cli(
@@ -878,7 +894,7 @@ class RunExperimentCliTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--search_stage tuning", completed.stdout)
-        self.assertIn("--hpo_trial_cap 4", completed.stdout)
+        self.assertIn("--hpo_trial_cap 10", completed.stdout)
         self.assertIn("--stage1_lora_r", completed.stdout)
         self.assertIn("--stage1_lora_alpha", completed.stdout)
         self.assertIn("--stage2_learning_rate", completed.stdout)
@@ -925,15 +941,16 @@ class RunExperimentCliTests(unittest.TestCase):
             "--python",
             "python",
         )
+        head_learning_rate = re.search(r"--head_learning_rate ([0-9.eE+-]+)", hpo.stdout)
+        self.assertIsNotNone(head_learning_rate)
+
         final = self.run_cli(
             "--experiment",
             "frozen_distilbert_tuning",
             "--suggest_seed_runs",
             "final",
             "--set",
-            "head_learning_rate=0.0003",
-            "--set",
-            "num_train_epochs=10",
+            f"head_learning_rate={head_learning_rate.group(1)}",
             "--python",
             "python",
         )

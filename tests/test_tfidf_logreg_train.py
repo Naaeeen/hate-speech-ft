@@ -123,6 +123,8 @@ class TfidfLogregTrainTests(unittest.TestCase):
         self.assertEqual(args.trial_id, "tfidf_logreg_manual")
         self.assertEqual(args.output_dir, "outputs/tfidf_logreg")
         self.assertEqual(args.ngram_range, "1,2")
+        self.assertEqual(args.max_df, 1.0)
+        self.assertFalse(args.sublinear_tf)
 
     def test_config_and_data_modules_record_shared_contract(self):
         with patch.object(sys, "argv", ["train.py", "--ngram_range", "[1,2]"]):
@@ -152,7 +154,41 @@ class TfidfLogregTrainTests(unittest.TestCase):
         self.assertEqual(config["raw_train_size"], 2)
         self.assertEqual(config["dropped_no_majority_train"], 0)
         self.assertEqual(config["hyperparameters"]["ngram_range"], [1, 2])
+        self.assertEqual(config["hyperparameters"]["max_df"], 1.0)
+        self.assertFalse(config["hyperparameters"]["sublinear_tf"])
         self.assertEqual(config["test_policy"], "final_only")
+
+    def test_tfidf_vectorizer_receives_search_space_options(self):
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "train.py",
+                "--ngram_range",
+                "1,3",
+                "--min_df",
+                "2",
+                "--max_df",
+                "0.9",
+                "--max_features",
+                "20000",
+                "--sublinear_tf",
+            ],
+        ):
+            args = tfidf_args.parse_args()
+
+        pipeline = train.build_pipeline(
+            TfidfVectorizer=FakeTfidfVectorizer,
+            LogisticRegression=FakeLogisticRegression,
+            Pipeline=FakePipeline,
+            args=args,
+            ngram_range=parse_ngram_range(args.ngram_range),
+        )
+
+        vectorizer = pipeline.named_steps["tfidf"]
+        self.assertEqual(vectorizer.kwargs["max_df"], 0.9)
+        self.assertEqual(vectorizer.kwargs["max_features"], 20000)
+        self.assertTrue(vectorizer.kwargs["sublinear_tf"])
 
     def test_parse_ngram_range_accepts_catalog_and_hpo_formats(self):
         self.assertEqual(parse_ngram_range("1,2"), (1, 2))
@@ -174,6 +210,13 @@ class TfidfLogregTrainTests(unittest.TestCase):
             args = tfidf_args.parse_args()
 
         with self.assertRaisesRegex(ValueError, "data_fraction"):
+            train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
+
+    def test_rejects_invalid_max_df_before_dataset_load(self):
+        with patch.object(sys, "argv", ["train.py", "--max_df", "0"]):
+            args = tfidf_args.parse_args()
+
+        with self.assertRaisesRegex(ValueError, "max_df"):
             train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
 
     def test_classification_metrics_use_shared_key_names(self):
