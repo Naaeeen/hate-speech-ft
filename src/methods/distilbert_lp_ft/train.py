@@ -135,11 +135,6 @@ def main() -> None:
             precision_policy=precision_policy,
             wandb_settings=stage_wandb_settings,
         )
-        stage1_trainer = build_hf_trainer(
-            context,
-            stage1_args,
-            callbacks=stage1_callbacks,
-        )
         stage2_args = build_stage_training_arguments(
             context.libraries.training_args_cls,
             args=args,
@@ -148,6 +143,11 @@ def main() -> None:
             num_train_epochs=args.stage2_epochs,
             precision_policy=precision_policy,
             wandb_settings=stage_wandb_settings,
+        )
+        stage1_trainer = build_hf_trainer(
+            context,
+            stage1_args,
+            callbacks=stage1_callbacks,
         )
 
     except Exception as exc:
