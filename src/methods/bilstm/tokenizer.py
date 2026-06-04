@@ -77,8 +77,7 @@ class StandardBiLSTMTokenizer:
 
     @staticmethod
     def tokenize(text: str) -> list[str]:
-        # The shared HateXplain text is already built from post_tokens with spaces,
-        # so split() recovers the same token sequence without extra cleaning.
+        # The shared HateXplain text is already built from post_tokens with spaces.
         return str(text).split()
 
     @property
@@ -98,8 +97,8 @@ class StandardBiLSTMTokenizer:
         input_ids = [self.vocab.get(token, self.unk_id) for token in tokens]
         input_ids = input_ids[: self.max_length]
 
-        # pack_padded_sequence requires length >= 1. Empty posts are rare, but if
-        # one appears we encode it as a single <unk> token rather than length 0.
+        # pack_padded_sequence requires length >= 1. If
+        # empty appears we encode it as a single <unk> token.
         if not input_ids:
             input_ids = [self.unk_id]
 
