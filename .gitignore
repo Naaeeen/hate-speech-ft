@@ -38,3 +38,5 @@ hyperparameter_policy.txt
 # OS
 .DS_Store
 Thumbs.db
+
+venv

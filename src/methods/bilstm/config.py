@@ -16,7 +16,7 @@ from src.utils.wandb_config import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODEL_NAME = "bilstm-random-embedding"
-TOKENIZER_NAME = "distilbert-base-uncased"
+TOKENIZER_NAME = "bilstm-vocab"
 
 if TYPE_CHECKING:
     from src.methods.bilstm.tokenizer import StandardBiLSTMTokenizer
