@@ -16,7 +16,7 @@ from src.utils.wandb_config import (
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODEL_NAME = "bilstm-random-embedding"
-TOKENIZER_NAME = "distilbert-base-uncased"
+TOKENIZER_NAME = "bilstm-word"
 
 if TYPE_CHECKING:
     from src.methods.bilstm.tokenizer import StandardBiLSTMTokenizer
@@ -93,6 +93,8 @@ def build_experiment_config(
         "batch_size": args.batch_size,
         "eval_batch_size": args.eval_batch_size,
         "epochs": args.epochs,
+        "tokenizer_min_freq": args.tokenizer_min_freq,
+        "max_vocab_size": args.max_vocab_size,
         "device": args.device,
     }
     config = build_common_experiment_config(

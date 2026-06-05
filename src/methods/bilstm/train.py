@@ -216,7 +216,12 @@ def main() -> None:
 
         from src.methods.bilstm.tokenizer import StandardBiLSTMTokenizer
 
-        tokenizer = StandardBiLSTMTokenizer.create(max_length=args.max_length)
+        tokenizer = StandardBiLSTMTokenizer.create(
+            train_records=train_data.records,
+            max_length=args.max_length,
+            min_freq=args.tokenizer_min_freq,
+            max_vocab_size=args.max_vocab_size,
+        )
         class_weights = resolve_class_weights(
             train_data.records,
             class_weighting=args.class_weighting,

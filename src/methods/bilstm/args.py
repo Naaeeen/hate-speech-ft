@@ -32,6 +32,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--eval_batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--tokenizer_min_freq", type=int, default=2)
+    parser.add_argument("--max_vocab_size", type=int, default=30000)
     return parser.parse_args(argv)
 
 
@@ -44,10 +46,14 @@ def validate_bilstm_args(args: argparse.Namespace) -> None:
         "batch_size",
         "eval_batch_size",
         "epochs",
+        "tokenizer_min_freq",
+        "max_vocab_size",
     )
     for option_name in positive_int_options:
         if int(getattr(args, option_name)) < 1:
             raise ValueError(f"--{option_name} must be >= 1.")
+    if args.max_vocab_size < 2:
+        raise ValueError("--max_vocab_size must be >= 2 for <pad> and <unk> tokens.")
 
     for option_name in ("max_train_samples", "max_eval_samples", "max_test_samples"):
         value = getattr(args, option_name)

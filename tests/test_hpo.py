@@ -279,6 +279,34 @@ class HpoTests(unittest.TestCase):
             {"ngram_range": [1, 2], "C": 1.0, "min_df": 2},
         )
 
+    def test_bilstm_tokenizer_fields_are_hash_effective(self):
+        from src.experiments.hpo import build_config_hash_payload
+
+        hash_keys = get_config_hash_keys(load_hpo_config(), "bilstm")
+        base_args = {
+            "hidden_size": 128,
+            "dropout": 0.1,
+            "learning_rate": 0.001,
+            "tokenizer_min_freq": 2,
+            "max_vocab_size": 30000,
+        }
+
+        base_payload = build_config_hash_payload(base_args, hash_keys=hash_keys)
+        changed_payload = build_config_hash_payload(
+            {
+                **base_args,
+                "tokenizer_min_freq": 3,
+            },
+            hash_keys=hash_keys,
+        )
+
+        self.assertEqual(base_payload["tokenizer_min_freq"], 2)
+        self.assertEqual(base_payload["max_vocab_size"], 30000)
+        self.assertNotEqual(
+            build_config_hash(base_payload),
+            build_config_hash(changed_payload),
+        )
+
     def test_merge_trial_overrides_lets_user_override_global_switches_and_rehashes(self):
         trial = {
             "learning_rate": 2e-5,
@@ -470,6 +498,8 @@ class HpoTests(unittest.TestCase):
         self.assertEqual(get_time_cap_gpu_hours(config, "full_ft"), 1.0)
         self.assertIn("learning_rate", get_config_hash_keys(config, "full_ft"))
         self.assertIn("ngram_range", get_config_hash_keys(config, "tfidf_logreg"))
+        self.assertIn("tokenizer_min_freq", get_config_hash_keys(config, "bilstm"))
+        self.assertIn("max_vocab_size", get_config_hash_keys(config, "bilstm"))
         self.assertEqual(
             shared_fixed_command_overrides(config)["mixed_precision"],
             "none",

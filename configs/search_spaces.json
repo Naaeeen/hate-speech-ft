@@ -84,6 +84,8 @@
       "dropout",
       "learning_rate",
       "weight_decay",
+      "tokenizer_min_freq",
+      "max_vocab_size",
       "batch_size",
       "eval_batch_size",
       "epochs",

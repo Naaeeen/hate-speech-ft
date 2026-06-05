@@ -156,7 +156,7 @@ src/methods/bilstm/args.py      CLI knobs and no-dependency validation
 src/methods/bilstm/config.py    resolved config, runtime, and model selection
 src/methods/bilstm/data.py      shared HateXplain preprocessing/split handling
 src/methods/bilstm/model.py     torch BiLSTM classifier
-src/methods/bilstm/tokenizer.py DistilBERT tokenizer wrapper for token ids
+src/methods/bilstm/tokenizer.py train-split word vocabulary and token ids
 src/methods/bilstm/training.py  torch training loop, metrics, checkpoints
 src/methods/bilstm/train.py     executable orchestration entry point
 ```

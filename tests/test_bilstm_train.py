@@ -33,6 +33,8 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
             "--max_test_samples",
             "--class_weighting",
             "--early_stopping_patience",
+            "--tokenizer_min_freq",
+            "--max_vocab_size",
             "--use_wandb",
             "--wandb_entity",
             "--wandb_project",
@@ -46,6 +48,12 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
         args = bilstm_args.parse_args(["--wandb_log_model", "end"])
 
         with self.assertRaisesRegex(ValueError, "local model artifacts only"):
+            bilstm_args.validate_bilstm_args(args)
+
+    def test_rejects_vocab_size_without_pad_and_unk_slots(self):
+        args = bilstm_args.parse_args(["--max_vocab_size", "1"])
+
+        with self.assertRaisesRegex(ValueError, "max_vocab_size must be >= 2"):
             bilstm_args.validate_bilstm_args(args)
 
     def test_runtime_metrics_count_gpu_hours_only_when_training_on_cuda(self):
@@ -120,20 +128,27 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
             output_dir = Path(temp_dir)
             training_module = types.ModuleType("src.methods.bilstm.training")
             tokenizer_module = types.ModuleType("src.methods.bilstm.tokenizer")
+            created_tokenizers = []
 
             class FakeTokenizer:
                 vocab_size = 100
 
                 @classmethod
-                def create(cls, *, max_length):
+                def create(cls, *, train_records, max_length, min_freq, max_vocab_size):
                     instance = cls()
+                    instance.train_records = train_records
                     instance.max_length = max_length
+                    instance.min_freq = min_freq
+                    instance.max_vocab_size = max_vocab_size
+                    created_tokenizers.append(instance)
                     return instance
 
                 def to_dict(self):
                     return {
                         "tokenizer_name": "fake-tokenizer",
                         "max_length": self.max_length,
+                        "min_freq": self.min_freq,
+                        "max_vocab_size": self.max_vocab_size,
                         "vocab_size": self.vocab_size,
                     }
 
@@ -180,8 +195,20 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 },
                 "history": [{"epoch": 1, "eval_f1_macro": 0.5}],
             }
-            fake_split = types.SimpleNamespace(
-                records=[{"id": "sample-1", "text": "sample", "label": 1}],
+            train_split = types.SimpleNamespace(
+                records=[{"id": "train-1", "text": "train sample", "label": 1}],
+                raw_size=1,
+                preprocessed_size=1,
+                dropped_no_majority_count=0,
+            )
+            eval_split = types.SimpleNamespace(
+                records=[{"id": "eval-1", "text": "eval sample", "label": 1}],
+                raw_size=1,
+                preprocessed_size=1,
+                dropped_no_majority_count=0,
+            )
+            test_split = types.SimpleNamespace(
+                records=[{"id": "test-1", "text": "test sample", "label": 1}],
                 raw_size=1,
                 preprocessed_size=1,
                 dropped_no_majority_count=0,
@@ -226,12 +253,14 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 patch.object(
                     bilstm_train,
                     "build_bilstm_data_splits",
-                    return_value=(fake_split, fake_split, fake_split),
+                    return_value=(train_split, eval_split, test_split),
                 ),
                 patch.object(bilstm_train, "print_split_summary"),
             ):
                 bilstm_train.main()
 
+            self.assertEqual(len(created_tokenizers), 1)
+            self.assertEqual(created_tokenizers[0].train_records, train_split.records)
             self.assertTrue((output_dir / "model.pt").is_file())
             self.assertTrue((output_dir / "eval_predictions.json").is_file())
             self.assertTrue((output_dir / "test_predictions.json").is_file())
@@ -248,6 +277,18 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
             self.assertEqual(summary["config"]["trainable_params"], 123)
             self.assertIn("git_commit", summary["config"])
             self.assertIn("split_accounting_policy", summary["config"])
+            self.assertEqual(
+                summary["config"]["tokenizer_policy"]["tokenizer_name"],
+                "fake-tokenizer",
+            )
+            self.assertEqual(
+                summary["config"]["hyperparameters"]["tokenizer_min_freq"],
+                2,
+            )
+            self.assertEqual(
+                summary["config"]["hyperparameters"]["max_vocab_size"],
+                30000,
+            )
 
     def test_overwrite_preserves_previous_outputs_when_setup_fails_before_commit(self):
         with TemporaryDirectory() as temp_dir:

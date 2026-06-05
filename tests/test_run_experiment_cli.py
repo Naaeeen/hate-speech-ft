@@ -738,6 +738,8 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--max_grad_norm 1", completed.stdout)
         self.assertIn("--optim adamw_torch", completed.stdout)
         self.assertIn("--lr_scheduler_type linear", completed.stdout)
+        self.assertIn("--tokenizer_min_freq 2", completed.stdout)
+        self.assertIn("--max_vocab_size 30000", completed.stdout)
 
     def test_bilstm_hpo_uses_tuning_base_and_search_space(self):
         completed = self.run_cli(
@@ -757,6 +759,8 @@ class RunExperimentCliTests(unittest.TestCase):
         self.assertIn("--hidden_size", completed.stdout)
         self.assertIn("--dropout", completed.stdout)
         self.assertIn("--learning_rate", completed.stdout)
+        self.assertIn("--tokenizer_min_freq 2", completed.stdout)
+        self.assertIn("--max_vocab_size 30000", completed.stdout)
         self.assertIn("bilstm_tuning__bilstm__hpo42__trial001", completed.stdout)
 
     def test_frozen_distilbert_smoke_preview_uses_method_script(self):

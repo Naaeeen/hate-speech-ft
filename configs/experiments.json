@@ -245,6 +245,8 @@
       "args": {
         "device": "auto",
         "max_length": 128,
+        "tokenizer_min_freq": 2,
+        "max_vocab_size": 30000,
         "embedding_size": 100,
         "hidden_size": 128,
         "num_layers": 1,
@@ -278,6 +280,8 @@
       "args": {
         "device": "auto",
         "max_length": 128,
+        "tokenizer_min_freq": 2,
+        "max_vocab_size": 30000,
         "embedding_size": 200,
         "hidden_size": 128,
         "num_layers": 1,
@@ -309,6 +313,8 @@
       "args": {
         "device": "auto",
         "max_length": 128,
+        "tokenizer_min_freq": 2,
+        "max_vocab_size": 30000,
         "embedding_size": 100,
         "hidden_size": 128,
         "num_layers": 1,
@@ -339,6 +345,8 @@
       "args": {
         "device": "auto",
         "max_length": 128,
+        "tokenizer_min_freq": 2,
+        "max_vocab_size": 30000,
         "embedding_size": 200,
         "hidden_size": 128,
         "num_layers": 1,
