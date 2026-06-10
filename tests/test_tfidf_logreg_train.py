@@ -1,18 +1,19 @@
 import json
-import sys
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from src.methods.tfidf_logreg import args as tfidf_args
 from src.methods.tfidf_logreg import config as tfidf_config
 from src.methods.tfidf_logreg import data as tfidf_data
 from src.methods.tfidf_logreg import train
+from src.methods.tfidf_logreg.manual_config import CONFIG as TFIDF_CONFIG
 from src.methods.tfidf_logreg.training import (
     build_classification_metrics,
     parse_ngram_range,
 )
+from src.utils.wandb_config import build_wandb_settings_from_args
 
 
 def make_example(post_id: str, label: int) -> dict:
@@ -108,27 +109,19 @@ class FakeWandbRun:
         self.finished = True
 
 
-class FailingWandbRun(FakeWandbRun):
-    def log(self, payload):
-        super().log({"attempted": payload})
-        raise RuntimeError("wandb unavailable")
-
-
 class TfidfLogregTrainTests(unittest.TestCase):
-    def test_parse_args_sets_tfidf_defaults(self):
-        with patch.object(sys, "argv", ["train.py"]):
-            args = tfidf_args.parse_args()
+    def test_manual_config_matches_selected_tfidf_run(self):
+        args = SimpleNamespace(**TFIDF_CONFIG)
 
         self.assertEqual(args.method, "tfidf-logreg")
-        self.assertEqual(args.trial_id, "tfidf_logreg_manual")
-        self.assertEqual(args.output_dir, "outputs/tfidf_logreg")
-        self.assertEqual(args.ngram_range, "1,2")
-        self.assertEqual(args.max_df, 1.0)
-        self.assertFalse(args.sublinear_tf)
+        self.assertEqual(args.run_name, "tfidf_logreg_final_seed42")
+        self.assertEqual(args.output_dir, "outputs/tfidf_logreg_final_seed42")
+        self.assertEqual(args.ngram_range, [1, 2])
+        self.assertEqual(args.max_df, 0.9)
+        self.assertTrue(args.sublinear_tf)
 
     def test_config_and_data_modules_record_shared_contract(self):
-        with patch.object(sys, "argv", ["train.py", "--ngram_range", "[1,2]"]):
-            args = tfidf_args.parse_args()
+        args = SimpleNamespace(**{**TFIDF_CONFIG, "ngram_range": [1, 2], "use_wandb": False})
         split = tfidf_data.build_classical_split(
             [
                 make_example("sample-0", 0),
@@ -137,7 +130,7 @@ class TfidfLogregTrainTests(unittest.TestCase):
             max_samples=1,
         )
 
-        settings = tfidf_config.resolve_wandb_settings(args)
+        settings = build_wandb_settings_from_args(args)
         config = tfidf_config.build_experiment_config(
             args,
             ngram_range=parse_ngram_range(args.ngram_range),
@@ -154,28 +147,21 @@ class TfidfLogregTrainTests(unittest.TestCase):
         self.assertEqual(config["raw_train_size"], 2)
         self.assertEqual(config["dropped_no_majority_train"], 0)
         self.assertEqual(config["hyperparameters"]["ngram_range"], [1, 2])
-        self.assertEqual(config["hyperparameters"]["max_df"], 1.0)
-        self.assertFalse(config["hyperparameters"]["sublinear_tf"])
-        self.assertEqual(config["test_policy"], "final_only")
+        self.assertEqual(config["hyperparameters"]["max_df"], 0.9)
+        self.assertTrue(config["hyperparameters"]["sublinear_tf"])
+        self.assertEqual(config["test_policy"], "enabled_by_run_test")
 
-    def test_tfidf_vectorizer_receives_search_space_options(self):
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "train.py",
-                "--ngram_range",
-                "1,3",
-                "--min_df",
-                "2",
-                "--max_df",
-                "0.9",
-                "--max_features",
-                "20000",
-                "--sublinear_tf",
-            ],
-        ):
-            args = tfidf_args.parse_args()
+    def test_tfidf_vectorizer_receives_manual_options(self):
+        args = SimpleNamespace(
+            **{
+                **TFIDF_CONFIG,
+                "ngram_range": [1, 3],
+                "min_df": 2,
+                "max_df": 0.9,
+                "max_features": 20000,
+                "sublinear_tf": True,
+            }
+        )
 
         pipeline = train.build_pipeline(
             TfidfVectorizer=FakeTfidfVectorizer,
@@ -190,31 +176,22 @@ class TfidfLogregTrainTests(unittest.TestCase):
         self.assertEqual(vectorizer.kwargs["max_features"], 20000)
         self.assertTrue(vectorizer.kwargs["sublinear_tf"])
 
-    def test_parse_ngram_range_accepts_catalog_and_hpo_formats(self):
-        self.assertEqual(parse_ngram_range("1,2"), (1, 2))
-        self.assertEqual(parse_ngram_range("[1,2]"), (1, 2))
+    def test_parse_ngram_range_uses_manual_config_lists_only(self):
         self.assertEqual(parse_ngram_range([1, 3]), (1, 3))
+        with self.assertRaisesRegex(TypeError, "Python list"):
+            parse_ngram_range("1,2")
 
         with self.assertRaises(ValueError):
-            parse_ngram_range("2,1")
-
-    def test_rejects_unsupported_wandb_model_upload(self):
-        with patch.object(sys, "argv", ["train.py", "--wandb_log_model", "end"]):
-            args = tfidf_args.parse_args()
-
-        with self.assertRaisesRegex(ValueError, "local model artifacts only"):
-            train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
+            parse_ngram_range([2, 1])
 
     def test_rejects_invalid_data_fraction_before_dataset_load(self):
-        with patch.object(sys, "argv", ["train.py", "--data_fraction", "0"]):
-            args = tfidf_args.parse_args()
+        args = SimpleNamespace(**{**TFIDF_CONFIG, "data_fraction": 0})
 
         with self.assertRaisesRegex(ValueError, "data_fraction"):
             train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
 
     def test_rejects_invalid_max_df_before_dataset_load(self):
-        with patch.object(sys, "argv", ["train.py", "--max_df", "0"]):
-            args = tfidf_args.parse_args()
+        args = SimpleNamespace(**{**TFIDF_CONFIG, "max_df": 0})
 
         with self.assertRaisesRegex(ValueError, "max_df"):
             train.validate_classical_args(args, parse_ngram_range(args.ngram_range))
@@ -236,7 +213,6 @@ class TfidfLogregTrainTests(unittest.TestCase):
         runtime = tfidf_config.build_runtime_metrics(
             training_time_sec=60.0,
             gpu_type="NVIDIA A100-SXM4-80GB",
-            status="completed",
         )
 
         self.assertEqual(runtime["gpu_type"], "NVIDIA A100-SXM4-80GB")
@@ -246,7 +222,14 @@ class TfidfLogregTrainTests(unittest.TestCase):
         self.assertIsNone(runtime["peak_memory_mb"])
         self.assertIsNone(runtime["peak_memory_reserved_mb"])
 
-    def run_fake_main(self, output_dir, *, search_stage="tuning", run_test=False):
+    def run_fake_main(
+        self,
+        output_dir,
+        *,
+        run_name="tfidf_manual",
+        run_test=False,
+        use_wandb=False,
+    ):
         dataset = FakeDataset()
 
         def fake_load_dataset(_name):
@@ -259,24 +242,19 @@ class TfidfLogregTrainTests(unittest.TestCase):
             FakeLogisticRegression,
             FakePipeline,
         )
-        argv = [
-            "train.py",
-            "--search_stage",
-            search_stage,
-            "--trial_id",
-            f"tfidf_{search_stage}",
-            "--output_dir",
-            str(output_dir),
-            "--ngram_range",
-            "[1,2]",
-            "--min_df",
-            "1",
-        ]
-        if run_test:
-            argv.append("--run_test")
+        run_config = {
+            **TFIDF_CONFIG,
+            "run_name": run_name,
+            "output_dir": str(output_dir),
+            "ngram_range": [1, 2],
+            "min_df": 1,
+            "run_test": run_test,
+            "use_wandb": use_wandb,
+            "wandb_mode": "disabled" if use_wandb else "online",
+        }
 
         with (
-            patch.object(sys, "argv", argv),
+            patch.object(train, "MANUAL_CONFIG", run_config),
             patch.object(train, "load_libraries", return_value=fake_libraries),
             patch.object(train, "get_gpu_type", return_value="cpu"),
         ):
@@ -286,7 +264,7 @@ class TfidfLogregTrainTests(unittest.TestCase):
     def test_tuning_run_does_not_touch_test_split(self):
         with TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            dataset = self.run_fake_main(output_dir, search_stage="tuning")
+            dataset = self.run_fake_main(output_dir, run_name="tfidf_validation")
 
             self.assertNotIn("test", dataset.accessed)
             summary = json.loads(
@@ -301,7 +279,7 @@ class TfidfLogregTrainTests(unittest.TestCase):
             output_dir = Path(temp_dir)
             dataset = self.run_fake_main(
                 output_dir,
-                search_stage="final",
+                run_name="tfidf_test",
                 run_test=True,
             )
 
@@ -318,10 +296,10 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 (output_dir / "test_predictions.json").as_posix(),
             )
 
-    def test_success_outputs_survive_wandb_log_failure(self):
+    def test_success_run_writes_outputs_and_logs_final_metrics_to_wandb(self):
         with TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            fake_run = FailingWandbRun()
+            fake_run = FakeWandbRun()
             dataset = FakeDataset()
 
             def fake_load_dataset(_name):
@@ -334,21 +312,17 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 FakeLogisticRegression,
                 FakePipeline,
             )
-            argv = [
-                "train.py",
-                "--search_stage",
-                "tuning",
-                "--trial_id",
-                "tfidf_wandb_success_failure",
-                "--output_dir",
-                str(output_dir),
-                "--use_wandb",
-                "--wandb_mode",
-                "disabled",
-            ]
+            run_config = {
+                **TFIDF_CONFIG,
+                "run_name": "tfidf_wandb_success",
+                "output_dir": str(output_dir),
+                "use_wandb": True,
+                "wandb_mode": "disabled",
+                "run_test": False,
+            }
 
             with (
-                patch.object(sys, "argv", argv),
+                patch.object(train, "MANUAL_CONFIG", run_config),
                 patch.object(train, "load_libraries", return_value=fake_libraries),
                 patch.object(train, "init_wandb_run", return_value=fake_run),
                 patch.object(train, "get_gpu_type", return_value="cpu"),
@@ -356,93 +330,17 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 train.main()
 
             self.assertTrue((output_dir / "result_summary.json").is_file())
-            self.assertFalse((output_dir / "failure_summary.json").exists())
             self.assertTrue((output_dir / "model.joblib").is_file())
-            self.assertTrue(fake_run.finished)
-
-    def test_wandb_starts_before_dataset_load_failures(self):
-        with TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir)
-            fake_run = FakeWandbRun()
-
-            def failing_load_dataset(_name):
-                raise RuntimeError("dataset unavailable")
-
-            fake_libraries = (
-                failing_load_dataset,
-                fake_dump,
-                FakeTfidfVectorizer,
-                FakeLogisticRegression,
-                FakePipeline,
-            )
-            argv = [
-                "train.py",
-                "--search_stage",
-                "tuning",
-                "--trial_id",
-                "tfidf_wandb_failure",
-                "--output_dir",
-                str(output_dir),
-                "--use_wandb",
-                "--wandb_mode",
-                "disabled",
-            ]
-
-            with (
-                patch.object(sys, "argv", argv),
-                patch.object(train, "load_libraries", return_value=fake_libraries),
-                patch.object(train, "init_wandb_run", return_value=fake_run),
-                patch.object(train, "get_gpu_type", return_value="cpu"),
-            ):
-                with self.assertRaises(RuntimeError):
-                    train.main()
-
-            self.assertTrue((output_dir / "failure_summary.json").is_file())
-            self.assertTrue(fake_run.finished)
             self.assertTrue(
-                any(log.get("status") == "failed" for log in fake_run.logs)
+                any(payload.get("eval_f1_macro") == 1.0 for payload in fake_run.logs)
             )
-
-    def test_overwrite_preserves_previous_outputs_when_setup_fails_before_commit(self):
-        with TemporaryDirectory() as temp_dir:
-            output_dir = Path(temp_dir)
-            stale_summary = output_dir / "result_summary.json"
-            stale_summary.write_text('{"status": "completed"}', encoding="utf-8")
-            stale_model = output_dir / "model.joblib"
-            stale_model.write_text("old model", encoding="utf-8")
-
-            def failing_load_dataset(_name):
-                raise RuntimeError("dataset unavailable")
-
-            fake_libraries = (
-                failing_load_dataset,
-                fake_dump,
-                FakeTfidfVectorizer,
-                FakeLogisticRegression,
-                FakePipeline,
+            self.assertTrue(
+                any(
+                    payload.get("model_selection/best_metric") == 1.0
+                    for payload in fake_run.logs
+                )
             )
-            argv = [
-                "train.py",
-                "--search_stage",
-                "tuning",
-                "--trial_id",
-                "tfidf_setup_failure",
-                "--output_dir",
-                str(output_dir),
-                "--overwrite_output_dir",
-            ]
-
-            with (
-                patch.object(sys, "argv", argv),
-                patch.object(train, "load_libraries", return_value=fake_libraries),
-                patch.object(train, "get_gpu_type", return_value="cpu"),
-            ):
-                with self.assertRaises(RuntimeError):
-                    train.main()
-
-            self.assertTrue(stale_summary.exists())
-            self.assertTrue(stale_model.exists())
-            self.assertTrue((output_dir / "failure_summary.json").is_file())
+            self.assertTrue(fake_run.finished)
 
 
 if __name__ == "__main__":

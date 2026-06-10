@@ -1,9 +1,11 @@
-import sys
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from src.methods import peft_utils
-from src.utils.wandb_config import WandbSettings
+from src.methods.distilbert_efficient_head.manual_config import (
+    CONFIG as EFFICIENT_HEAD_CONFIG,
+)
 
 
 class FakeTensor:
@@ -75,201 +77,26 @@ class DistilbertEfficientHeadTrainTests(unittest.TestCase):
         context = type("FakeContext", (), {"model": FakeModel()})()
         args = type("FakeArgs", (), {"stage1_modules_to_save": "classifier"})()
 
-        with patch.object(training, "apply_lora_to_model") as apply_lora:
-            with self.assertRaisesRegex(ValueError, "pre_classifier"):
+        with patch.object(peft_utils, "apply_lora_to_model") as apply_lora:
+            with self.assertRaisesRegex(TypeError, "manual_config"):
                 training.apply_stage1_lora_to_context(context, args)
 
         apply_lora.assert_not_called()
 
-    def test_efficient_head_parser_defaults_match_two_stage_policy(self):
-        from src.methods.distilbert_efficient_head import args as eh_args
-
-        with patch.object(sys, "argv", ["prog"]):
-            args = eh_args.parse_args()
+    def test_efficient_head_manual_config_matches_two_stage_policy(self):
+        args = SimpleNamespace(**EFFICIENT_HEAD_CONFIG)
 
         self.assertEqual(args.method, "efficient-head-ft")
         self.assertEqual(args.model_name, "distilbert-base-uncased")
-        self.assertEqual(args.stage1_learning_rate, 3e-4)
+        self.assertEqual(args.stage1_learning_rate, 2e-4)
         self.assertEqual(args.stage1_epochs, 5)
         self.assertEqual(args.stage2_learning_rate, 2e-5)
-        self.assertEqual(args.stage2_epochs, 5)
+        self.assertEqual(args.stage2_epochs, 3)
         self.assertEqual(args.metric_for_best_model, "eval_f1_macro")
         self.assertEqual(
             peft_utils.parse_module_names(args.stage1_target_modules),
-            ["q_lin", "k_lin", "v_lin"],
+            ["q_lin", "v_lin"],
         )
-
-    def test_efficient_head_main_saves_outputs_from_stage2_trainer(self):
-        import src.methods.distilbert_efficient_head.train as eh_train
-        from src.methods.distilbert_efficient_head import args as eh_args
-
-        calls = []
-
-        class FakeTrainer:
-            def __init__(self, name):
-                self.name = name
-                self.model = FakeModel()
-
-            def train(self):
-                calls.append((self.name, "train"))
-
-            def evaluate(self, metric_key_prefix="eval", eval_dataset=None):
-                calls.append((self.name, "evaluate", metric_key_prefix, eval_dataset))
-                return {f"{metric_key_prefix}_f1_macro": 0.5}
-
-        with patch.object(sys, "argv", ["prog"]):
-            run_args = eh_args.parse_args()
-        run_args.run_test = True
-        run_args.search_stage = "final"
-        run_args.output_dir = "outputs/unit-test"
-
-        class FakeContext:
-            libraries = type(
-                "FakeLibraries",
-                (),
-                {
-                    "training_args_cls": object,
-                    "early_stopping_callback_cls": object,
-                },
-            )()
-
-            def __init__(self, model=None):
-                self.args = run_args
-                self.model = model or FakeModel()
-                self.tokenizer = object()
-                self.test_dataset = [{"labels": 1}]
-
-            def config_kwargs(self):
-                return {
-                    "train_split": "train",
-                    "eval_split": "validation",
-                    "train_size": 1,
-                    "eval_size": 1,
-                    "full_train_size": 1,
-                    "full_eval_size": 1,
-                    "raw_train_size": 1,
-                    "raw_eval_size": 1,
-                    "dropped_no_majority_train": 0,
-                    "dropped_no_majority_eval": 0,
-                    "test_size": 1,
-                    "full_test_size": 1,
-                    "raw_test_size": 1,
-                    "dropped_no_majority_test": 0,
-                    "gpu_type": "cpu",
-                    "class_weights": None,
-                    "precision_policy": {
-                        "mixed_precision": "none",
-                        "fp16": False,
-                        "bf16": False,
-                    },
-                }
-
-        setup = type(
-            "FakeSetup",
-            (),
-            {
-                "gpu_type": "cpu",
-                "precision_policy": {
-                    "mixed_precision": "none",
-                    "fp16": False,
-                    "bf16": False,
-                },
-                "experiment_config": {"setup_complete": False},
-                "wandb_settings": WandbSettings(enabled=True, project="unit-test"),
-            },
-        )()
-        trainers = [FakeTrainer("stage1"), FakeTrainer("stage2")]
-
-        with patch.object(eh_train, "parse_args", return_value=run_args), patch.object(
-            eh_train,
-            "initialize_hf_run",
-            return_value=setup,
-        ), patch.object(
-            eh_train,
-            "start_hf_run",
-            return_value=(setup.precision_policy, {"setup_complete": False}, None),
-        ), patch.object(
-            eh_train,
-            "prepare_hf_classification_run",
-            return_value=FakeContext(),
-        ), patch.object(
-            eh_train,
-            "apply_stage1_lora_to_context",
-            side_effect=lambda context, args: context,
-        ), patch.object(
-            eh_train,
-            "build_stage2_context",
-            return_value=FakeContext(),
-        ), patch.object(
-            eh_train,
-            "count_model_parameters",
-            side_effect=[(4, 4), (2, 6)],
-        ), patch.object(
-            eh_train,
-            "build_experiment_config",
-            return_value={"setup_complete": True},
-        ) as build_experiment_config, patch.object(
-            eh_train,
-            "write_config_snapshot",
-        ), patch.object(
-            eh_train,
-            "build_stage_training_arguments",
-            side_effect=["stage1_args", "stage2_args"],
-        ) as build_stage_training_arguments, patch.object(
-            eh_train,
-            "build_hf_trainer",
-            side_effect=trainers,
-        ), patch.object(
-            eh_train,
-            "build_callbacks",
-            return_value=[],
-        ), patch.object(
-            eh_train,
-            "build_model_selection_summary",
-            return_value={"best_metric": 0.5},
-        ), patch.object(
-            eh_train,
-            "save_final_model",
-        ) as save_final_model, patch.object(
-            eh_train,
-            "save_final_predictions",
-            return_value={},
-        ) as save_final_predictions, patch.object(
-            eh_train,
-            "build_runtime_metrics",
-            return_value={"status": "completed"},
-        ), patch.object(
-            eh_train,
-            "write_success_outputs",
-            return_value={},
-        ) as write_success_outputs, patch.object(
-            eh_train,
-            "print_run_report",
-        ), patch.object(
-            eh_train,
-            "finish_wandb_run",
-        ), patch.object(
-            eh_train,
-            "synchronize_cuda",
-        ):
-            eh_train.main()
-
-        self.assertIn(("stage1", "train"), calls)
-        self.assertIn(("stage2", "train"), calls)
-        build_config_kwargs = build_experiment_config.call_args.kwargs
-        self.assertEqual(build_config_kwargs["stage1_trainable_params"], 2)
-        self.assertEqual(build_config_kwargs["stage2_trainable_params"], 4)
-        self.assertEqual(build_config_kwargs["total_params"], 4)
-        save_final_model.assert_called_once()
-        self.assertIs(save_final_model.call_args.args[0], trainers[1])
-        save_final_predictions.assert_called_once()
-        self.assertIs(save_final_predictions.call_args.args[1], trainers[1])
-        write_success_outputs.assert_called_once()
-        self.assertEqual(build_stage_training_arguments.call_count, 2)
-        for call_args in build_stage_training_arguments.call_args_list:
-            self.assertFalse(call_args.kwargs["wandb_settings"].enabled)
-            self.assertEqual(call_args.kwargs["wandb_settings"].project, "unit-test")
-
 
 if __name__ == "__main__":
     unittest.main()

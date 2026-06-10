@@ -1,0 +1,56 @@
+"""Manual config for one DistilBERT LP-FT run.
+
+Usually change `seed`, `run_name`, and `output_dir`. LP-FT has two learning
+rates: `stage1_head_learning_rate` for the frozen-head stage and
+`stage2_learning_rate` for full fine-tuning. Do not replace them with a plain
+`learning_rate` field.
+"""
+
+CONFIG = {
+    "method": "lp-ft",
+    "run_name": "distilbert_lp_ft_final_seed42",
+    "model_name": "distilbert-base-uncased",
+    "dataset_name": "Hate-speech-CNERG/hatexplain",
+    "seed": 42,
+    "data_fraction_seed": 42,
+    "data_fraction": 1.0,
+    "max_train_samples": None,
+    "max_eval_samples": None,
+    "max_test_samples": None,
+    "output_dir": "outputs/distilbert_lp_ft_final_seed42",
+    "overwrite_output_dir": False,
+    "run_test": True,
+    "test_split_name": "test",
+    "max_length": 128,
+    "stage1_head_learning_rate": 0.0001,
+    "stage1_epochs": 5.0,
+    "stage2_learning_rate": 2e-5,
+    "stage2_epochs": 3.0,
+    "per_device_train_batch_size": 16,
+    "per_device_eval_batch_size": 32,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.06,
+    "max_grad_norm": 1.0,
+    "optim": "adamw_torch",
+    "lr_scheduler_type": "linear",
+    "eval_strategy": "epoch",
+    "save_strategy": "epoch",
+    "logging_strategy": "steps",
+    "logging_steps": 20,
+    "eval_steps": None,
+    "save_steps": 500,
+    "save_total_limit": 1,
+    "load_best_model_at_end": True,
+    "metric_for_best_model": "eval_f1_macro",
+    "lower_is_better": False,
+    "no_save_final_model": False,
+    "mixed_precision": "none",
+    "gradient_checkpointing": False,
+    "class_weighting": "none",
+    "early_stopping_patience": 2,
+    "early_stopping_threshold": 0.001,
+    "use_wandb": True,
+    "wandb_project": "hate-speech-ft",
+    "wandb_entity": "hoangbachbach05-the-australian-national-university",
+    "wandb_mode": "online",
+}

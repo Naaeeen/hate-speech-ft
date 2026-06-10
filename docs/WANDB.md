@@ -1,305 +1,99 @@
-# W&B Setup
+# W&B Logging Contract
 
-This repo treats W&B as the shared experiment dashboard, not as the place where
-hyperparameters are defined. Hyperparameters live in
-`configs/experiments.json` or in temporary `--set key=value` overrides.
+W&B logging is per run. A run means one method, one seed, and one manual
+hyperparameter set.
 
-Current status:
-- `src/run_experiment.py` is the preferred entry point for listed experiments.
-- `src/methods/distilbert_full/train.py` and
-  `src/methods/distilbert_lp_ft/train.py`,
-  `src/methods/frozen_distilbert/train.py`,
-  `src/methods/distilbert_lora/train.py`,
-  `src/methods/distilbert_efficient_head/train.py`,
-  `src/methods/tfidf_logreg/train.py`, and `src/methods/bilstm/train.py`
-  support direct W&B usage.
-- Enable W&B with `--use_wandb`.
-- Colab uses `src/colab/experiment_launcher.py` to pick an experiment and
-  optional overrides from `configs/experiments.json`.
+## Required Config Fields
 
-Recommended team setup:
-1. Create one W&B team, for example `hate-speech-ft-team`.
-2. Invite collaborators to that team.
-3. Create one W&B project under the team, for example `hate-speech-ft`.
-4. Each person logs in with their own W&B account/API key.
+Set these fields in the method's `manual_config.py`:
 
-Colab workflow:
-1. Add `WANDB_API_KEY` to Colab Secrets.
-2. Open `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb`.
-3. Run setup cells.
-4. In the experiment launcher widget, choose:
-  - Experiment: for example `distilbert_full_smoke`,
-    `distilbert_lp_ft_smoke`, `frozen_distilbert_smoke`,
-    `distilbert_lora_smoke`,
-    `distilbert_efficient_head_smoke`, `tfidf_logreg_smoke`, or `bilstm_smoke`
-   - Mode: `online`, `offline`, or `disabled`
-   - Entity: your team or username
-   - Project: `hate-speech-ft`
-   - Optional overrides such as `learning_rate=3e-5`
-5. Preview the command, then run it.
-
-The widget opens with `Use W&B` checked and `Mode=online`. If the secret is not
-available, uncheck W&B or switch Mode to `offline` / `disabled` before the first
-run. W&B is optional; local JSON summaries remain the source of truth for
-aggregation.
-
-Do not paste the API key into the notebook, a README, a Python file, or
-`configs/experiments.json`.
-
-CLI smoke example:
-
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
-  --use_wandb \
-  --wandb_entity hate-speech-ft-team \
-  --wandb_project hate-speech-ft
+```python
+"use_wandb": True
+"wandb_project": "hate-speech-ft"
+"wandb_entity": "hoangbachbach05-the-australian-national-university"
+"run_name": "<method>-seed<seed>"
 ```
 
-LP+FT uses the same W&B switches:
+Optional:
 
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_lp_ft_smoke \
-  --use_wandb \
-  --wandb_entity hate-speech-ft-team \
-  --wandb_project hate-speech-ft
+```python
+"wandb_mode": "online"
 ```
 
-TF-IDF and Bi-LSTM use the same W&B switches:
+Use `"wandb_mode": "offline"` when Colab/network access is unreliable.
+Use `"wandb_mode": "disabled"` when you want the run to skip W&B completely and
+only write local JSON files.
 
-```bash
-python src/run_experiment.py \
-  --experiment bilstm_smoke \
-  --use_wandb \
-  --wandb_entity hate-speech-ft-team \
-  --wandb_project hate-speech-ft
-```
+## What A Run Should Log
 
-Offline/no-upload test:
+Each W&B run should have enough config to identify:
 
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_full_smoke \
-  --use_wandb \
-  --wandb_mode disabled
-```
+- `method`
+- `run_name`
+- `seed`
+- dataset and split sizes
+- manually chosen hyperparameters
+- trainable and total parameter counts when available
+- output directory
 
-List all configured experiments:
+Each run should log:
 
-```bash
-python src/run_experiment.py --list --include_planned
-```
+- validation metrics. Transformer methods use slash-normalized names such as
+  `eval/f1_macro`, `eval/accuracy`, `eval/precision_macro`, and
+  `eval/recall_macro`; TF-IDF and BiLSTM use local names such as
+  `eval_f1_macro` and `eval_accuracy`.
+- test metrics for runs launched with `run_test = True`. Transformer methods use
+  slash-normalized names such as `test/f1_macro` and `test/accuracy`; TF-IDF
+  and BiLSTM use local names such as `test_f1_macro` and `test_accuracy`.
+- runtime metrics such as `training_time_sec`, `training_time_hours`,
+  `gpu_hours`, `gpu_type`, and memory fields when available
+- model-selection metadata when the method uses checkpoints. Runs log the
+  nested `model_selection` object and scalar keys such as
+  `model_selection/best_epoch` and `model_selection/best_metric` for easier
+  manual lookup in W&B.
 
-Do not commit:
-- `wandb/`
-- `wandb-key.txt`
-- API keys or tokens
-- checkpoints, logs, Hugging Face cache, or model outputs
+Single-stage Transformer methods let Hugging Face Trainer report to W&B, so
+those runs can show normal Trainer train/loss and eval curves.
 
-Every serious completed run should still write local files in `output_dir`:
+Two-stage methods are different on purpose. Their internal stage-1 and stage-2
+Trainer objects have W&B reporting disabled, so one manual experiment stays as
+one parent W&B run. The parent run logs final validation/test metrics, runtime,
+model-selection metadata, plus one final stage-1 validation summary payload with
+`stage1/<metric>` keys. Do not expect full stage-local Trainer curves for LP-FT
+or Efficient-Head in the current manual workflow.
+
+Local JSON files preserve final metrics and model-selection metadata, not full
+Trainer history.
+
+## Local Files Stay Authoritative
+
+W&B is for tracking. The local output directory is the source of truth:
 
 ```text
 resolved_config.json
 metrics.json
 runtime.json
 result_summary.json
-eval_predictions.json       # final-stage runs
-test_predictions.json       # final-stage runs with --run_test
+eval_predictions.json       # when run_test is true
+test_predictions.json       # when run_test is true
 ```
 
-These files make the run understandable even if W&B is disabled, offline, or
-someone looks at the output directory later.
-Failed runs write `failure_summary.json` locally so errors are still auditable.
+When manually building comparison CSVs, copy rows from `result_summary.json` and
+keep the W&B URL/name as a convenience reference.
 
-## Many Runs Per Method
+The current simplified code does not upload `result_summary.json`,
+`metrics.json`, `runtime.json`, prediction JSON files, or model weights as W&B
+artifacts. Historical W&B runs may show W&B-native files such as
+`config.yaml`, `output.log`, `wandb-summary.json`, `wandb-metadata.json`, and
+history/event artifacts. That is expected: Drive/local run folders carry the
+authoritative files, while W&B carries the tracking view.
 
-For hyperparameter search, every trial should have a distinct `trial_id`,
-`output_dir`, and W&B run. Generated HPO runs include the HPO seed, trial index,
-and `config_hash` in the run identity; generated confirm and final seed runs
-include the selected config hash. The current runner includes `trial_id` in the
-auto-generated W&B run name, so repeated runs of the same method are easier to
-separate in the dashboard.
-Direct `tuning` and `final` catalog runs also get an automatic config hash, and
-the default W&B group includes it. Smoke and quick runs keep short setup
-identities.
+Some historical public W&B runs were produced before the simplification and may
+use legacy metric names such as `val_macro_f1` or `test_macro_f1`. New manual
+runs should follow the current key patterns described above.
 
-Use the repo to generate trial commands instead of hand-writing them:
+## What Not To Reintroduce
 
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_full_tuning \
-  --suggest_trials 3 \
-  --search_space full_ft \
-  --use_wandb \
-  --wandb_entity your-team \
-  --wandb_project hate-speech-ft
-```
-
-Use a tuning experiment for real HPO. Smoke and quick experiments keep setup
-sample caps or one-epoch defaults, so they are not comparable model-selection
-bases. The CLI blocks quick/final bases and blocks smoke bases unless
-`--allow_smoke_hpo` is passed for a smoke-only command test; the Colab launcher
-requires a tuning base.
-Do not override `output_dir`, `trial_id`, `search_stage`, `hpo_seed`, or
-`config_hash` with `--set` in HPO mode. The generated command records
-`hpo_trial_cap` and, when configured, `hpo_time_cap_gpu_hours`; do not override
-those by hand. Use `--trial_output_root` for where trial directories are
-created.
-
-If you leave `wandb_group` blank, the launcher uses a safe generated group:
-`method-stage` for ordinary runs and `method-stage-config_hash` for tuning,
-confirmation, and final seed runs. This keeps HPO, confirmation, final, and
-different selected configs separated in W&B.
-
-Only set `wandb_group` manually when you still include the stage and enough
-identity to avoid mixing unrelated runs, for example:
-
-```text
-wandb_group=full-ft-tuning
-wandb_group=full-ft-confirm
-wandb_group=full-ft-final
-wandb_group=tfidf-logreg-hpo
-wandb_group=tfidf-logreg-confirm
-wandb_group=tfidf-logreg-final
-```
-
-Avoid method-only groups such as `full-ft` or `tfidf-logreg` for real batches;
-they collapse HPO, confirmation, final, and different selected configs into one
-group. Use tags for extra stage and method labels, for example:
-
-```text
-smoke,distilbert,full-ft
-tuning,lora,peft
-final,seed42
-```
-
-W&B is the dashboard, but the repo still writes local summaries. After a batch
-finishes, aggregate local files and compare them with W&B tables:
-
-```bash
-python src/aggregate_results.py outputs/hpo \
-  --output outputs/hpo/aggregate_summary.json \
-  --write_pareto_csvs \
-  --group_by method search_stage config_hash \
-  --metric eval_f1_macro \
-  --metric training_time_sec \
-  --metric best_epoch
-```
-
-`--write_pareto_csvs` writes `hpo_runs.csv`, `final_runs.csv`, and
-`method_summary.csv` beside the aggregate JSON. Use those local CSVs for
-random-search HPO budget and Pareto tables; use W&B to inspect run-level
-curves, logs, and dashboard comparisons. Direct catalog/manual tuning runs stay
-visible in W&B and aggregate JSON, but they are not counted as HPO budget rows.
-
-## Two-Stage Method Curves
-
-Two-stage methods such as DistilBERT LP+FT and DistilBERT Efficient Head run two
-separate Hugging Face `Trainer` phases inside one experiment run. Each Trainer
-has its own local global-step counter, so logging both phases as plain
-`train/loss` against `train/global_step` would create a non-monotonic x-axis and
-misleading connected curves.
-
-For those methods, the pipeline disables Hugging Face's automatic W&B reporting
-inside each stage and logs stage-scoped histories instead:
-
-```text
-stage1/train/loss
-stage1/train/learning_rate
-stage1/eval/f1_macro
-stage2/train/loss
-stage2/train/learning_rate
-stage2/eval/f1_macro
-```
-
-Use `stage1/global_step` as the x-axis for `stage1/*` charts and
-`stage2/global_step` as the x-axis for `stage2/*` charts. Final validation/test
-metrics are still logged as normal `eval/*` and `test/*` metrics after the final
-stage's selected checkpoint is loaded. Local JSON summaries remain the source of
-truth for aggregation.
-
-For seed-run suggestions, the launcher uses the effective stage in W&B metadata:
-confirmation commands use confirm tags/groups, and final commands use final
-tags/groups even when they are generated from the tuning base experiment.
-
-## Model Artifacts
-
-The local model always belongs under the run's `output_dir`.
-The runner refuses to start if that directory already contains summaries,
-checkpoints, or saved model files. This protects local evidence from accidental
-reruns. Use a fresh output directory for a new run, or pass
-`--overwrite_output_dir` only when replacing the previous local files is
-intentional. Overwrite mode clears managed summaries, prediction files,
-checkpoints, and saved model/tokenizer files before the replacement run starts.
-
-For current one-stage ready methods such as DistilBERT full FT, TF-IDF LogReg,
-and Bi-LSTM:
-
-```text
-output_dir/checkpoint-*     intermediate checkpoints when the method uses them
-output_dir/                 final saved model/tokenizer, metrics, config, and
-                            final-stage prediction files when produced
-```
-
-For DistilBERT LP+FT:
-
-```text
-output_dir/stage1_linear_probe/    stage-1 head-only checkpoints
-output_dir/stage2_full_ft/         stage-2 full-finetuning checkpoints
-output_dir/                        final saved stage-2 model/tokenizer,
-                                   metrics, config, and final-stage
-                                   prediction files when produced
-```
-
-If `load_best_model_at_end=true`, the final saved model is the best validation
-checkpoint according to `metric_for_best_model`. For LP+FT, that final model is
-selected from the stage-2 full-finetuning checkpoints. If it is false, the final
-saved model is the last training state.
-
-W&B model upload is controlled separately:
-
-```text
---wandb_log_model false       do not upload model artifacts
---wandb_log_model end         upload the final model
---wandb_log_model checkpoint  upload checkpoints
-```
-
-Hugging Face Trainer methods support those upload modes. TF-IDF LogReg and
-Bi-LSTM currently require `false` and record model artifacts locally under
-`output_dir`; the CLI and Colab launcher reject those commands when they request
-`end` or `checkpoint`.
-Keep `false` for smoke and most tuning runs unless the team explicitly wants to
-store model artifacts in W&B and the selected method supports it.
-
-## What To Compare In W&B
-
-For HPO, filter or group by:
-
-```text
-method
-search_stage
-trial_id
-hpo_seed
-hpo_trial_cap
-hpo_time_cap_gpu_hours
-seed
-global_switches.mixed_precision
-global_switches.gradient_checkpointing
-global_switches.class_weighting
-checkpoint_policy.final_model_source
-```
-
-Use validation metrics for selection. Test metrics should appear only in final
-runs, and final runs should include them. Local `result_summary.json` records
-prediction file paths when `eval_predictions.json` or `test_predictions.json`
-exist.
-When a method saves a local final model, the same summary records those paths
-under `artifacts.model`; this is the local source of truth even when
-`wandb_log_model=false`. Transformer full-model runs usually record
-`model.safetensors` or `pytorch_model.bin`; PEFT runs such as LoRA may record
-`adapter_model.safetensors`, `adapter_model.bin`, and `adapter_config.json`
-instead. Hugging Face tokenizer files such as `tokenizer_config.json` and
-`vocab.txt` are also recorded when saved.
-Use local aggregate reports for HPO cost accounting: they include total training
-time in seconds/hours and summarize `best_epoch` by mean/std/min/max.
+Do not add W&B-specific HPO groups, generated config hashes, seed-batch naming,
+or automatic aggregation logic. If a comparison needs means or standard
+deviations, calculate them manually from the per-run files.

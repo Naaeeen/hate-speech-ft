@@ -2,23 +2,20 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-from src.methods.distilbert_full.train import (
-    REPO_ROOT,
+from src.methods.transformer_data import (
     build_fixed_label_maps,
-    build_training_arguments,
-    build_trainer,
-    build_tokenized_dataset,
     build_tokenized_dataset_with_stats,
-    clear_existing_run_artifacts,
-    compute_balanced_class_weights,
-    find_existing_run_artifacts,
     resolve_eval_split_name,
-    resolve_class_weights,
-    save_prediction_file,
-    validate_output_dir_for_run,
 )
-from src.methods.distilbert_full.args import parse_args
+from src.methods.distilbert_full.train import REPO_ROOT
+from src.methods.predictions import save_prediction_file
+from src.methods.transformer_trainer import (
+    build_hf_trainer,
+    compute_balanced_class_weights,
+    resolve_class_weights,
+)
 
 
 class RecordingTokenizer:
@@ -37,27 +34,8 @@ class FakePredictionOutput:
 
 class RunDistilbertHatexplainTests(unittest.TestCase):
     def test_repo_root_points_to_project_root_after_method_move(self):
-        self.assertTrue((REPO_ROOT / "configs" / "experiments.json").is_file())
+        self.assertTrue((REPO_ROOT / "README.md").is_file())
         self.assertTrue((REPO_ROOT / "src" / "methods" / "distilbert_full" / "train.py").is_file())
-
-    def test_parser_accepts_shared_hpo_arguments(self):
-        args = parse_args(
-            [
-                "--hpo_trial_cap",
-                "6",
-                "--hpo_time_cap_gpu_hours",
-                "2.0",
-                "--search_method",
-                "random_search",
-                "--search_space_name",
-                "full_ft",
-            ]
-        )
-
-        self.assertEqual(args.hpo_trial_cap, 6)
-        self.assertEqual(args.hpo_time_cap_gpu_hours, 2.0)
-        self.assertEqual(args.search_method, "random_search")
-        self.assertEqual(args.search_space_name, "full_ft")
 
     def test_build_fixed_label_maps_uses_hatexplain_class_order(self):
         id2label, label2id, num_labels = build_fixed_label_maps()
@@ -87,14 +65,14 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             },
         ]
 
-        tokenized = build_tokenized_dataset(
+        split = build_tokenized_dataset_with_stats(
             examples,
             tokenizer=tokenizer,
             max_length=128,
         )
 
         self.assertEqual(
-            tokenized,
+            split.dataset,
             [{"input_ids": [101, 102], "attention_mask": [1, 1], "labels": 2}],
         )
         self.assertEqual(
@@ -109,15 +87,15 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             {"id": "b", "post_tokens": ["b"], "annotators": {"label": [1, 1, 2]}},
         ]
 
-        tokenized = build_tokenized_dataset(
+        split = build_tokenized_dataset_with_stats(
             examples,
             tokenizer=tokenizer,
             max_length=128,
             max_samples=1,
         )
 
-        self.assertEqual(len(tokenized), 1)
-        self.assertEqual(tokenized[0]["labels"], 0)
+        self.assertEqual(len(split.dataset), 1)
+        self.assertEqual(split.dataset[0]["labels"], 0)
 
     def test_build_tokenized_dataset_with_stats_tracks_raw_and_dropped_counts(self):
         tokenizer = RecordingTokenizer()
@@ -181,7 +159,7 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             self.assertEqual(payload["predictions"][1]["predicted_label"], 0)
             self.assertEqual(payload["predictions"][1]["logits"], [2.0, 0.5, 0.1])
 
-    def test_build_trainer_uses_processing_class_instead_of_removed_tokenizer_arg(self):
+    def test_build_hf_trainer_uses_processing_class_instead_of_removed_tokenizer_arg(self):
         captured_kwargs = {}
 
         class FakeTrainer:
@@ -190,22 +168,29 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
 
         tokenizer = object()
 
-        trainer = build_trainer(
-            trainer_cls=FakeTrainer,
-            model=object(),
-            training_args=object(),
-            train_dataset=[],
-            eval_dataset=[],
-            tokenizer=tokenizer,
-            data_collator=object(),
-            compute_metrics=lambda _: {},
+        context = type(
+            "FakeContext",
+            (),
+            {
+                "trainer_cls": FakeTrainer,
+                "model": object(),
+                "train_dataset": [],
+                "eval_dataset": [],
+                "tokenizer": tokenizer,
+                "data_collator": object(),
+            },
         )
+        with patch(
+            "src.methods.transformer_trainer.compute_metrics_fn",
+            return_value=lambda _: {},
+        ):
+            trainer = build_hf_trainer(context, training_args=object())
 
         self.assertIsInstance(trainer, FakeTrainer)
         self.assertIs(captured_kwargs["processing_class"], tokenizer)
         self.assertNotIn("tokenizer", captured_kwargs)
 
-    def test_build_trainer_passes_callbacks_when_provided(self):
+    def test_build_hf_trainer_passes_callbacks_when_provided(self):
         captured_kwargs = {}
 
         class FakeTrainer:
@@ -214,43 +199,29 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
 
         callbacks = [object()]
 
-        build_trainer(
-            trainer_cls=FakeTrainer,
-            model=object(),
-            training_args=object(),
-            train_dataset=[],
-            eval_dataset=[],
-            tokenizer=object(),
-            data_collator=object(),
-            compute_metrics=lambda _: {},
-            callbacks=callbacks,
+        context = type(
+            "FakeContext",
+            (),
+            {
+                "trainer_cls": FakeTrainer,
+                "model": object(),
+                "train_dataset": [],
+                "eval_dataset": [],
+                "tokenizer": object(),
+                "data_collator": object(),
+            },
         )
+        with patch(
+            "src.methods.transformer_trainer.compute_metrics_fn",
+            return_value=lambda _: {},
+        ):
+            build_hf_trainer(
+                context,
+                training_args=object(),
+                callbacks=callbacks,
+            )
 
         self.assertIs(captured_kwargs["callbacks"], callbacks)
-
-    def test_build_training_arguments_filters_unsupported_kwargs(self):
-        captured_kwargs = {}
-
-        class FakeTrainingArguments:
-            def __init__(self, output_dir, learning_rate):
-                captured_kwargs.update(
-                    {
-                        "output_dir": output_dir,
-                        "learning_rate": learning_rate,
-                    }
-                )
-
-        args = build_training_arguments(
-            FakeTrainingArguments,
-            output_dir="outputs/example",
-            learning_rate=2e-5,
-            overwrite_output_dir=False,
-        )
-
-        self.assertIsInstance(args, FakeTrainingArguments)
-        self.assertEqual(captured_kwargs["output_dir"], "outputs/example")
-        self.assertEqual(captured_kwargs["learning_rate"], 2e-5)
-        self.assertNotIn("overwrite_output_dir", captured_kwargs)
 
     def test_balanced_class_weights_use_final_training_subset(self):
         dataset = [
@@ -288,94 +259,6 @@ class RunDistilbertHatexplainTests(unittest.TestCase):
             ),
             [1.0, 1.0, 1.0],
         )
-
-    def test_output_dir_guard_protects_existing_run_artifacts(self):
-        with TemporaryDirectory() as tmp:
-            output_dir = Path(tmp)
-            (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
-            (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
-            (output_dir / "adapter_model.safetensors").write_text(
-                "adapter",
-                encoding="utf-8",
-            )
-            (output_dir / "adapter_model.bin").write_text("adapter", encoding="utf-8")
-            (output_dir / "checkpoint-1").mkdir()
-            (output_dir / "stage1_linear_probe").mkdir()
-            (output_dir / "stage1_lora_head").mkdir()
-
-            artifacts = find_existing_run_artifacts(output_dir)
-
-            self.assertIn(output_dir / "result_summary.json", artifacts)
-            self.assertIn(output_dir / "test_predictions.json", artifacts)
-            self.assertIn(output_dir / "adapter_model.safetensors", artifacts)
-            self.assertIn(output_dir / "adapter_model.bin", artifacts)
-            self.assertIn(output_dir / "checkpoint-1", artifacts)
-            self.assertIn(output_dir / "stage1_linear_probe", artifacts)
-            self.assertIn(output_dir / "stage1_lora_head", artifacts)
-            with self.assertRaisesRegex(ValueError, "already contains run artifacts"):
-                validate_output_dir_for_run(output_dir, overwrite=False)
-            validate_output_dir_for_run(output_dir, overwrite=True)
-
-    def test_output_dir_guard_allows_empty_or_missing_directory(self):
-        with TemporaryDirectory() as tmp:
-            empty_dir = Path(tmp) / "empty"
-            empty_dir.mkdir()
-            missing_dir = Path(tmp) / "missing"
-
-            validate_output_dir_for_run(empty_dir, overwrite=False)
-            validate_output_dir_for_run(missing_dir, overwrite=False)
-
-    def test_clear_existing_run_artifacts_removes_only_managed_outputs(self):
-        with TemporaryDirectory() as tmp:
-            output_dir = Path(tmp)
-            (output_dir / "result_summary.json").write_text("{}", encoding="utf-8")
-            (output_dir / "model.safetensors").write_text("model", encoding="utf-8")
-            (output_dir / "adapter_model.safetensors").write_text(
-                "adapter",
-                encoding="utf-8",
-            )
-            (output_dir / "adapter_model.bin").write_text("adapter", encoding="utf-8")
-            (output_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
-            (output_dir / "training_args.bin").write_text("args", encoding="utf-8")
-            (output_dir / "test_predictions.json").write_text("[]", encoding="utf-8")
-            checkpoint = output_dir / "checkpoint-1"
-            checkpoint.mkdir()
-            (checkpoint / "trainer_state.json").write_text("{}", encoding="utf-8")
-            stage1_lora_dir = output_dir / "stage1_lora_head"
-            stage1_lora_dir.mkdir()
-            (stage1_lora_dir / "trainer_state.json").write_text("{}", encoding="utf-8")
-            stage_dir = output_dir / "stage2_full_ft"
-            stage_dir.mkdir()
-            (stage_dir / "trainer_state.json").write_text("{}", encoding="utf-8")
-            note = output_dir / "notes.txt"
-            note.write_text("keep", encoding="utf-8")
-
-            removed = clear_existing_run_artifacts(output_dir)
-
-            self.assertEqual(
-                {path.name for path in removed},
-                {
-                    "adapter_config.json",
-                    "adapter_model.bin",
-                    "adapter_model.safetensors",
-                    "checkpoint-1",
-                    "model.safetensors",
-                    "result_summary.json",
-                    "stage1_lora_head",
-                    "stage2_full_ft",
-                    "test_predictions.json",
-                    "training_args.bin",
-                },
-            )
-            self.assertFalse(checkpoint.exists())
-            self.assertFalse(stage1_lora_dir.exists())
-            self.assertFalse(stage_dir.exists())
-            self.assertFalse((output_dir / "model.safetensors").exists())
-            self.assertFalse((output_dir / "adapter_model.safetensors").exists())
-            self.assertFalse((output_dir / "adapter_model.bin").exists())
-            self.assertFalse((output_dir / "adapter_config.json").exists())
-            self.assertFalse((output_dir / "training_args.bin").exists())
-            self.assertTrue(note.exists())
 
 
 if __name__ == "__main__":

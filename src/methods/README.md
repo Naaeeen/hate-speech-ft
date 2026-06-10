@@ -1,12 +1,11 @@
 # Method Packages
 
-This directory contains method-owned training packages and shared method
-helpers.
+This directory contains one runnable package per method plus a few small
+utilities for result files, W&B logging, and repeated Transformer setup.
 
 ## What Goes Where
 
 ```text
-_template/          copyable starter for a new method
 distilbert_full/    ready DistilBERT full fine-tuning method
 frozen_distilbert/  ready frozen-backbone DistilBERT method
 distilbert_lp_ft/   ready DistilBERT linear probing + full fine-tuning method
@@ -16,23 +15,41 @@ distilbert_efficient_head/
 tfidf_logreg/       ready TF-IDF + Logistic Regression baseline
 bilstm/             ready Bi-LSTM from-scratch baseline
 peft_utils.py       PEFT/LoRA and classification-head transfer helpers
-common.py           method-agnostic CLI/config/output policy helpers
-hf_common.py        Hugging Face Trainer helpers shared by Transformer methods
-hf_sequence_classification.py
-                    shared setup/train/eval/save workflow for HF text classifiers
-transformer_data.py shared HateXplain tokenization/split helpers for Transformer methods
+classification_metrics.py
+                    shared accuracy, macro, and per-class metric names
+transformer_data.py HateXplain tokenization/split helpers for Transformer methods
+transformer_config.py
+                    common resolved-config fields for Transformer methods
+transformer_setup.py
+                    load dataset/tokenizer/model and create one HF run context
+transformer_trainer.py
+                    Trainer args, metrics, class weights, and checkpoint checks
+transformer_outputs.py
+                    final eval/test, model save, predictions, and run reports
+transformer_runner.py
+                    shared single-stage Transformer training flow
+transformer_two_stage_runner.py
+                    shared two-stage Transformer training flow
+transformer_types.py
+                    small dataclasses used by Transformer methods
 predictions.py      shared per-sample prediction JSON writer
 ```
 
-New methods should use their own package:
+Each method can be run directly from its package:
 
 ```text
-src/methods/tfidf_logreg/
-src/methods/bilstm/
-src/methods/distilbert_lora/
-src/methods/distilbert_efficient_head/
-src/methods/frozen_distilbert/
+python src/methods/tfidf_logreg/train.py
+python src/methods/distilbert_full/train.py
+python src/methods/distilbert_lora/train.py
+python src/methods/distilbert_lp_ft/train.py
+python src/methods/distilbert_efficient_head/train.py
+python src/methods/frozen_distilbert/train.py
+python src/methods/bilstm/train.py
 ```
+
+Before running, edit that method's `manual_config.py`. The train scripts read
+that config directly and do not accept research settings through command
+arguments.
 
 Do not put new methods inside `distilbert_full/`.
 
@@ -44,61 +61,34 @@ Read the full checklist in:
 docs/ADDING_METHOD.md
 ```
 
-The minimum flow is:
-
-```text
-copy src/methods/_template/ -> src/methods/<method_name>/
-edit the copied train.py
-register a planned experiment in configs/experiments.json
-validate and run a smoke test
-mark the experiment ready only after smoke works
-```
+The minimum flow is to create `src/methods/<method_name>/`, write its
+`manual_config.py`, `config.py`, `training.py` when needed, and an executable
+`train.py`.
+Then run one smoke-sized config and one final config with `run_test = True`.
 
 ## Shared Boundaries
 
-Use `common.py` for behavior every method should share:
+Each method package owns its manual config schema, trainability policy, stage
+layout, method-specific hyperparameters, and executable `train.py`.
 
-- common CLI flags
-- comparable config metadata
-- output directory protection
-- final/test policy: final-stage runs must use `--run_test`, and non-final
-  stages must not
-- managed-artifact cleanup for intentional overwrite or failed attempts
-- HPO accounting fields such as `hpo_trial_cap` and `hpo_time_cap_gpu_hours`
+Project-level helpers should stay small and boring. They are only for behavior
+multiple active methods genuinely need:
 
-Use `hf_common.py` for Hugging Face Trainer behavior:
-
-- metrics
-- mixed precision
-- class weighting
-- TrainingArguments compatibility
-- model-selection summaries
-- GPU and memory metadata
-
-Use `hf_sequence_classification.py` when a method is a Hugging Face
-sequence-classification fine-tuning method. It owns the repeated lifecycle:
-
-- output directory setup and managed-artifact overwrite behavior
-- W&B run start/update/finish
-- HateXplain split loading, tokenization, and split accounting
-- tokenizer/model/data-collator construction
-- Trainer construction
-- runtime and failure summaries
-- final validation/test evaluation
-- final model, prediction, and result JSON writing
-- runtime metadata such as memory, training hours, and GPU-hours
-
-Method packages still own the method-specific parts: trainability policy,
-stage layout, method-specific hyperparameters, and resolved-config schema.
+- result JSON writing in `src/results.py`
+- W&B settings and direct logging in `src/utils/wandb_config.py`
+- runtime metadata in `src/utils/run_metadata.py`
+- Transformer tokenization/setup/trainer/output utilities in the small
+  `src/methods/transformer_*.py` files
+- PEFT adapter/head-transfer helpers in `src/methods/peft_utils.py`
 
 Every completed method run should write `resolved_config.json`, `metrics.json`,
-`runtime.json`, and `result_summary.json`. Final-stage runs that can produce
-per-sample outputs should also write `eval_predictions.json`; final runs with
-`--run_test` should write `test_predictions.json` and store those paths in
+`runtime.json`, and `result_summary.json`. Runs with `run_test = True` that can
+produce per-sample outputs should write `eval_predictions.json` and
+`test_predictions.json`, and store those paths in
 `result_summary.json`.
-Those prediction files are the source for shared post-hoc diagnostics:
-`src/experiments/prediction_analysis.py` can derive confusion matrices,
-optional AUROC summaries, and error examples without rerunning the method.
+Those prediction files are enough for manual post-hoc diagnostics such as
+confusion matrices, optional AUROC summaries, and error examples without
+rerunning the method.
 When a method saves a local final model, pass those paths to
 `write_result_files()` so `result_summary.json.artifacts.model` identifies the
 model artifact behind the recorded metrics.
@@ -108,15 +98,15 @@ adapter choices, TF-IDF vectorizers, Bi-LSTM modules, freezing policy, and
 two-stage training logic.
 
 For example, LP+FT keeps its stage-1 head-only freezing and stage-2 full
-unfreeze helpers in `src/methods/distilbert_lp_ft/training.py`; the shared HF
-workflow only provides the comparable data, logging, W&B, checkpoint, and
-output contracts.
+unfreeze helpers in `src/methods/distilbert_lp_ft/training.py`; the small
+Transformer helper files only provide comparable data, Trainer, W&B,
+checkpoint, and output contracts.
 
 Frozen DistilBERT follows the same HF workflow as full FT, but keeps its
 method-owned trainability helper in `src/methods/frozen_distilbert/training.py`.
 That helper freezes the DistilBERT backbone and leaves only the classification
-head trainable; the shared HF workflow still owns tokenization, Trainer setup,
-W&B, checkpoints, predictions, and result JSON files.
+head trainable; the small Transformer utilities still handle tokenization,
+Trainer setup, W&B, checkpoints, predictions, and result JSON files.
 
 DistilBERT LoRA keeps PEFT adapter setup in `src/methods/distilbert_lora/` and
 uses `src/methods/peft_utils.py` for target-module parsing and LoRA wrapping.
@@ -127,46 +117,40 @@ Efficient-head FT keeps Aaron's two-stage policy in
 classification head, then stage 2 reloads a fresh pretrained backbone, copies
 only the trained classification-head weights, and fully fine-tunes all
 parameters. The stage transition is method-owned; data, W&B, checkpoint policy,
-final-only test evaluation, and output files stay shared.
+optional test evaluation, and output files stay shared.
 
-TF-IDF + Logistic Regression keeps its vectorizer, sklearn estimator, classical
-metrics, and prediction writer inside `src/methods/tfidf_logreg/`. It still uses
-the shared output guard, final-only test policy, W&B settings, and local result
-JSON contract.
+TF-IDF + Logistic Regression keeps its vectorizer, sklearn estimator, and
+prediction writer inside `src/methods/tfidf_logreg/`. It still uses the same
+optional test evaluation, W&B settings, shared metric key names, and local
+result JSON contract.
 
 The TF-IDF package follows the same small-file layout used by the Transformer
 methods:
 
 ```text
-src/methods/tfidf_logreg/args.py      CLI knobs
+src/methods/tfidf_logreg/manual_config.py editable one-run settings
 src/methods/tfidf_logreg/config.py    resolved config and runtime summaries
 src/methods/tfidf_logreg/data.py      classical split/text preparation
 src/methods/tfidf_logreg/reporting.py final artifacts and console reporting
 src/methods/tfidf_logreg/training.py  sklearn pipeline, metrics, predictions
-src/methods/tfidf_logreg/train.py     executable orchestration entry point
+src/methods/tfidf_logreg/train.py     executable direct entry point
 ```
 
-Keep `train.py` runnable because the catalog dispatches to that path, but avoid
-putting new TF-IDF internals there unless they are orchestration-only.
+Keep `train.py` runnable because users execute that path directly, but avoid
+putting new TF-IDF internals there unless they only wire the run flow.
 
 The Bi-LSTM package follows the same small-file structure and shared contract:
 
 ```text
-src/methods/bilstm/args.py      CLI knobs and no-dependency validation
+src/methods/bilstm/manual_config.py editable one-run settings
 src/methods/bilstm/config.py    resolved config, runtime, and model selection
 src/methods/bilstm/data.py      shared HateXplain preprocessing/split handling
 src/methods/bilstm/model.py     torch BiLSTM classifier
-src/methods/bilstm/tokenizer.py train-split word vocabulary and token ids
+src/methods/bilstm/tokenizer.py DistilBERT tokenizer wrapper used by Bi-LSTM
 src/methods/bilstm/training.py  torch training loop, metrics, checkpoints
-src/methods/bilstm/train.py     executable orchestration entry point
+src/methods/bilstm/train.py     executable direct entry point
 ```
 
 Bi-LSTM is not a Hugging Face Trainer method, so it does not use
-`hf_sequence_classification.py`. It still uses the same catalog, W&B, output-dir
-protection, final-only test policy, result JSON names, failure summary, and HPO
-identity fields as the other ready methods.
-
-Bi-LSTM HPO is intentionally not stored under `src/methods/bilstm/`. Use
-`configs/search_spaces.json` plus `src/run_experiment.py --suggest_trials` so
-trial caps, seeds, config hashes, and output directories stay consistent with
-the rest of the pipeline.
+the Transformer utilities. It still uses the same W&B, optional test evaluation,
+and result JSON names as the other ready methods.

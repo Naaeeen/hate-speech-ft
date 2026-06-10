@@ -38,12 +38,6 @@ The shared layer does not train models. It standardizes the dataset before model
   - Selects deterministic data fractions.
   - Tokenizes a preprocessed record for Hugging Face `Trainer`.
 
-- `check_dataset.py`
-  - Smoke-check script for the HateXplain dataset.
-
-- `load_hatexplain.py`
-  - Basic dataset loading script using `trust_remote_code=True`.
-
 ## Dataset Shape
 
 Load the dataset with:
@@ -330,36 +324,6 @@ Reason: tokenization is model-specific. A Transformer, TF-IDF baseline, and Bi-L
 
 Run this once in each experiment script before method-specific training starts.
 
-### Step 0: Check The Raw Dataset Once
-
-Before writing or running a new experiment, first confirm that your environment
-can load HateXplain and that the dataset shape is what this guide expects.
-
-Run:
-
-```bash
-python src/data/check_dataset.py
-```
-
-This script loads `Hate-speech-CNERG/hatexplain`, prints the available splits,
-prints the size of each split, and shows the keys and first tokens from one
-training example. Use it when you want a quick sanity check without printing a
-large nested sample.
-
-You can also run:
-
-```bash
-python src/data/load_hatexplain.py
-```
-
-This script loads the same dataset with `trust_remote_code=True` and prints the
-full dataset object plus the first training sample. Use it when you need to
-inspect the nested `annotators`, `rationales`, and `post_tokens` structure.
-
-These scripts are inspection tools. They do not create the shared preprocessed
-records used by experiments. After the checks pass, use `preprocessing.py` in
-your experiment code.
-
 ### Step 1: Load HateXplain In Your Experiment
 
 ```python
@@ -544,12 +508,6 @@ Compile check:
 
 ```bash
 python -m py_compile src/data/text_field_policy.py src/data/label_policy.py src/data/preprocessing.py
-```
-
-Dataset smoke check, if dependencies are installed:
-
-```bash
-python src/data/check_dataset.py
 ```
 
 ## Common Mistakes

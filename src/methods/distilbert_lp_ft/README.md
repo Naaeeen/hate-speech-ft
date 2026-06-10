@@ -10,45 +10,26 @@ The method has two training stages:
 2. `stage2_full_ft`: unfreeze all model parameters and continue training with a
    smaller full-finetuning learning rate.
 
-The method is integrated with the shared experiment launcher. Prefer running it
-through:
+Edit this method's config and run one seed plus one hyperparameter set:
 
-```bash
-python src/run_experiment.py --experiment distilbert_lp_ft_smoke --dry_run
-python src/run_experiment.py --experiment distilbert_lp_ft_smoke
+```text
+src/methods/distilbert_lp_ft/manual_config.py
+python src/methods/distilbert_lp_ft/train.py
 ```
 
-For HPO command generation:
-
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_lp_ft_tuning \
-  --suggest_trials 4 \
-  --search_space lp_ft \
-  --hpo_seed 42
-```
-
-For final seed commands after selecting a fixed config:
-
-```bash
-python src/run_experiment.py \
-  --experiment distilbert_lp_ft_tuning \
-  --suggest_seed_runs final \
-  --set stage1_head_learning_rate=1e-4 \
-  --set stage1_epochs=5 \
-  --set stage2_learning_rate=2e-5 \
-  --set stage2_epochs=2
-```
+For a quick validation-only check, change `run_name`, point `output_dir` at a
+scratch folder, and set `run_test = False`. In Colab, edit
+`manual_config.py` by hand and run the script directly.
 
 ## Shared Contract
 
 Package layout:
 
 ```text
-args.py       LP+FT CLI args layered on top of shared method args
-config.py     resolved config and failure config builders
-training.py   freeze/unfreeze, W&B settings, and TrainingArguments helpers
-train.py      two-stage LP+FT orchestration only
+manual_config.py editable one-run settings
+config.py     resolved config builder
+training.py   LP stage trainability helpers and stage directory names
+train.py      two-stage LP+FT direct entry point
 ```
 
 This method reuses the project-level policies:
@@ -56,8 +37,8 @@ This method reuses the project-level policies:
 - official HateXplain train / validation / test splits
 - strict-majority label policy
 - validation macro-F1 model selection
-- final-only test evaluation
-- W&B metadata from `src/run_experiment.py`
+- optional test evaluation
+- W&B metadata from this method's `manual_config.py`
 - local JSON result files under `output_dir`
 
 Completed runs write:
@@ -72,7 +53,7 @@ result_summary.json
 `metrics.json` and `result_summary.json` include final validation/test metrics
 plus a `stage1` metrics block for the linear-probe validation pass.
 
-Final-stage runs also write:
+Runs with `run_test = True` also write:
 
 ```text
 eval_predictions.json
@@ -88,24 +69,22 @@ output_dir/stage2_full_ft/
 
 The final saved model/tokenizer are written directly under `output_dir`.
 
-W&B logging keeps the two stages separate. Stage Trainer auto-reporting is
-disabled to avoid repeated non-monotonic `train/global_step` curves. Use
-`stage1/train/*` with `stage1/global_step` for the linear-probe phase and
-`stage2/train/*` with `stage2/global_step` for the full-finetuning phase. Final
-validation/test metrics still appear as normal `eval/*` and `test/*` metrics.
+Stage Trainer W&B auto-reporting is disabled so stage-local Trainer steps do
+not collide. The W&B run records the completed run's final validation/test
+metrics, runtime, model-selection fields, and one final `stage1/<metric>`
+payload. Stage-1 validation metrics also stay in the local JSON files for
+manual inspection and manual copying.
 
-## Shared HF Workflow
+W&B setup, Hugging Face `TrainingArguments`, tokenization, prediction files, and
+the local JSON writers live in the shared `transformer_*` helpers. LP+FT's own
+files only keep the method-specific stage behavior.
 
-`train.py` intentionally stays small. It delegates repeated Hugging Face
-sequence-classification work to:
+## Manual Run Structure
 
-```text
-src/methods/hf_sequence_classification.py
-```
-
-That shared helper handles W&B setup, HateXplain loading/tokenization, model and
-Trainer construction, failure summaries, final validation/test evaluation,
-prediction files, runtime metrics, and result JSON files.
+`train.py` intentionally stays focused on this method's two-stage run. Small
+Transformer helper files handle W&B setup, HateXplain loading/tokenization,
+model and Trainer construction, validation/test evaluation, prediction files,
+runtime metrics, and result JSON files.
 
 LP+FT still owns only the method-specific behavior:
 

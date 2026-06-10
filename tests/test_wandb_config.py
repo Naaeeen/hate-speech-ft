@@ -5,49 +5,13 @@ from unittest.mock import patch
 from src.utils.wandb_config import (
     WandbSettings,
     apply_wandb_environment,
-    build_wandb_run_name,
-    define_wandb_metric_best_effort,
-    parse_wandb_tags,
+    finish_wandb_run,
+    log_wandb,
+    prefixed_wandb_scalars,
 )
 
 
 class WandbConfigTests(unittest.TestCase):
-    def test_parse_wandb_tags_deduplicates_and_ignores_empty_values(self):
-        self.assertEqual(
-            parse_wandb_tags(" smoke,distilbert,, smoke , colab "),
-            ("smoke", "distilbert", "colab"),
-        )
-
-    def test_build_wandb_run_name_is_stable_and_informative(self):
-        self.assertEqual(
-            build_wandb_run_name(
-                method="full-ft",
-                model_name="distilbert-base-uncased",
-                seed=42,
-                max_train_samples=64,
-                num_train_epochs=1.0,
-                learning_rate=2e-5,
-            ),
-            "full-ft_distilbert-base-uncased_seed42_train64_ep1_lr2e-05",
-        )
-
-    def test_build_wandb_run_name_can_include_trial_id(self):
-        self.assertEqual(
-            build_wandb_run_name(
-                method="full-ft",
-                model_name="distilbert-base-uncased",
-                seed=42,
-                max_train_samples=64,
-                num_train_epochs=1.0,
-                learning_rate=2e-5,
-                trial_id="distilbert/full smoke",
-            ),
-            (
-                "distilbert-full-smoke_"
-                "full-ft_distilbert-base-uncased_seed42_train64_ep1_lr2e-05"
-            ),
-        )
-
     def test_wandb_settings_report_to_switches_with_enabled_flag(self):
         self.assertEqual(WandbSettings(enabled=True).report_to, "wandb")
         self.assertEqual(WandbSettings(enabled=False).report_to, "none")
@@ -59,9 +23,6 @@ class WandbConfigTests(unittest.TestCase):
             entity="hate-speech-team",
             mode="offline",
             run_name="run-name",
-            group="distilbert",
-            tags=("smoke", "colab"),
-            log_model="false",
         )
 
         with patch.dict(os.environ, {}, clear=True):
@@ -71,33 +32,9 @@ class WandbConfigTests(unittest.TestCase):
             self.assertEqual(os.environ["WANDB_ENTITY"], "hate-speech-team")
             self.assertEqual(os.environ["WANDB_MODE"], "offline")
             self.assertEqual(os.environ["WANDB_NAME"], "run-name")
-            self.assertEqual(os.environ["WANDB_RUN_GROUP"], "distilbert")
-            self.assertEqual(os.environ["WANDB_TAGS"], "smoke,colab")
-            self.assertEqual(os.environ["WANDB_LOG_MODEL"], "false")
             self.assertEqual(applied["WANDB_PROJECT"], "hate-speech-ft")
 
-    def test_define_wandb_metric_best_effort_sets_step_metric(self):
-        class FakeRun:
-            def __init__(self):
-                self.calls = []
-
-            def define_metric(self, *args, **kwargs):
-                self.calls.append((args, kwargs))
-
-        run = FakeRun()
-
-        define_wandb_metric_best_effort(
-            run,
-            "train_loss",
-            step_metric="global_step",
-        )
-
-        self.assertEqual(
-            run.calls,
-            [(("train_loss",), {"step_metric": "global_step"})],
-        )
-
-    def test_log_wandb_best_effort_skips_empty_payloads(self):
+    def test_log_wandb_skips_empty_payloads(self):
         class FakeRun:
             def __init__(self):
                 self.calls = []
@@ -105,12 +42,37 @@ class WandbConfigTests(unittest.TestCase):
             def log(self, payload):
                 self.calls.append(payload)
 
-        from src.utils.wandb_config import log_wandb_best_effort
-
         run = FakeRun()
-        log_wandb_best_effort(run, {}, {"eval/f1_macro": 0.5})
+        log_wandb(run, {}, {"eval/f1_macro": 0.5})
 
         self.assertEqual(run.calls, [{"eval/f1_macro": 0.5}])
+
+    def test_prefixed_wandb_scalars_skips_nested_and_none_values(self):
+        payload = prefixed_wandb_scalars(
+            "model_selection",
+            {"best_epoch": 3, "best_metric": 0.7, "extra": {"nested": True}, "none": None},
+        )
+
+        self.assertEqual(
+            payload,
+            {"model_selection/best_epoch": 3, "model_selection/best_metric": 0.7},
+        )
+
+    def test_wandb_runtime_errors_fail_the_run(self):
+        class BadRun:
+            def log(self, payload):
+                raise RuntimeError("log unavailable")
+
+            def finish(self):
+                raise RuntimeError("finish unavailable")
+
+        run = BadRun()
+
+        with self.assertRaisesRegex(RuntimeError, "log unavailable"):
+            log_wandb(run, {"metric": 1.0})
+
+        with self.assertRaisesRegex(RuntimeError, "finish unavailable"):
+            finish_wandb_run(run)
 
 
 if __name__ == "__main__":

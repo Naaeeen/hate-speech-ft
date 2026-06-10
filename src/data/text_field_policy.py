@@ -1,16 +1,10 @@
 """Shared HateXplain text-field construction policy.
-We do not clean the HateXplain text because post_tokens is already
-the canonical annotated text representation. We only join tokens with spaces
-to reconstruct a text string. Any further tokenization should be method-specific,
-not dataset-level preprocessing, so that all methods are compared on the same input content.
 
-Team policy:
-All experiment methods must construct the model input from HateXplain
-`post_tokens` by joining tokens with a single space. No extra dataset-level
-cleaning is applied before model-specific tokenization or vectorization.
-
-This keeps every method comparable and preserves the token sequence that
-HateXplain rationales are aligned to.
+Every method starts from the same text: join HateXplain `post_tokens` with one
+space. We deliberately avoid dataset-level cleaning here, because extra
+cleaning would make methods less comparable and could break alignment with the
+original HateXplain rationale tokens. Tokenization/vectorization happens later,
+inside each method.
 """
 
 from collections.abc import Mapping, Sequence
@@ -27,116 +21,17 @@ TEXT_FIELD_POLICY = (
 )
 
 TEXT_FIELD_USAGE = """
-How to use this module
-======================
+Use `build_text_from_post_tokens(example)` when a method needs raw text. This is
+equivalent to `" ".join(example["post_tokens"])`.
 
-What is `example`?
-------------------
-`example` means one row/sample from the HateXplain dataset. When using the
-Hugging Face datasets library, a typical example is:
+Transformer methods should call `tokenize_hatexplain_text(...)`, which builds
+that shared text and then calls the model tokenizer with truncation/max length.
+TF-IDF and BiLSTM should call `build_text_from_post_tokens(...)` and pass the
+same string into their own vectorizer/tokenizer.
 
-    from datasets import load_dataset
-
-    ds = load_dataset("Hate-speech-CNERG/hatexplain")
-    example = ds["train"][0]
-
-That `example` is a dictionary-like object containing the fields declared by
-the Hugging Face dataset schema:
-
-    {
-        "id": "...",
-        "post_tokens": ["this", "is", "a", "post"],
-        "annotators": ...,
-        "rationales": [...]
-    }
-
-The helper functions in this module only require `post_tokens`. The example
-above is therefore a minimal shape for text construction, not a full printout
-of every nested annotation field.
-
-For reference, the raw HateXplain JSON used by the Hugging Face loader stores
-`annotators` as a list of annotator dictionaries:
-
-    {
-        "post_id": "...",
-        "post_tokens": ["this", "is", "a", "post"],
-        "annotators": [
-            {"label": "hatespeech", "annotator_id": 203, "target": ["..."]},
-            {"label": "offensive", "annotator_id": 204, "target": ["..."]},
-            {"label": "normal", "annotator_id": 233, "target": ["..."]}
-        ],
-        "rationales": [[0, 1, 0, 0], [0, 0, 0, 0]]
-    }
-
-In the Hugging Face dataset schema, `annotators.label` is declared as a
-ClassLabel with names `hatespeech`, `normal`, and `offensive`. Depending on the
-library representation being printed, labels may appear as class ids rather
-than strings. This does not affect text construction because text construction
-uses only `post_tokens`.
-
-Shared dataset-level text construction
---------------------------------------
-Every method should construct the input text through this helper:
-
-    from src.data.text_field_policy import build_text_from_post_tokens
-
-    text = build_text_from_post_tokens(example)
-
-This is equivalent to:
-
-    text = " ".join(example["post_tokens"])
-
-Do not add any extra dataset-level cleaning before this text enters a
-method-specific tokenizer or vectorizer. In particular, do not remove
-punctuation, emojis, stopwords, hashtags, offensive terms, or apply stemming,
-lemmatization, spelling correction, profanity masking, or metadata concatenation.
-
-Transformer methods
--------------------
-For DistilBERT, BERT, RoBERTa, LoRA, frozen-backbone, partial fine-tuning,
-full fine-tuning, and LP-FT experiments, first build the shared text and then
-call the model tokenizer:
-
-    from src.data.text_field_policy import tokenize_hatexplain_text
-
-    tokenized = tokenize_hatexplain_text(
-        example,
-        tokenizer,
-        max_length=128,
-    )
-
-This calls:
-
-    tokenizer(text, truncation=True, max_length=128)
-
-Classical baselines
--------------------
-For TF-IDF and Logistic Regression, use the same shared text as input to the
-vectorizer:
-
-    text = build_text_from_post_tokens(example)
-    features = tfidf_vectorizer.transform([text])
-
-If `TfidfVectorizer` lowercases internally or creates n-grams, that is part of
-the vectorizer configuration. It is not a separate dataset-level text policy.
-
-Bi-LSTM baseline
-----------------
-For a Bi-LSTM trained from scratch, also start from the same shared text:
-
-    text = build_text_from_post_tokens(example)
-
-Then pass that text into the Bi-LSTM vocabulary/tokenization pipeline chosen for
-that baseline. Document the Bi-LSTM tokenizer separately, but do not mutate the
-shared HateXplain text field.
-
-Why this policy exists
-----------------------
-HateXplain provides `post_tokens` as the canonical annotated token sequence, and
-its human rationale masks are aligned to that sequence by index. Extra cleaning
-can shift, delete, or rewrite tokens, making rationale alignment harder to
-interpret. This project compares model adaptation methods, so all methods should
-start from the same textual content.
+Do not add punctuation removal, stopword removal, stemming, profanity masking,
+metadata concatenation, or other dataset-level cleaning here. Those choices
+would change the shared input before the model-specific code sees it.
 """.strip()
 
 

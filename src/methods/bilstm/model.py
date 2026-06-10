@@ -1,3 +1,5 @@
+"""The small from-scratch BiLSTM classifier used as a neural baseline."""
+
 from __future__ import annotations
 
 import torch
@@ -5,6 +7,12 @@ import torch.nn as nn
 
 
 class BiLSTMClassifier(nn.Module):
+    """Small BiLSTM text classifier trained from scratch.
+
+    Token ids come from the fixed DistilBERT tokenizer wrapper, but the
+    embedding table, LSTM, and classifier are normal trainable PyTorch layers
+    initialized for this run.
+    """
 
     def __init__(
         self,
@@ -52,6 +60,7 @@ class BiLSTMClassifier(nn.Module):
         input_ids: torch.Tensor,
         lengths: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        """Run embedding, packed BiLSTM, dropout, and final classifier."""
 
         embedded = self.embedding(input_ids)
 

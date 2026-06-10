@@ -2,14 +2,16 @@
 
 This package owns the classical TF-IDF + Logistic Regression baseline.
 
-It is intentionally separate from the Transformer runners. The shared pipeline
-only builds commands and enforces the common experiment contract; the sklearn
-vectorizer and classifier stay here.
+It is intentionally separate from the Transformer runners. The sklearn
+vectorizer and classifier stay here. Its `manual_config.py` holds the editable
+settings for one run; small project utilities provide the output-dir guard, W&B
+settings, and result-file
+contract.
 
 ## Package Layout
 
 ```text
-args.py       CLI arguments and TF-IDF defaults
+manual_config.py editable one-run settings and TF-IDF hyperparameters
 config.py     resolved config, W&B settings, runtime/model-selection summaries
 data.py       HateXplain split preprocessing for the classical sklearn path
 reporting.py  final prediction artifact writing and console result report
@@ -19,64 +21,27 @@ train.py      thin executable entry point that wires the pieces together
 
 Most future TF-IDF changes should be local:
 
-- change command-line knobs in `args.py`
+- change run settings in `manual_config.py`
 - change recorded metadata in `config.py`
 - change split/text preparation in `data.py`
 - change final artifact/report formatting in `reporting.py`
 - change vectorizer/classifier/metrics in `training.py`
-- keep `train.py` as orchestration only
+- keep `train.py` as the direct entry point only
 
-## Catalog Entries
+## Manual Runs
 
-Ready entries:
+Edit this method's config and run one seed plus one hyperparameter set:
 
 ```text
-tfidf_logreg_smoke
-tfidf_logreg_quick
-tfidf_logreg_tuning
-tfidf_logreg_final_seed42
+src/methods/tfidf_logreg/manual_config.py
+python src/methods/tfidf_logreg/train.py
 ```
 
-Use the generic runner:
+For a quick validation-only check, change `run_name`, point `output_dir` at a
+scratch folder, and set `run_test = False`.
 
-```bash
-python src/run_experiment.py --experiment tfidf_logreg_smoke --dry_run
-python src/run_experiment.py --experiment tfidf_logreg_smoke
-```
-
-## HPO
-
-The search space is `tfidf_logreg` in `configs/search_spaces.json`.
-
-```bash
-python src/run_experiment.py \
-  --experiment tfidf_logreg_tuning \
-  --suggest_trials 4 \
-  --search_space tfidf_logreg \
-  --hpo_seed 42
-```
-
-The launcher prints commands with unique `trial_id`, `config_hash`, and
-`output_dir`. HPO runs evaluate validation only. They must not read or score the
-test split.
-
-## Final Seeds
-
-After selecting a fixed config, generate final seed commands from the tuning
-entry:
-
-```bash
-python src/run_experiment.py \
-  --experiment tfidf_logreg_tuning \
-  --suggest_seed_runs final \
-  --set ngram_range=[1,2] \
-  --set min_df=2 \
-  --set C=1.0 \
-  --set max_features=50000
-```
-
-Use JSON-style `ngram_range` in `--set` so the config hash matches HPO trial
-commands, which also use JSON-style list values.
+In Colab, edit this method's `manual_config.py` by hand. Change the method,
+seed, output, W&B, and parameter fields yourself for each run.
 
 ## Outputs
 
@@ -90,14 +55,14 @@ result_summary.json
 model.joblib
 ```
 
-Final-stage runs also write:
+Runs with `run_test = True` also write:
 
 ```text
 eval_predictions.json
-test_predictions.json   # when --run_test is enabled
+test_predictions.json   # when run_test is true
 ```
 
-Metrics use the same aggregation keys as Transformer methods:
+Metrics use the same manual comparison keys as Transformer methods:
 
 ```text
 eval_f1_macro

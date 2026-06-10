@@ -1,8 +1,15 @@
+"""Prediction-file writer for Transformer methods.
+
+The saved rows keep text, gold label, predicted label, and logits. That is
+enough for later manual confusion matrices, AUROC-style analysis, and error
+examples without rerunning the model.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from src.experiments.results import write_json
+from src.results import write_json
 
 
 def _as_list(value):
@@ -22,6 +29,8 @@ def save_prediction_file(
     prediction_output,
     id2label: dict[int, str],
 ):
+    """Save one split's predictions next to the run's result JSON files."""
+
     logits = _as_list(prediction_output.predictions)
     labels = _as_list(prediction_output.label_ids)
     if len(records) != len(logits) or len(records) != len(labels):

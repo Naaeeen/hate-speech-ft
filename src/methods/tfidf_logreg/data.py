@@ -1,3 +1,9 @@
+"""Data loading helpers for the TF-IDF baseline.
+
+This keeps TF-IDF on the same HateXplain strict-majority policy as the neural
+methods, just without tokenization into model ids.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +22,8 @@ from src.methods.transformer_data import (
 
 @dataclass(frozen=True)
 class ClassicalSplit:
+    """One sklearn-ready split plus the split accounting we save later."""
+
     records: list[dict[str, Any]]
     raw_size: int | None
     preprocessed_size: int
@@ -29,6 +37,12 @@ def build_classical_split(
     fraction_seed: int = 42,
     max_samples: int | None = None,
 ) -> ClassicalSplit:
+    """Turn one HateXplain split into records for sklearn.
+
+    We apply the shared strict-majority label policy, then optional manual
+    sampling for smoke runs. No extra text cleaning happens before TF-IDF.
+    """
+
     raw_size = len(examples) if hasattr(examples, "__len__") else None
     records = preprocess_hatexplain_split(examples)
     preprocessed_size = len(records)
@@ -47,6 +61,8 @@ def build_classical_split(
 
 
 def records_to_xy(records: Sequence[Mapping[str, Any]]) -> tuple[list[str], list[int]]:
+    """Extract text strings and numeric labels from preprocessed records."""
+
     return (
         [str(record["text"]) for record in records],
         [int(record["label"]) for record in records],
@@ -62,6 +78,8 @@ def print_split_summary(
     eval_data: ClassicalSplit,
     test_data: ClassicalSplit | None,
 ) -> None:
+    """Print split sizes in the plain style used by the runbooks."""
+
     print(
         f"Train split: {train_split}, size={len(train_data.records)} "
         f"(preprocessed full={train_data.preprocessed_size})"
@@ -84,6 +102,8 @@ def print_split_summary(
 
 
 def resolve_classical_split_names(dataset, args) -> tuple[str, str, str | None]:
+    """Pick train/eval/test split names for one TF-IDF run."""
+
     train_split = find_split_name(dataset, ["train"])
     eval_split = resolve_eval_split_name(dataset, test_split_name=args.test_split_name)
     test_split = find_split_name(dataset, [args.test_split_name])
@@ -110,6 +130,8 @@ def build_classical_data_splits(
     eval_split: str,
     test_split: str | None,
 ) -> tuple[ClassicalSplit, ClassicalSplit, ClassicalSplit | None]:
+    """Build train/eval/test `ClassicalSplit` objects from the dataset dict."""
+
     train_data = build_classical_split(
         dataset[train_split],
         data_fraction=args.data_fraction,

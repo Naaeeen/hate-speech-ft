@@ -8,20 +8,19 @@ backbone and LoRA adapters, reloads a fresh pretrained DistilBERT backbone,
 copies only the trained classification-head weights, then fully fine-tunes all
 parameters.
 
-Use the catalog entries:
+Edit this method's config and run one seed plus one hyperparameter set:
 
-```bash
-python src/run_experiment.py --experiment distilbert_efficient_head_smoke --dry_run
-python src/run_experiment.py --experiment distilbert_efficient_head_smoke
-python src/run_experiment.py --experiment distilbert_efficient_head_tuning --suggest_trials 2 --search_space efficient_head_ft
+```text
+src/methods/distilbert_efficient_head/manual_config.py
+python src/methods/distilbert_efficient_head/train.py
 ```
 
-The shared pipeline owns HateXplain preprocessing, strict-majority labels,
-validation-only HPO, final-only test evaluation, W&B arguments, output safety,
-and standard result artifacts.
+Compact Transformer helpers cover HateXplain preprocessing, strict-majority
+labels, optional test evaluation, W&B arguments, output safety, and standard
+result artifacts.
 
-W&B logging keeps the two stages separate. Stage Trainer auto-reporting is
-disabled to avoid repeated non-monotonic `train/global_step` curves. Use
-`stage1/train/*` with `stage1/global_step` for the LoRA-head phase and
-`stage2/train/*` with `stage2/global_step` for the full-finetuning phase. Final
-validation/test metrics still appear as normal `eval/*` and `test/*` metrics.
+Stage Trainer W&B auto-reporting is disabled so stage-local Trainer steps do
+not collide. The W&B run records the completed run's final validation/test
+metrics, runtime, model-selection fields, and one final `stage1/<metric>`
+payload. Stage-1 validation metrics also stay in the local JSON files for
+manual inspection and manual copying.

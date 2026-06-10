@@ -1,17 +1,10 @@
+"""Trainability helpers for frozen-backbone DistilBERT."""
+
 from __future__ import annotations
 
-import argparse
 from collections.abc import Iterable
 
-from src.utils.wandb_config import (
-    WandbSettings,
-    build_wandb_run_name,
-    parse_wandb_tags,
-)
-
-
-def is_classification_head_parameter(name: str) -> bool:
-    return any(part in {"pre_classifier", "classifier", "score"} for part in name.split("."))
+from src.methods.peft_utils import set_classification_head_trainability
 
 
 def _iter_backbone_modules(model) -> Iterable:
@@ -46,6 +39,8 @@ def keep_frozen_backbone_in_eval_mode(model) -> None:
     original_train = model.train
 
     def train_with_frozen_backbone(mode: bool = True):
+        """Call the original `train` and immediately restore backbone eval mode."""
+
         result = original_train(mode)
         _set_backbone_eval_mode(model)
         return result
@@ -56,28 +51,7 @@ def keep_frozen_backbone_in_eval_mode(model) -> None:
 
 
 def set_frozen_backbone_trainability(model) -> None:
-    for name, parameter in model.named_parameters():
-        parameter.requires_grad = is_classification_head_parameter(name)
+    """Freeze DistilBERT backbone weights and keep only the head trainable."""
+
+    set_classification_head_trainability(model)
     keep_frozen_backbone_in_eval_mode(model)
-
-
-def resolve_wandb_settings(args: argparse.Namespace) -> WandbSettings:
-    run_name = args.wandb_run_name or build_wandb_run_name(
-        method=args.method,
-        model_name=args.model_name,
-        seed=args.seed,
-        max_train_samples=args.max_train_samples,
-        num_train_epochs=args.num_train_epochs,
-        learning_rate=args.head_learning_rate,
-        trial_id=args.trial_id,
-    )
-    return WandbSettings(
-        enabled=args.use_wandb,
-        project=args.wandb_project,
-        entity=args.wandb_entity,
-        mode=args.wandb_mode,
-        run_name=run_name,
-        group=args.wandb_group,
-        tags=parse_wandb_tags(args.wandb_tags),
-        log_model=args.wandb_log_model,
-    )

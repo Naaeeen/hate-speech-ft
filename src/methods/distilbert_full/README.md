@@ -5,67 +5,54 @@ This package owns the ready DistilBERT full fine-tuning method.
 File responsibilities:
 
 ```text
-args.py     CLI arguments for this method.
-config.py   DistilBERT full-FT resolved config and setup-failure config.
-data.py     HateXplain split lookup, filtering, and tokenization glue.
-train.py    Full-FT one-stage orchestration only.
+manual_config.py editable one-run settings.
+config.py   DistilBERT full-FT resolved config.
+train.py    Thin full-FT entry point; it calls the shared one-stage runner.
 ```
 
-Shared method-agnostic behavior lives outside this package:
+Small cross-method utilities live outside this package:
 
 ```text
-src/methods/common.py     shared method contract and output/test policy
-src/methods/hf_common.py  Hugging Face Trainer utilities
-src/methods/hf_sequence_classification.py
-                          shared HF classifier setup/eval/save workflow
+src/results.py                  result JSON files
+src/utils/wandb_config.py       W&B settings and direct logging
+src/utils/run_metadata.py       GPU, memory, parameter, and git metadata
+src/methods/transformer_data.py shared HateXplain split/tokenization logic
+src/methods/transformer_*.py    compact setup/trainer/output helpers
 ```
 
-This keeps `train.py` readable and prevents future methods from copying a
-single large runner.
+This keeps `train.py` focused on one manual full-FT run without rebuilding a
+large experiment runner.
 
-The full-FT entrypoint now does only the method-specific sequence:
+The full-FT entrypoint now mostly wires method-specific pieces into
+`run_single_stage_transformer`:
 
-1. prepare the shared HF text-classification run context
-2. count all trainable parameters
-3. build the full-FT resolved config
-4. build one Trainer
-5. train, evaluate, save the selected model, and write standard artifacts
+1. read `manual_config.py`
+2. point the runner at this method's config builder
+3. use the default all-parameters-trainable DistilBERT setup
 
-The shared helper handles the repeated W&B, dataset, tokenizer/model setup,
-failure summary, runtime, prediction, and result-file logic.
+The compact helper files do the repeated work: dataset loading, tokenization,
+model setup, Trainer construction, W&B setup, runtime metrics, prediction files,
+and result JSON files.
 
-Run through the shared experiment catalog whenever possible:
+Edit this method's config and run one seed plus one hyperparameter set:
 
-```bash
-python src/run_experiment.py --experiment distilbert_full_smoke --dry_run
-python src/run_experiment.py --experiment distilbert_full_smoke
+```text
+src/methods/distilbert_full/manual_config.py
+python src/methods/distilbert_full/train.py
 ```
 
-Direct execution is still supported for debugging, but catalog runs are the
-protocol-equivalent path. If you run this script directly, pass the same
-checkpoint/model-selection flags that the catalog supplies.
+For a quick validation-only check, change `run_name`, point `output_dir` at a
+scratch folder, and set `run_test = False`.
 
-```bash
-python src/methods/distilbert_full/train.py \
-  --method full-ft \
-  --search_stage smoke \
-  --trial_id manual_smoke \
-  --load_best_model_at_end \
-  --early_stopping_patience 2 \
-  --metric_for_best_model eval_f1_macro
-```
-
-Final-stage runs must include `--run_test`; non-final stages are blocked from
-using it. The runner writes the standard local files (`resolved_config.json`,
-`metrics.json`, `runtime.json`, `result_summary.json`) and, for final-stage
-runs, per-sample prediction files. `eval_predictions.json` is written for final
-runs, and `test_predictions.json` is written when `--run_test` evaluates the
-test split. These prediction paths are also stored in `result_summary.json`.
+The runner writes the standard local files (`resolved_config.json`,
+`metrics.json`, `runtime.json`, `result_summary.json`). Runs with `run_test = True`
+also write per-sample prediction files: `eval_predictions.json` and
+`test_predictions.json`. These prediction paths are stored in
+`result_summary.json`.
 
 The runner records raw split sizes, post-policy split sizes, strict-majority
 drop counts, model-selection details, runtime, GPU type, and memory metrics in
 local JSON files and W&B when enabled.
 
 Do not add other methods to this package. New methods should use their own
-package under `src/methods/<method_name>/train.py` and then be registered in
-`configs/experiments.json`.
+package under `src/methods/<method_name>/train.py`.

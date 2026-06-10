@@ -1,6 +1,15 @@
+"""Custom PyTorch training loop for the BiLSTM baseline.
+
+BiLSTM does not use Hugging Face Trainer, so this file owns the whole loop:
+seed/device setup, DataLoaders, AdamW, linear warmup/decay, epoch validation,
+checkpoint selection by macro-F1, early stopping, optional prediction rows, and
+runtime metadata. Prediction rows are useful for final/test runs, but the
+entrypoint only writes prediction files when `run_test=True`. It mirrors the
+Transformer output contract so the manual aggregation step stays the same.
+"""
+
 from __future__ import annotations
 
-import argparse
 import math
 import random
 import shutil
@@ -13,11 +22,11 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-from src.experiments.results import write_json
+from src.results import write_json
 from src.methods.bilstm.data import BiLSTMSplit
 from src.methods.bilstm.dataset import HateXplainBiLSTMDataset
-from src.methods.bilstm.history import append_epoch_history
 from src.methods.bilstm.model import BiLSTMClassifier
+from src.methods.classification_metrics import build_classification_metrics
 
 if TYPE_CHECKING:
     from src.methods.bilstm.tokenizer import StandardBiLSTMTokenizer
@@ -27,6 +36,8 @@ LABEL_ID_TO_NAME = {0: "hatespeech", 1: "normal", 2: "offensive"}
 
 
 def set_seed(seed: int) -> None:
+    """Seed Python, numpy, and torch for one manual run."""
+
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -35,6 +46,8 @@ def set_seed(seed: int) -> None:
 
 
 def resolve_device(requested_device: str) -> torch.device:
+    """Resolve `auto` to CUDA when available, otherwise CPU."""
+
     if requested_device == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device(requested_device)
@@ -44,23 +57,31 @@ def resolve_device(requested_device: str) -> torch.device:
 
 
 def reset_peak_memory_stats(device: torch.device) -> None:
+    """Reset CUDA peak-memory tracking before training starts."""
+
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats()
 
 
 def get_peak_memory_mb(device: torch.device) -> float | None:
+    """Return peak allocated CUDA memory in MB, or `None` on CPU."""
+
     if device.type != "cuda":
         return None
     return torch.cuda.max_memory_allocated() / (1024 * 1024)
 
 
 def get_peak_memory_reserved_mb(device: torch.device) -> float | None:
+    """Return peak reserved CUDA memory in MB, or `None` on CPU."""
+
     if device.type != "cuda":
         return None
     return torch.cuda.max_memory_reserved() / (1024 * 1024)
 
 
 def count_parameters(model: torch.nn.Module) -> tuple[int, int]:
+    """Return `(trainable_params, total_params)` for result tables."""
+
     total = sum(parameter.numel() for parameter in model.parameters())
     trainable = sum(
         parameter.numel() for parameter in model.parameters() if parameter.requires_grad
@@ -74,6 +95,8 @@ def resolve_class_weights(
     class_weighting: str,
     num_labels: int,
 ) -> list[float] | None:
+    """Compute optional balanced class weights for the loss function."""
+
     if class_weighting == "none":
         return None
     if class_weighting != "balanced":
@@ -105,6 +128,8 @@ def make_dataloader(
     shuffle: bool,
     seed: int,
 ) -> DataLoader:
+    """Build a deterministic DataLoader for one BiLSTM split."""
+
     generator = torch.Generator()
     generator.manual_seed(seed)
     dataset = HateXplainBiLSTMDataset(records, tokenizer)
@@ -117,11 +142,13 @@ def make_dataloader(
 
 
 def build_model(
-    args: argparse.Namespace,
+    args: Any,
     tokenizer: StandardBiLSTMTokenizer,
     *,
     num_labels: int = 3,
 ) -> BiLSTMClassifier:
+    """Create the from-scratch BiLSTM model from manual config values."""
+
     return BiLSTMClassifier(
         vocab_size=tokenizer.vocab_size,
         embedding_size=args.embedding_size,
@@ -139,91 +166,19 @@ def build_scheduler(
     total_steps: int,
     warmup_ratio: float,
 ) -> torch.optim.lr_scheduler.LambdaLR:
+    """Build the simple linear warmup/decay scheduler used in old runs."""
+
     warmup_steps = int(total_steps * warmup_ratio)
 
     def lr_lambda(current_step: int) -> float:
+        """Scale LR for this optimizer step."""
+
         if warmup_steps > 0 and current_step < warmup_steps:
             return float(current_step + 1) / float(max(1, warmup_steps))
         remaining_steps = max(1, total_steps - warmup_steps)
         return max(0.0, float(total_steps - current_step) / float(remaining_steps))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
-
-def _safe_divide(numerator: int | float, denominator: int | float) -> float:
-    return float(numerator / denominator) if denominator else 0.0
-
-
-def _class_counts(
-    y_true: Sequence[int],
-    y_pred: Sequence[int],
-    label_id: int,
-) -> tuple[int, int, int, int]:
-    true_positive = sum(
-        1
-        for gold, predicted in zip(y_true, y_pred)
-        if gold == label_id and predicted == label_id
-    )
-    false_positive = sum(
-        1
-        for gold, predicted in zip(y_true, y_pred)
-        if gold != label_id and predicted == label_id
-    )
-    false_negative = sum(
-        1
-        for gold, predicted in zip(y_true, y_pred)
-        if gold == label_id and predicted != label_id
-    )
-    support = sum(1 for gold in y_true if gold == label_id)
-    return true_positive, false_positive, false_negative, support
-
-
-def build_classification_metrics(
-    y_true: Sequence[int],
-    y_pred: Sequence[int],
-    *,
-    prefix: str,
-    label_id_to_name: Mapping[int, str] = LABEL_ID_TO_NAME,
-) -> dict[str, float | int]:
-    if len(y_true) != len(y_pred):
-        raise ValueError(
-            "Metric inputs must have the same length: "
-            f"y_true={len(y_true)}, y_pred={len(y_pred)}."
-        )
-    if not y_true:
-        raise ValueError(f"Cannot compute {prefix} metrics for an empty split.")
-
-    label_ids = sorted(label_id_to_name)
-    correct = sum(1 for gold, predicted in zip(y_true, y_pred) if gold == predicted)
-    metrics: dict[str, float | int] = {
-        f"{prefix}_accuracy": _safe_divide(correct, len(y_true))
-    }
-    per_class_precision: list[float] = []
-    per_class_recall: list[float] = []
-    per_class_f1: list[float] = []
-
-    for label_id in label_ids:
-        true_positive, false_positive, false_negative, support = _class_counts(
-            y_true,
-            y_pred,
-            label_id,
-        )
-        precision = _safe_divide(true_positive, true_positive + false_positive)
-        recall = _safe_divide(true_positive, true_positive + false_negative)
-        f1 = _safe_divide(2 * precision * recall, precision + recall)
-        label_name = label_id_to_name[label_id]
-        metrics[f"{prefix}_precision_{label_name}"] = precision
-        metrics[f"{prefix}_recall_{label_name}"] = recall
-        metrics[f"{prefix}_f1_{label_name}"] = f1
-        metrics[f"{prefix}_support_{label_name}"] = support
-        per_class_precision.append(precision)
-        per_class_recall.append(recall)
-        per_class_f1.append(f1)
-
-    metrics[f"{prefix}_precision_macro"] = sum(per_class_precision) / len(label_ids)
-    metrics[f"{prefix}_recall_macro"] = sum(per_class_recall) / len(label_ids)
-    metrics[f"{prefix}_f1_macro"] = sum(per_class_f1) / len(label_ids)
-    return metrics
 
 
 @torch.no_grad()
@@ -235,6 +190,8 @@ def evaluate_model(
     split_name: str,
     source_records: Sequence[Mapping[str, Any]] | None = None,
 ) -> tuple[dict[str, float | int], list[dict[str, Any]]]:
+    """Evaluate a split and optionally build per-example prediction rows."""
+
     model.eval()
     all_predictions: list[int] = []
     all_labels: list[int] = []
@@ -272,6 +229,8 @@ def build_prediction_rows(
     predicted_labels: Sequence[int],
     probabilities: Sequence[Sequence[float]],
 ) -> list[dict[str, Any]]:
+    """Create JSON-friendly prediction rows aligned to source records."""
+
     if not records:
         return []
     if len(records) != len(predicted_labels):
@@ -308,6 +267,8 @@ def build_prediction_rows(
 
 
 def save_prediction_file(path: str | Path, predictions: list[dict[str, Any]]) -> Path:
+    """Save BiLSTM prediction rows using the shared JSON writer."""
+
     return write_json(path, {"count": len(predictions), "predictions": predictions})
 
 
@@ -321,6 +282,8 @@ def save_checkpoint(
     scheduler: torch.optim.lr_scheduler.LambdaLR,
     metrics: dict[str, Any],
 ) -> Path:
+    """Save one epoch checkpoint with model/optimizer/scheduler state."""
+
     checkpoint_dir = Path(output_dir) / f"checkpoint-epoch{epoch}"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -344,6 +307,8 @@ def cleanup_checkpoints(
     save_total_limit: int,
     best_checkpoint: str | Path | None,
 ) -> None:
+    """Keep only the best/recent checkpoints allowed by `save_total_limit`."""
+
     if save_total_limit <= 0:
         return
 
@@ -375,6 +340,8 @@ def load_checkpoint_model_state(
     *,
     device: torch.device,
 ) -> None:
+    """Load the selected checkpoint back into the current model."""
+
     checkpoint = torch.load(checkpoint_dir / "model.pt", map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -387,6 +354,8 @@ def save_final_model(
     config: dict[str, Any],
     no_save_final_model: bool,
 ) -> Path | None:
+    """Save the final BiLSTM model and tokenizer files for this run."""
+
     if no_save_final_model:
         return None
     output_path = Path(output_dir)
@@ -452,7 +421,7 @@ def _train_one_epoch(
 
 def run_training(
     *,
-    args: argparse.Namespace,
+    args: Any,
     train_data: BiLSTMSplit,
     eval_data: BiLSTMSplit,
     test_data: BiLSTMSplit | None,
@@ -460,6 +429,8 @@ def run_training(
     device: torch.device,
     class_weights: list[float] | None,
 ) -> dict[str, Any]:
+    """Train one BiLSTM run and return everything the caller needs to save."""
+
     if not train_data.records:
         raise ValueError("Training split is empty after preprocessing/subsetting.")
     if not eval_data.records:
@@ -505,10 +476,8 @@ def run_training(
     best_epoch: int | None = None
     best_step: int | None = None
     best_checkpoint: Path | None = None
-    best_eval_metrics: dict[str, Any] = {}
     epochs_without_improvement = 0
     global_step = 0
-    history: list[dict[str, Any]] = []
 
     reset_peak_memory_stats(device)
     if device.type == "cuda":
@@ -534,13 +503,6 @@ def run_training(
             device=device,
             split_name="eval",
         )
-        eval_metrics = append_epoch_history(
-            history,
-            eval_metrics=eval_metrics,
-            train_loss=train_loss,
-            epoch=epoch,
-            global_step=global_step,
-        )
 
         print(
             f"epoch={epoch} train_loss={train_loss:.4f} "
@@ -560,18 +522,21 @@ def run_training(
             )
 
         current_metric = _metric_value(eval_metrics, args.metric_for_best_model)
+        # Checkpoint selection is intentionally simple: validation macro-F1 must
+        # improve by more than the threshold, otherwise patience starts ticking.
         improved = current_metric > best_metric + args.early_stopping_threshold
         if improved:
             best_metric = current_metric
             best_epoch = epoch
             best_step = global_step
-            best_eval_metrics = dict(eval_metrics)
             best_checkpoint = checkpoint_dir
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
 
         if checkpoint_dir is not None:
+            # Keep the best checkpoint plus the newest allowed checkpoints, so
+            # Colab output folders do not grow forever during manual runs.
             cleanup_checkpoints(
                 args.output_dir,
                 save_total_limit=args.save_total_limit,
@@ -600,7 +565,9 @@ def run_training(
         eval_loader,
         device=device,
         split_name="eval",
-        source_records=eval_data.records if args.search_stage == "final" else None,
+        # We only attach source text/ids to eval predictions when the run is in
+        # final/test mode. Validation-only HPO reruns can stay lighter.
+        source_records=eval_data.records if args.run_test else None,
     )
 
     test_metrics = None
@@ -645,5 +612,4 @@ def run_training(
             "trainable_params": trainable_params,
             "total_params": total_params,
         },
-        "history": history,
     }

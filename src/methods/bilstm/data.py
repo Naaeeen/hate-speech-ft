@@ -1,3 +1,10 @@
+"""BiLSTM data loading and split accounting.
+
+BiLSTM uses the same HateXplain strict-majority text policy as the other
+methods, then keeps plain text records for the fixed DistilBERT tokenizer
+wrapper used by the PyTorch BiLSTM.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,6 +16,8 @@ from src.methods.transformer_data import find_split_name, maybe_select_subset, r
 
 @dataclass(frozen=True)
 class BiLSTMSplit:
+    """One BiLSTM split after shared HateXplain preprocessing."""
+
     records: list[dict[str, Any]]
     raw_size: int | None
     preprocessed_size: int
@@ -16,6 +25,8 @@ class BiLSTMSplit:
 
 
 def load_dataset_library():
+    """Import `datasets.load_dataset` lazily with a Colab-friendly error."""
+
     try:
         from datasets import load_dataset
     except ImportError as exc:
@@ -33,6 +44,8 @@ def _build_split(
     fraction_seed: int = 42,
     max_samples: int | None = None,
 ) -> BiLSTMSplit:
+    """Preprocess one raw split and optionally sample it for quick checks."""
+
     raw_size = len(examples) if hasattr(examples, "__len__") else None
     records = preprocess_hatexplain_split(examples)
     preprocessed_size = len(records)
@@ -51,6 +64,8 @@ def _build_split(
 
 
 def resolve_bilstm_split_names(dataset, args) -> tuple[str, str, str | None]:
+    """Resolve official HateXplain split names for one BiLSTM run."""
+
     train_split = find_split_name(dataset, ["train"])
     if train_split is None:
         raise ValueError(f"No train split found. Available splits: {list(dataset.keys())}")
@@ -69,6 +84,8 @@ def resolve_bilstm_split_names(dataset, args) -> tuple[str, str, str | None]:
 
 
 def build_bilstm_data_splits(dataset, args, *, train_split: str, eval_split: str, test_split: str | None):
+    """Create BiLSTM train/eval/test splits with shared label/text policy."""
+
     train_data = _build_split(
         dataset[train_split],
         data_fraction=args.data_fraction,
@@ -93,6 +110,8 @@ def print_split_summary(
     eval_data: BiLSTMSplit,
     test_data: BiLSTMSplit | None,
 ) -> None:
+    """Print split sizes and strict-majority drop counts for the run log."""
+
     print(
         f"Train split: {train_split}, size={len(train_data.records)} "
         f"(preprocessed full={train_data.preprocessed_size})"

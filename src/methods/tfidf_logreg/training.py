@@ -1,33 +1,35 @@
+"""Training helpers for the TF-IDF + Logistic Regression baseline.
+
+The model is small enough that the "training loop" is one sklearn `.fit()`.
+These helpers still produce stats and prediction files shaped like the neural
+methods, so later manual tables do not need a totally separate TF-IDF format.
+"""
+
 from __future__ import annotations
 
-import argparse
-import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from src.experiments.results import write_json
-from src.methods.common import validate_sample_selection_args
+from src.methods.classification_metrics import build_classification_metrics
+from src.results import write_json
+from src.results import validate_sample_selection_args
 
 
-def parse_ngram_range(value: str | Sequence[int]) -> tuple[int, int]:
+def parse_ngram_range(value: Sequence[int]) -> tuple[int, int]:
+    """Validate the editable `ngram_range` list from manual config."""
+
     if isinstance(value, str):
-        text = value.strip()
-        if text.startswith("["):
-            parsed = json.loads(text)
-        else:
-            parsed = [item.strip() for item in text.split(",")]
-    else:
-        parsed = list(value)
-
+        raise TypeError("ngram_range must be a Python list such as [1, 2].")
+    parsed = list(value)
     if len(parsed) != 2:
         raise ValueError(
-            "ngram_range must contain exactly two integers, e.g. '1,2' or '[1,2]'."
+            "ngram_range must contain exactly two integers, e.g. [1, 2]."
         )
     try:
         lower, upper = (int(parsed[0]), int(parsed[1]))
     except (TypeError, ValueError) as exc:
         raise ValueError(
-            "ngram_range must contain integer values, e.g. '1,2' or '[1,2]'."
+            "ngram_range must contain integer values, e.g. [1, 2]."
         ) from exc
     if lower <= 0 or upper < lower:
         raise ValueError(
@@ -38,6 +40,8 @@ def parse_ngram_range(value: str | Sequence[int]) -> tuple[int, int]:
 
 
 def load_libraries():
+    """Import sklearn/datasets/joblib lazily with a friendly Colab error."""
+
     try:
         from datasets import load_dataset
         from joblib import dump
@@ -52,37 +56,31 @@ def load_libraries():
     return load_dataset, dump, TfidfVectorizer, LogisticRegression, Pipeline
 
 
-def validate_classical_args(args: argparse.Namespace, ngram_range: tuple[int, int]) -> None:
+def validate_classical_args(args: Any, ngram_range: tuple[int, int]) -> None:
+    """Validate TF-IDF/logreg manual settings before fitting sklearn."""
+
     validate_sample_selection_args(args)
     if args.min_df < 1:
-        raise ValueError("--min_df must be >= 1.")
+        raise ValueError("min_df must be >= 1.")
     if args.max_df <= 0:
-        raise ValueError("--max_df must be > 0.")
+        raise ValueError("max_df must be > 0.")
     if args.max_features is not None and args.max_features < 1:
-        raise ValueError("--max_features must be >= 1.")
+        raise ValueError("max_features must be >= 1.")
     if args.C <= 0:
-        raise ValueError("--C must be > 0.")
-    if args.mixed_precision != "none":
-        raise ValueError("TF-IDF is CPU/classical and does not support mixed precision.")
-    if args.gradient_checkpointing:
-        raise ValueError("TF-IDF is CPU/classical and does not support gradient checkpointing.")
-    if args.wandb_log_model != "false":
-        raise ValueError(
-            "TF-IDF currently records local model artifacts only. "
-            "Use --wandb_log_model false until W&B artifact upload is implemented "
-            "for this method."
-        )
+        raise ValueError("C must be > 0.")
     if ngram_range[0] > ngram_range[1]:
-        raise ValueError("Invalid --ngram_range.")
+        raise ValueError("Invalid ngram_range.")
 
 def build_pipeline(
     *,
     TfidfVectorizer,
     LogisticRegression,
     Pipeline,
-    args: argparse.Namespace,
+    args: Any,
     ngram_range: tuple[int, int],
 ):
+    """Build the sklearn TF-IDF -> LogisticRegression pipeline."""
+
     class_weight = "balanced" if args.class_weighting == "balanced" else None
     return Pipeline(
         [
@@ -100,6 +98,8 @@ def build_pipeline(
                 "clf",
                 LogisticRegression(
                     C=args.C,
+                    # liblinear is deterministic and handles this small
+                    # one-vs-rest style baseline well enough for our comparison.
                     solver="liblinear",
                     random_state=args.seed,
                     max_iter=1000,
@@ -111,6 +111,8 @@ def build_pipeline(
 
 
 def get_model_stats(pipeline) -> tuple[int, int, int]:
+    """Return linear-model parameter counts and TF-IDF vocabulary size."""
+
     classifier = pipeline.named_steps["clf"]
     vectorizer = pipeline.named_steps["tfidf"]
     coef_size = getattr(classifier.coef_, "size", None)
@@ -122,76 +124,6 @@ def get_model_stats(pipeline) -> tuple[int, int, int]:
     trainable_params = int(coef_size + intercept_size)
     vocab_size = int(len(vectorizer.vocabulary_))
     return trainable_params, trainable_params, vocab_size
-
-
-def _class_counts(
-    y_true: Sequence[int],
-    y_pred: Sequence[int],
-    label_id: int,
-) -> tuple[int, int, int, int]:
-    true_positive = sum(
-        1 for gold, predicted in zip(y_true, y_pred) if gold == label_id and predicted == label_id
-    )
-    false_positive = sum(
-        1 for gold, predicted in zip(y_true, y_pred) if gold != label_id and predicted == label_id
-    )
-    false_negative = sum(
-        1 for gold, predicted in zip(y_true, y_pred) if gold == label_id and predicted != label_id
-    )
-    support = sum(1 for gold in y_true if gold == label_id)
-    return true_positive, false_positive, false_negative, support
-
-
-def _safe_divide(numerator: int | float, denominator: int | float) -> float:
-    return float(numerator / denominator) if denominator else 0.0
-
-
-def build_classification_metrics(
-    y_true: Sequence[int],
-    y_pred: Sequence[int],
-    *,
-    prefix: str,
-    label_id_to_name: Mapping[int, str],
-) -> dict[str, float | int]:
-    if len(y_true) != len(y_pred):
-        raise ValueError(
-            "Metric inputs must have the same length: "
-            f"y_true={len(y_true)}, y_pred={len(y_pred)}."
-        )
-    if not y_true:
-        raise ValueError("Cannot compute metrics for an empty split.")
-
-    label_ids = sorted(label_id_to_name)
-    correct = sum(1 for gold, predicted in zip(y_true, y_pred) if gold == predicted)
-    per_class_precision: list[float] = []
-    per_class_recall: list[float] = []
-    per_class_f1: list[float] = []
-    metrics: dict[str, float | int] = {
-        f"{prefix}_accuracy": _safe_divide(correct, len(y_true)),
-    }
-
-    for label_id in label_ids:
-        true_positive, false_positive, false_negative, support = _class_counts(
-            y_true,
-            y_pred,
-            label_id,
-        )
-        precision = _safe_divide(true_positive, true_positive + false_positive)
-        recall = _safe_divide(true_positive, true_positive + false_negative)
-        f1 = _safe_divide(2 * precision * recall, precision + recall)
-        label_name = label_id_to_name[label_id]
-        metrics[f"{prefix}_precision_{label_name}"] = precision
-        metrics[f"{prefix}_recall_{label_name}"] = recall
-        metrics[f"{prefix}_f1_{label_name}"] = f1
-        metrics[f"{prefix}_support_{label_name}"] = support
-        per_class_precision.append(precision)
-        per_class_recall.append(recall)
-        per_class_f1.append(f1)
-
-    metrics[f"{prefix}_precision_macro"] = sum(per_class_precision) / len(label_ids)
-    metrics[f"{prefix}_recall_macro"] = sum(per_class_recall) / len(label_ids)
-    metrics[f"{prefix}_f1_macro"] = sum(per_class_f1) / len(label_ids)
-    return metrics
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -210,6 +142,8 @@ def save_classical_prediction_file(
     probabilities: Any,
     id2label: Mapping[int, str],
 ) -> Path:
+    """Save prediction rows with probabilities, matching the neural JSON shape."""
+
     probability_rows = _as_list(probabilities)
     if len(records) != len(predicted_labels):
         raise ValueError(

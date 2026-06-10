@@ -50,13 +50,10 @@ class TextFieldPolicyTests(unittest.TestCase):
 
     def test_usage_text_explains_dataset_example_transformers_and_baselines(self):
         self.assertIn("example", TEXT_FIELD_USAGE)
-        self.assertIn("load_dataset", TEXT_FIELD_USAGE)
-        self.assertIn("raw HateXplain JSON", TEXT_FIELD_USAGE)
-        self.assertIn("list of annotator dictionaries", TEXT_FIELD_USAGE)
-        self.assertIn("ClassLabel", TEXT_FIELD_USAGE)
         self.assertIn("Transformer", TEXT_FIELD_USAGE)
         self.assertIn("TF-IDF", TEXT_FIELD_USAGE)
-        self.assertIn("Bi-LSTM", TEXT_FIELD_USAGE)
+        self.assertIn("BiLSTM", TEXT_FIELD_USAGE)
+        self.assertIn("Do not add punctuation removal", TEXT_FIELD_USAGE)
 
 
 if __name__ == "__main__":

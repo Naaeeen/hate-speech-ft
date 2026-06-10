@@ -1,3 +1,5 @@
+"""Console reporting and prediction-file glue for TF-IDF runs."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +19,9 @@ def write_final_prediction_files(
     test_data: ClassicalSplit | None,
     id2label: dict[int, str],
 ) -> dict[str, Path]:
-    if args.search_stage != "final":
+    """Write eval/test prediction files for final TF-IDF runs."""
+
+    if not args.run_test:
         return {}
 
     prediction_paths = {
@@ -29,17 +33,16 @@ def write_final_prediction_files(
             id2label=id2label,
         )
     }
-    if args.run_test:
-        if test_data is None:
-            raise ValueError("Cannot save final test predictions before loading test data.")
-        x_test, _y_test = records_to_xy(test_data.records)
-        prediction_paths["test"] = save_classical_prediction_file(
-            output_dir / "test_predictions.json",
-            records=test_data.records,
-            predicted_labels=pipeline.predict(x_test),
-            probabilities=pipeline.predict_proba(x_test),
-            id2label=id2label,
-        )
+    if test_data is None:
+        raise ValueError("Cannot save final test predictions before loading test data.")
+    x_test, _y_test = records_to_xy(test_data.records)
+    prediction_paths["test"] = save_classical_prediction_file(
+        output_dir / "test_predictions.json",
+        records=test_data.records,
+        predicted_labels=pipeline.predict(x_test),
+        probabilities=pipeline.predict_proba(x_test),
+        id2label=id2label,
+    )
     return prediction_paths
 
 
@@ -49,9 +52,12 @@ def print_result_report(
     eval_metrics: dict[str, Any],
     test_metrics: dict[str, Any] | None,
     runtime_metrics: dict[str, Any],
+    model_selection: dict[str, Any],
     result_paths: dict[str, Path],
     prediction_paths: dict[str, Path],
 ) -> None:
+    """Print the end-of-run facts a teammate should copy/check manually."""
+
     print("\nFinal validation metrics:")
     for key, value in eval_metrics.items():
         print(f"{key}: {value}")
@@ -61,6 +67,9 @@ def print_result_report(
             print(f"{key}: {value}")
     print("\nRuntime metrics:")
     for key, value in runtime_metrics.items():
+        print(f"{key}: {value}")
+    print("\nModel selection:")
+    for key, value in model_selection.items():
         print(f"{key}: {value}")
     print("\nResult files:")
     for key, value in result_paths.items():
