@@ -100,6 +100,24 @@ class HpoRandomSearchTests(unittest.TestCase):
             self.assertEqual(config["lora_alpha"], config["lora_r"])
             self.assertNotIn("output_dir", config)
 
+    def test_bilstm_report_includes_fixed_word_vocab_fields(self):
+        report = build_hpo_trial_report(
+            methods=["bilstm"],
+            seed=42,
+            trial_caps={"bilstm": 1},
+        )
+
+        trial = report["bilstm"][0]
+        self.assertEqual(trial["manual_config_updates"].keys(), SAMPLED_KEYS["bilstm"])
+        self.assertEqual(
+            trial["historical_sampled_hparams_json"]["tokenizer_min_freq"],
+            2,
+        )
+        self.assertEqual(
+            trial["historical_sampled_hparams_json"]["max_vocab_size"],
+            30000,
+        )
+
     def test_sampling_order_matches_historical_hpo_rows(self):
         trials = sample_hpo_trials(seed=42)
 

@@ -135,6 +135,8 @@ HISTORICAL_HPO_DEFAULTS = {
         "save_final_model": True,
         "mixed_precision": "none",
         "gradient_checkpointing": False,
+        "tokenizer_min_freq": 2,
+        "max_vocab_size": 30000,
         "num_layers": 1,
         "batch_size": 64,
         "eval_batch_size": 128,

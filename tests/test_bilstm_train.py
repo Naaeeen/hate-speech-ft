@@ -45,9 +45,12 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 vocab_size = 100
 
                 @classmethod
-                def create(cls, *, max_length):
+                def create(cls, *, train_records, max_length, min_freq, max_vocab_size):
                     instance = cls()
+                    instance.train_records = train_records
                     instance.max_length = max_length
+                    instance.min_freq = min_freq
+                    instance.max_vocab_size = max_vocab_size
                     created_tokenizers.append(instance)
                     return instance
 
@@ -55,6 +58,8 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                     return {
                         "tokenizer_name": "fake-tokenizer",
                         "max_length": self.max_length,
+                        "min_freq": self.min_freq,
+                        "max_vocab_size": self.max_vocab_size,
                         "vocab_size": self.vocab_size,
                     }
 
@@ -118,12 +123,14 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 preprocessed_size=1,
                 dropped_no_majority_count=0,
             )
+            fake_wandb_run = object()
             run_config = {
                 **BILSTM_CONFIG,
                 "run_name": "bilstm_final_fake",
                 "output_dir": str(output_dir),
                 "run_test": True,
-                "use_wandb": False,
+                "use_wandb": True,
+                "wandb_mode": "disabled",
             }
 
             with (
@@ -152,11 +159,21 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                     return_value=(train_split, eval_split, test_split),
                 ),
                 patch.object(bilstm_train, "print_split_summary"),
+                patch.object(
+                    bilstm_train,
+                    "init_wandb_run",
+                    return_value=fake_wandb_run,
+                ) as init_wandb_run,
+                patch.object(bilstm_train, "log_wandb") as log_wandb,
+                patch.object(bilstm_train, "finish_wandb_run") as finish_wandb_run,
             ):
                 bilstm_train.main()
 
             self.assertEqual(len(created_tokenizers), 1)
+            self.assertIs(created_tokenizers[0].train_records, train_split.records)
             self.assertEqual(created_tokenizers[0].max_length, 128)
+            self.assertEqual(created_tokenizers[0].min_freq, 2)
+            self.assertEqual(created_tokenizers[0].max_vocab_size, 30000)
             self.assertTrue((output_dir / "model.pt").is_file())
             self.assertTrue((output_dir / "eval_predictions.json").is_file())
             self.assertTrue((output_dir / "test_predictions.json").is_file())
@@ -177,6 +194,51 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 summary["config"]["tokenizer_policy"]["tokenizer_name"],
                 "fake-tokenizer",
             )
+            self.assertEqual(
+                summary["config"]["hyperparameters"]["tokenizer_min_freq"],
+                2,
+            )
+            self.assertEqual(
+                summary["config"]["hyperparameters"]["max_vocab_size"],
+                30000,
+            )
+            wandb_config = init_wandb_run.call_args.kwargs["config"]
+            self.assertEqual(wandb_config["tokenizer_name"], "bilstm-word")
+            self.assertEqual(
+                wandb_config["tokenizer_policy"]["tokenizer_name"],
+                "fake-tokenizer",
+            )
+            self.assertEqual(wandb_config["vocab_size"], 100)
+            self.assertEqual(
+                wandb_config["hyperparameters"]["tokenizer_min_freq"],
+                2,
+            )
+            self.assertEqual(
+                wandb_config["hyperparameters"]["max_vocab_size"],
+                30000,
+            )
+            log_wandb.assert_called_once()
+            self.assertIs(log_wandb.call_args.args[0], fake_wandb_run)
+            payloads = log_wandb.call_args.args[1:]
+            self.assertIn({"eval_f1_macro": 0.5, "eval_accuracy": 0.5}, payloads)
+            self.assertIn({"test_f1_macro": 0.4, "test_accuracy": 0.4}, payloads)
+            runtime_payload = payloads[2]
+            self.assertEqual(runtime_payload["training_time_sec"], 1.25)
+            self.assertEqual(runtime_payload["device"], "cpu")
+            model_selection_payload = payloads[3]
+            self.assertEqual(
+                model_selection_payload["model_selection"]["best_metric"],
+                0.5,
+            )
+            self.assertEqual(
+                model_selection_payload["model_selection/best_metric"],
+                0.5,
+            )
+            self.assertEqual(
+                model_selection_payload["model_selection/best_epoch"],
+                1,
+            )
+            finish_wandb_run.assert_called_once_with(fake_wandb_run)
 
 if __name__ == "__main__":
     unittest.main()

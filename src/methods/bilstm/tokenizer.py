@@ -1,108 +1,200 @@
-"""Fixed DistilBERT tokenizer wrapper for the BiLSTM baseline.
-
-The BiLSTM model itself is trained from scratch, but the token ids come from
-`distilbert-base-uncased` so we do not maintain a separate train-split
-vocabulary. The wrapper pads/truncates to `max_length` and returns the
-non-padding tokenized length, including DistilBERT special tokens, so the LSTM
-can ignore padding.
-"""
+"""Train-split word tokenizer for the BiLSTM baseline."""
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from transformers import PreTrainedTokenizerBase
+from pathlib import Path
+from typing import Any
 
 
-TOKENIZER_NAME = "distilbert-base-uncased"
+TOKENIZER_NAME = "bilstm-word"
+PAD_TOKEN = "<pad>"
+UNK_TOKEN = "<unk>"
+DEFAULT_MIN_FREQ = 2
+DEFAULT_MAX_VOCAB_SIZE = 30000
+DEFAULT_LOWERCASE = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class StandardBiLSTMTokenizer:
-    """Hard-coded DistilBERT tokenizer for the Bi-LSTM baseline."""
+    """Word vocabulary built from the BiLSTM training split only."""
 
     max_length: int
-    hf_tokenizer: "PreTrainedTokenizerBase | Any"
+    vocab: dict[str, int]
+    min_freq: int = DEFAULT_MIN_FREQ
+    max_vocab_size: int = DEFAULT_MAX_VOCAB_SIZE
+    lowercase: bool = DEFAULT_LOWERCASE
 
     @classmethod
-    def create(cls, *, max_length: int) -> "StandardBiLSTMTokenizer":
-        """Load the fixed DistilBERT tokenizer used by the BiLSTM baseline."""
+    def create(
+        cls,
+        *,
+        train_records: Sequence[Mapping[str, Any]],
+        max_length: int,
+        min_freq: int = DEFAULT_MIN_FREQ,
+        max_vocab_size: int = DEFAULT_MAX_VOCAB_SIZE,
+        lowercase: bool = DEFAULT_LOWERCASE,
+    ) -> "StandardBiLSTMTokenizer":
+        if max_length < 1:
+            raise ValueError("max_length must be >= 1.")
+        if min_freq < 1:
+            raise ValueError("min_freq must be >= 1.")
+        if max_vocab_size < 2:
+            raise ValueError("max_vocab_size must be >= 2 for pad and unk tokens.")
 
-        from transformers import AutoTokenizer
+        counter: Counter[str] = Counter()
+        for record in train_records:
+            counter.update(cls.tokenize(record.get("text", ""), lowercase=lowercase))
 
-        hf_tokenizer = AutoTokenizer.from_pretrained(
-            TOKENIZER_NAME,
-            use_fast=True,
+        vocab = {PAD_TOKEN: 0, UNK_TOKEN: 1}
+        available_slots = max_vocab_size - len(vocab)
+        candidates = (
+            token
+            for token, frequency in sorted(
+                counter.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+            if frequency >= min_freq and token not in vocab
         )
+        for token in candidates:
+            if len(vocab) - 2 >= available_slots:
+                break
+            vocab[token] = len(vocab)
 
         return cls(
             max_length=max_length,
-            hf_tokenizer=hf_tokenizer,
+            vocab=vocab,
+            min_freq=min_freq,
+            max_vocab_size=max_vocab_size,
+            lowercase=lowercase,
         )
+
+    @classmethod
+    def from_pretrained(cls, input_dir: str | Path) -> "StandardBiLSTMTokenizer":
+        input_path = Path(input_dir)
+        with (input_path / "vocab.json").open("r", encoding="utf-8") as handle:
+            raw_vocab = json.load(handle)
+        with (input_path / "tokenizer_config.json").open("r", encoding="utf-8") as handle:
+            config = json.load(handle)
+
+        tokenizer = cls(
+            max_length=int(config["max_length"]),
+            vocab={str(token): int(index) for token, index in raw_vocab.items()},
+            min_freq=int(config.get("min_freq", DEFAULT_MIN_FREQ)),
+            max_vocab_size=int(config.get("max_vocab_size", len(raw_vocab))),
+            lowercase=bool(config.get("lowercase", DEFAULT_LOWERCASE)),
+        )
+        tokenizer._validate_loaded_config(config)
+        return tokenizer
+
+    @staticmethod
+    def tokenize(text: Any, *, lowercase: bool = DEFAULT_LOWERCASE) -> list[str]:
+        value = str(text)
+        if lowercase:
+            value = value.lower()
+        return value.split()
 
     @property
     def pad_id(self) -> int:
-        """Return the tokenizer padding id used by the embedding layer."""
-
-        pad_token_id = self.hf_tokenizer.pad_token_id
-        if pad_token_id is None:
-            raise ValueError("distilbert-base-uncased does not define pad_token_id.")
-        return int(pad_token_id)
+        return self.vocab[PAD_TOKEN]
 
     @property
     def unk_id(self) -> int:
-        """Return the tokenizer unknown-token id for metadata/debugging."""
-
-        unk_token_id = self.hf_tokenizer.unk_token_id
-        if unk_token_id is None:
-            raise ValueError("distilbert-base-uncased does not define unk_token_id.")
-        return int(unk_token_id)
+        return self.vocab[UNK_TOKEN]
 
     @property
     def vocab_size(self) -> int:
-        """Return the fixed DistilBERT vocabulary size."""
+        return len(self.vocab)
 
-        return len(self.hf_tokenizer)
+    @property
+    def vocab_checksum(self) -> str:
+        return _vocab_checksum(self.vocab)
 
     def encode(self, text: str) -> dict[str, list[int] | int]:
-        """Encode text to padded ids plus non-padding tokenized length."""
+        tokens = self.tokenize(text, lowercase=self.lowercase)
+        input_ids = [self.vocab.get(token, self.unk_id) for token in tokens]
+        input_ids = input_ids[: self.max_length]
 
-        encoded = self.hf_tokenizer(
-            str(text),
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_attention_mask=True,
-            add_special_tokens=True,
-        )
+        if not input_ids:
+            input_ids = [self.unk_id]
 
-        input_ids = [int(value) for value in encoded["input_ids"]]
-        attention_mask = [int(value) for value in encoded["attention_mask"]]
-
-        length = max(1, sum(attention_mask))
-
+        length = len(input_ids)
+        padded_input_ids = input_ids + [self.pad_id] * (self.max_length - length)
         return {
-            "input_ids": input_ids,
+            "input_ids": [int(value) for value in padded_input_ids],
             "length": int(length),
         }
 
     def to_dict(self) -> dict[str, object]:
-        """Return tokenizer metadata saved into `resolved_config.json`."""
-
         return {
             "tokenizer_name": TOKENIZER_NAME,
             "max_length": self.max_length,
-            "pad_token": self.hf_tokenizer.pad_token,
+            "pad_token": PAD_TOKEN,
             "pad_id": self.pad_id,
-            "unk_token": self.hf_tokenizer.unk_token,
+            "unk_token": UNK_TOKEN,
             "unk_id": self.unk_id,
             "vocab_size": self.vocab_size,
-            "policy": "hardcoded_distilbert_base_uncased_tokenizer",
+            "vocab_checksum": self.vocab_checksum,
+            "min_freq": self.min_freq,
+            "max_vocab_size": self.max_vocab_size,
+            "lowercase": self.lowercase,
+            "policy": "train_split_word_vocab",
         }
 
-    def save_pretrained(self, output_dir: str) -> None:
-        """Save tokenizer files next to the final BiLSTM model."""
+    def save_pretrained(self, output_dir: str | Path) -> None:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
 
-        self.hf_tokenizer.save_pretrained(output_dir)
+        with (output_path / "vocab.json").open("w", encoding="utf-8") as handle:
+            json.dump(self.vocab, handle, ensure_ascii=False, indent=2, sort_keys=True)
+
+        with (output_path / "tokenizer_config.json").open("w", encoding="utf-8") as handle:
+            json.dump(self.to_dict(), handle, ensure_ascii=False, indent=2, sort_keys=True)
+
+    def _validate_loaded_config(self, config: Mapping[str, Any]) -> None:
+        if config.get("tokenizer_name") != TOKENIZER_NAME:
+            raise ValueError(
+                f"Tokenizer config name must be {TOKENIZER_NAME!r}, "
+                f"got {config.get('tokenizer_name')!r}."
+            )
+        if self.max_length < 1:
+            raise ValueError("Tokenizer config max_length must be >= 1.")
+        if self.min_freq < 1:
+            raise ValueError("Tokenizer config min_freq must be >= 1.")
+        if self.max_vocab_size < 2:
+            raise ValueError("Tokenizer config max_vocab_size must be >= 2.")
+        if len(self.vocab) > self.max_vocab_size:
+            raise ValueError("Tokenizer vocab exceeds configured max_vocab_size.")
+        if self.vocab.get(PAD_TOKEN) != 0:
+            raise ValueError("Tokenizer vocab must map <pad> to id 0.")
+        if self.vocab.get(UNK_TOKEN) != 1:
+            raise ValueError("Tokenizer vocab must map <unk> to id 1.")
+
+        expected_ids = set(range(len(self.vocab)))
+        actual_ids = set(self.vocab.values())
+        if actual_ids != expected_ids:
+            raise ValueError("Tokenizer vocab ids must be contiguous from 0.")
+
+        expected_fields = {
+            "pad_token": PAD_TOKEN,
+            "pad_id": self.pad_id,
+            "unk_token": UNK_TOKEN,
+            "unk_id": self.unk_id,
+            "vocab_size": self.vocab_size,
+            "vocab_checksum": self.vocab_checksum,
+        }
+        for field_name, expected_value in expected_fields.items():
+            if config.get(field_name) != expected_value:
+                raise ValueError(
+                    f"Tokenizer config {field_name} mismatch: expected "
+                    f"{expected_value!r}, got {config.get(field_name)!r}."
+                )
+
+
+def _vocab_checksum(vocab: Mapping[str, int]) -> str:
+    payload = json.dumps(dict(vocab), ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]

@@ -16,7 +16,7 @@ from src.utils.run_metadata import build_compute_cost_fields, get_git_commit_has
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODEL_NAME = "bilstm-random-embedding"
-TOKENIZER_NAME = "distilbert-base-uncased"
+TOKENIZER_NAME = "bilstm-word"
 
 if TYPE_CHECKING:
     from src.methods.bilstm.tokenizer import StandardBiLSTMTokenizer
@@ -33,6 +33,7 @@ def validate_bilstm_config(args: Any) -> None:
         "batch_size",
         "eval_batch_size",
         "epochs",
+        "tokenizer_min_freq",
     )
     for option_name in positive_int_options:
         if int(getattr(args, option_name)) < 1:
@@ -57,6 +58,8 @@ def validate_bilstm_config(args: Any) -> None:
         raise ValueError("early_stopping_patience must be >= 0.")
     if args.early_stopping_threshold < 0:
         raise ValueError("early_stopping_threshold must be >= 0.")
+    if args.max_vocab_size < 2:
+        raise ValueError("max_vocab_size must be >= 2 for pad and unk tokens.")
     if args.data_fraction is not None and not 0 < args.data_fraction <= 1:
         raise ValueError("data_fraction must be in the interval (0, 1].")
     if args.eval_strategy != "epoch":
@@ -124,6 +127,8 @@ def build_experiment_config(
         "batch_size": args.batch_size,
         "eval_batch_size": args.eval_batch_size,
         "epochs": args.epochs,
+        "tokenizer_min_freq": args.tokenizer_min_freq,
+        "max_vocab_size": args.max_vocab_size,
         "device": args.device,
     }
     return {

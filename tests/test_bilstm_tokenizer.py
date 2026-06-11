@@ -1,110 +1,132 @@
-import sys
-import types
+import json
 import unittest
-from unittest.mock import Mock, patch
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from src.methods.bilstm.tokenizer import TOKENIZER_NAME, StandardBiLSTMTokenizer
-
-
-class FakeHfTokenizer:
-    pad_token_id = 0
-    unk_token_id = 100
-    pad_token = "[PAD]"
-    unk_token = "[UNK]"
-
-    def __len__(self):
-        return 30522
-
-    def __call__(
-        self,
-        text,
-        *,
-        max_length,
-        padding,
-        truncation,
-        return_attention_mask,
-        add_special_tokens,
-    ):
-        self.last_call = {
-            "text": text,
-            "max_length": max_length,
-            "padding": padding,
-            "truncation": truncation,
-            "return_attention_mask": return_attention_mask,
-            "add_special_tokens": add_special_tokens,
-        }
-        return {
-            "input_ids": [101, 7592, 102, 0, 0],
-            "attention_mask": [1, 1, 1, 0, 0],
-        }
-
-    def save_pretrained(self, output_dir):
-        self.saved_to = output_dir
+from src.methods.bilstm.tokenizer import (
+    PAD_TOKEN,
+    UNK_TOKEN,
+    StandardBiLSTMTokenizer,
+)
 
 
 class BiLSTMTokenizerTests(unittest.TestCase):
-    def test_create_uses_distilbert_base_uncased_fast_tokenizer(self):
-        fake_tokenizer = FakeHfTokenizer()
-        fake_transformers = types.SimpleNamespace(
-            AutoTokenizer=types.SimpleNamespace(
-                from_pretrained=Mock(return_value=fake_tokenizer)
-            )
+    def test_builds_train_only_word_vocab_with_deterministic_order(self):
+        tokenizer = StandardBiLSTMTokenizer.create(
+            train_records=[
+                {"text": "Hello world world"},
+                {"text": "hello data"},
+                {"text": "rare token"},
+            ],
+            max_length=5,
+            min_freq=2,
+            max_vocab_size=4,
         )
 
-        with patch.dict(sys.modules, {"transformers": fake_transformers}):
-            tokenizer = StandardBiLSTMTokenizer.create(max_length=5)
+        self.assertEqual(tokenizer.vocab[PAD_TOKEN], 0)
+        self.assertEqual(tokenizer.vocab[UNK_TOKEN], 1)
+        self.assertEqual(list(tokenizer.vocab), [PAD_TOKEN, UNK_TOKEN, "hello", "world"])
+        self.assertEqual(tokenizer.vocab_size, 4)
 
-        fake_transformers.AutoTokenizer.from_pretrained.assert_called_once_with(
-            TOKENIZER_NAME,
-            use_fast=True,
-        )
-        self.assertIs(tokenizer.hf_tokenizer, fake_tokenizer)
-        self.assertEqual(tokenizer.max_length, 5)
-
-    def test_encode_uses_hf_padding_truncation_and_reports_attention_length(self):
-        fake_tokenizer = FakeHfTokenizer()
-        tokenizer = StandardBiLSTMTokenizer(max_length=5, hf_tokenizer=fake_tokenizer)
-
-        encoded = tokenizer.encode("Hello world")
+        encoded = tokenizer.encode("HELLO evalonly world")
 
         self.assertEqual(
-            fake_tokenizer.last_call,
-            {
-                "text": "Hello world",
-                "max_length": 5,
-                "padding": "max_length",
-                "truncation": True,
-                "return_attention_mask": True,
-                "add_special_tokens": True,
-            },
+            encoded["input_ids"],
+            [
+                tokenizer.vocab["hello"],
+                tokenizer.unk_id,
+                tokenizer.vocab["world"],
+                tokenizer.pad_id,
+                tokenizer.pad_id,
+            ],
         )
-        self.assertEqual(encoded["input_ids"], [101, 7592, 102, 0, 0])
         self.assertEqual(encoded["length"], 3)
 
-    def test_to_dict_matches_main_tokenizer_policy(self):
-        tokenizer = StandardBiLSTMTokenizer(max_length=5, hf_tokenizer=FakeHfTokenizer())
+    def test_empty_text_encodes_as_single_unknown_token(self):
+        tokenizer = StandardBiLSTMTokenizer.create(
+            train_records=[{"text": "hello"}],
+            max_length=3,
+        )
+
+        encoded = tokenizer.encode("")
 
         self.assertEqual(
-            tokenizer.to_dict(),
+            encoded,
             {
-                "tokenizer_name": "distilbert-base-uncased",
-                "max_length": 5,
-                "pad_token": "[PAD]",
-                "pad_id": 0,
-                "unk_token": "[UNK]",
-                "unk_id": 100,
-                "vocab_size": 30522,
-                "policy": "hardcoded_distilbert_base_uncased_tokenizer",
+                "input_ids": [tokenizer.unk_id, tokenizer.pad_id, tokenizer.pad_id],
+                "length": 1,
             },
         )
 
-    def test_save_pretrained_delegates_to_hf_tokenizer(self):
-        fake_tokenizer = FakeHfTokenizer()
-        tokenizer = StandardBiLSTMTokenizer(max_length=5, hf_tokenizer=fake_tokenizer)
+    def test_save_and_load_round_trip_preserves_vocab_and_config(self):
+        tokenizer = StandardBiLSTMTokenizer.create(
+            train_records=[
+                {"text": "hello world"},
+                {"text": "hello friend"},
+            ],
+            max_length=4,
+            min_freq=1,
+            max_vocab_size=5,
+        )
 
-        tokenizer.save_pretrained("out-tokenizer")
+        with TemporaryDirectory() as temp_dir:
+            tokenizer.save_pretrained(temp_dir)
+            loaded = StandardBiLSTMTokenizer.from_pretrained(temp_dir)
 
-        self.assertEqual(fake_tokenizer.saved_to, "out-tokenizer")
+            self.assertEqual(loaded.vocab, tokenizer.vocab)
+            self.assertEqual(loaded.max_length, tokenizer.max_length)
+            self.assertEqual(loaded.min_freq, tokenizer.min_freq)
+            self.assertEqual(loaded.max_vocab_size, tokenizer.max_vocab_size)
+            self.assertEqual(loaded.lowercase, tokenizer.lowercase)
+            self.assertEqual(
+                loaded.encode("HELLO missing"),
+                tokenizer.encode("HELLO missing"),
+            )
+
+            config = json.loads(
+                Path(temp_dir, "tokenizer_config.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(config["tokenizer_name"], "bilstm-word")
+            self.assertEqual(config["policy"], "train_split_word_vocab")
+            self.assertEqual(config["vocab_checksum"], tokenizer.vocab_checksum)
+
+    def test_from_pretrained_rejects_vocab_checksum_mismatch(self):
+        tokenizer = StandardBiLSTMTokenizer.create(
+            train_records=[
+                {"text": "hello world"},
+                {"text": "hello friend"},
+            ],
+            max_length=4,
+            min_freq=1,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            tokenizer.save_pretrained(temp_dir)
+            vocab_path = Path(temp_dir, "vocab.json")
+            vocab = json.loads(vocab_path.read_text(encoding="utf-8"))
+            vocab["tampered"] = vocab.pop("world")
+            vocab_path.write_text(json.dumps(vocab), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "vocab_checksum mismatch"):
+                StandardBiLSTMTokenizer.from_pretrained(temp_dir)
+
+    def test_from_pretrained_rejects_invalid_special_token_ids(self):
+        tokenizer = StandardBiLSTMTokenizer.create(
+            train_records=[{"text": "hello"}],
+            max_length=4,
+            min_freq=1,
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            tokenizer.save_pretrained(temp_dir)
+            vocab_path = Path(temp_dir, "vocab.json")
+            vocab = json.loads(vocab_path.read_text(encoding="utf-8"))
+            vocab[PAD_TOKEN] = 1
+            vocab[UNK_TOKEN] = 0
+            vocab_path.write_text(json.dumps(vocab), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "map <pad> to id 0"):
+                StandardBiLSTMTokenizer.from_pretrained(temp_dir)
 
 
 if __name__ == "__main__":

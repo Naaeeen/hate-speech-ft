@@ -1,9 +1,7 @@
 """Manual config for one BiLSTM run.
 
-Usually change `seed`, `run_name`, and `output_dir`. The model-specific knobs
-are `embedding_size`, `hidden_size`, `dropout`, and `learning_rate`. This is a
-from-scratch PyTorch baseline, so `device="auto"` is fine for Colab unless you
-are deliberately forcing CPU/GPU.
+Usually change `seed`, `run_name`, and `output_dir`. The settings below match
+the new BiLSTM final reference config `c01881878157`.
 """
 
 CONFIG = {
@@ -20,6 +18,8 @@ CONFIG = {
     "overwrite_output_dir": False,
     "run_test": True,
     "max_length": 128,
+    "tokenizer_min_freq": 2,
+    "max_vocab_size": 30000,
     "weight_decay": 0.01,
     "warmup_ratio": 0.06,
     "max_grad_norm": 1.0,
@@ -42,10 +42,10 @@ CONFIG = {
     "wandb_mode": "online",
     "test_split_name": "test",
     "device": "auto",
-    "embedding_size": 200,
-    "hidden_size": 128,
+    "embedding_size": 100,
+    "hidden_size": 256,
     "num_layers": 1,
-    "dropout": 0.1,
+    "dropout": 0.5,
     "learning_rate": 0.001,
     "batch_size": 64,
     "eval_batch_size": 128,

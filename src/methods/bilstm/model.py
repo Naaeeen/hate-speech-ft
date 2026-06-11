@@ -9,9 +9,9 @@ import torch.nn as nn
 class BiLSTMClassifier(nn.Module):
     """Small BiLSTM text classifier trained from scratch.
 
-    Token ids come from the fixed DistilBERT tokenizer wrapper, but the
-    embedding table, LSTM, and classifier are normal trainable PyTorch layers
-    initialized for this run.
+    Token ids come from the train-split word vocabulary. The embedding table,
+    LSTM, and classifier are normal trainable PyTorch layers initialized for
+    this run.
     """
 
     def __init__(

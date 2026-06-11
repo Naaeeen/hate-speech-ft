@@ -19,22 +19,27 @@ results/all/final_runs (1).csv
 results/all/hpo_runs.csv
 ```
 
+The new BiLSTM e2e summary from the work folder is result evidence for the
+later word-vocabulary BiLSTM run. It is useful for checking expected values,
+but the current run code does not need to read any summary file.
+
 ## What This Model Is
 
 BiLSTM is the from-scratch neural baseline:
 
 ```text
 HateXplain text
--> fixed distilbert-base-uncased token ids
+-> train-split word vocabulary token ids
 -> random embedding layer over those token ids
 -> bidirectional LSTM
 -> dropout
 -> linear classifier
 ```
 
-It is not a DistilBERT encoder. The tokenizer uses the fixed
-`distilbert-base-uncased` vocabulary, but the embedding layer and BiLSTM weights
-are randomly initialized and trained from scratch for this baseline.
+It is not a DistilBERT encoder and it does not use DistilBERT's tokenizer. The
+tokenizer builds a lowercase word vocabulary from the preprocessed training
+split only, with `<pad>` id 0 and `<unk>` id 1. Eval/test text never contributes
+to the vocabulary.
 
 ## Current Final Config
 
@@ -44,10 +49,12 @@ dataset_name = Hate-speech-CNERG/hatexplain
 seed = 42
 run_test = True
 max_length = 128
-embedding_size = 200
-hidden_size = 128
+tokenizer_min_freq = 2
+max_vocab_size = 30000
+embedding_size = 100
+hidden_size = 256
 num_layers = 1
-dropout = 0.1
+dropout = 0.5
 learning_rate = 0.001
 batch_size = 64
 eval_batch_size = 128
@@ -91,17 +98,21 @@ Run:
 python src/methods/bilstm/train.py
 ```
 
-The script chooses CPU or GPU based on `device = "auto"`.
+The script chooses CPU or GPU based on `device = "auto"`. It builds the BiLSTM
+vocabulary after preprocessing the training split, then uses that same
+tokenizer for validation/test encoding.
 
 ## HPO-Style Manual Reruns
 
-Historical BiLSTM HPO searched:
+The new BiLSTM HPO/final runs searched:
 
 ```text
 embedding_size in [100, 200]
 hidden_size in [128, 256]
 dropout in [0.1, 0.3, 0.5]
 learning_rate in [0.0003, 0.001, 0.003]
+tokenizer_min_freq = 2
+max_vocab_size = 30000
 trial cap = 20
 HPO seed = 42
 ```
@@ -127,7 +138,8 @@ result_summary.json
 eval_predictions.json        # when run_test=True
 test_predictions.json        # when run_test=True
 model.pt
-tokenizer/
+tokenizer/vocab.json
+tokenizer/tokenizer_config.json
 checkpoint-epoch*
 ```
 
@@ -158,12 +170,22 @@ total_params
 vocab_size
 ```
 
-For old final rows:
+For new BiLSTM final rows:
 
 ```text
 selected_hyperparams_json <- result_summary.config.hyperparameters
 val_macro_f1 <- metrics.eval.eval_f1_macro
 test_macro_f1 <- metrics.test.test_f1_macro
+```
+
+The expected new BiLSTM final reference is `config_hash = c01881878157`:
+
+```text
+seed 42: eval_f1_macro = 0.6197612361171717, test_f1_macro = 0.6051748199024796
+seed 43: eval_f1_macro = 0.6161605450124088, test_f1_macro = 0.613602526304215
+seed 44: eval_f1_macro = 0.609636763173935, test_f1_macro = 0.6232786592478307
+vocab_size = 11961
+trainable_params = total_params = 1930823
 ```
 
 ## W&B Check
@@ -184,7 +206,7 @@ This is expected for the custom PyTorch runner.
 ## Walkthrough Check
 
 ```text
-Can I explain the tokenizer? Fixed distilbert-base-uncased tokenizer wrapper.
+Can I explain the tokenizer? Lowercase word vocab built from train split only.
 Can I explain the model? Embedding -> BiLSTM -> classifier.
 Can I run one seed without launcher? Yes.
 Can I rebuild old metrics manually? Yes, from metrics/runtime/summary JSON.

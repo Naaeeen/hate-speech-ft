@@ -164,6 +164,46 @@ class MethodManualConfigParseTests(unittest.TestCase):
                 self.assertEqual(args.per_device_train_batch_size, 16)
                 self.assertEqual(args.per_device_eval_batch_size, 32)
 
+    def test_bilstm_manual_config_matches_new_final_reference(self):
+        expected = {
+            "batch_size": 64,
+            "class_weighting": "none",
+            "device": "auto",
+            "dropout": 0.5,
+            "embedding_size": 100,
+            "epochs": 10,
+            "eval_batch_size": 128,
+            "eval_steps": None,
+            "eval_strategy": "epoch",
+            "gradient_checkpointing": False,
+            "hidden_size": 256,
+            "learning_rate": 0.001,
+            "load_best_model_at_end": True,
+            "logging_steps": 20,
+            "logging_strategy": "steps",
+            "lr_scheduler_type": "linear",
+            "max_grad_norm": 1.0,
+            "max_length": 128,
+            "max_vocab_size": 30000,
+            "metric_for_best_model": "eval_f1_macro",
+            "mixed_precision": "none",
+            "num_layers": 1,
+            "optim": "adamw_torch",
+            "save_final_model": True,
+            "save_steps": 500,
+            "save_strategy": "epoch",
+            "save_total_limit": 1,
+            "tokenizer_min_freq": 2,
+            "warmup_ratio": 0.06,
+            "weight_decay": 0.01,
+        }
+
+        args = SimpleNamespace(**BILSTM_CONFIG)
+        config = bilstm_config.build_experiment_config(args)
+
+        self.assertEqual(config["tokenizer_name"], "bilstm-word")
+        self.assertEqual(config["hyperparameters"], expected)
+
     def test_transformer_mains_delegate_manual_config_directly_to_runner(self):
         cases = [
             (

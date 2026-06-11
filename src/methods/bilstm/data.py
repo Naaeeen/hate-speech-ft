@@ -1,8 +1,8 @@
 """BiLSTM data loading and split accounting.
 
 BiLSTM uses the same HateXplain strict-majority text policy as the other
-methods, then keeps plain text records for the fixed DistilBERT tokenizer
-wrapper used by the PyTorch BiLSTM.
+methods, then keeps plain text records for the train-split word tokenizer used
+by the PyTorch BiLSTM.
 """
 
 from __future__ import annotations

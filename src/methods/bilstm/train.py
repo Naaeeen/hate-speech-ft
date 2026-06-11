@@ -1,8 +1,8 @@
 """Manual entrypoint for one BiLSTM run.
 
-The script reads `manual_config.py`, builds the fixed DistilBERT tokenizer
-wrapper, runs the custom PyTorch loop, writes the shared result files, and logs
-one W&B run when enabled.
+The script reads `manual_config.py`, builds a train-split word vocabulary,
+runs the custom PyTorch loop, writes the shared result files, and logs one W&B
+run when enabled.
 """
 
 from __future__ import annotations
@@ -153,7 +153,12 @@ def main() -> None:
 
     from src.methods.bilstm.tokenizer import StandardBiLSTMTokenizer
 
-    tokenizer = StandardBiLSTMTokenizer.create(max_length=args.max_length)
+    tokenizer = StandardBiLSTMTokenizer.create(
+        train_records=train_data.records,
+        max_length=args.max_length,
+        min_freq=args.tokenizer_min_freq,
+        max_vocab_size=args.max_vocab_size,
+    )
     class_weights = resolve_class_weights(
         train_data.records,
         class_weighting=args.class_weighting,

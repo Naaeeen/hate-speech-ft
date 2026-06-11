@@ -198,6 +198,7 @@ peak_memory_mb
 gpu_type
 trainable_params
 total_params
+vocab_size
 best_epoch
 ```
 
@@ -246,6 +247,7 @@ automatic run-status ledgers.
 | `gpu_type` | `runtime -> gpu_type` |
 | `trainable_params` | `config -> trainable_params` |
 | `total_params` | `config -> total_params` |
+| `vocab_size` | `config -> vocab_size` |
 | `summary_path` | path to this run's `result_summary.json` |
 | `test_predictions_path` | `artifacts -> predictions -> test` |
 | `model_artifacts` | `artifacts -> model` |
@@ -322,6 +324,7 @@ manual_row = {
     "gpu_type": runtime.get("gpu_type"),
     "trainable_params": config.get("trainable_params"),
     "total_params": config.get("total_params"),
+    "vocab_size": config.get("vocab_size"),
     "summary_path": summary_path.as_posix(),
     "test_predictions_path": artifacts["predictions"].get("test"),
     "model_artifacts": json.dumps(artifacts.get("model", {}), sort_keys=True),
