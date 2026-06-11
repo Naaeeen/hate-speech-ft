@@ -1,11 +1,10 @@
 # Frozen DistilBERT Manual Steps
 
-This is the manual-version runbook for the frozen-backbone DistilBERT method.
-The old file used the shared launcher and automatic aggregation. The current
-repo is simpler: edit `manual_config.py`, run one seed, save the JSON files, and
-copy the metrics by hand.
+This runbook is for the frozen-backbone DistilBERT method. The workflow is
+simple: edit `manual_config.py`, run one seed, save the JSON files, and copy the
+metrics by hand.
 
-## Source Of Truth
+## Files To Use
 
 ```text
 src/methods/frozen_distilbert/manual_config.py
@@ -15,9 +14,11 @@ src/methods/frozen_distilbert/config.py
 src/methods/transformer_runner.py
 src/results.py
 src/hpo_random_search.py
-results/all/final_runs (1).csv
-results/all/hpo_runs.csv
 ```
+
+Reference CSVs such as `results/all/final_runs (1).csv` and
+`results/all/hpo_runs.csv` are useful for checking column names and selected
+settings, but the run itself only reads `manual_config.py`.
 
 ## What This Model Is
 
@@ -90,9 +91,42 @@ Run:
 python src/methods/frozen_distilbert/train.py
 ```
 
+## Colab Notebook Walkthrough
+
+Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` with a GPU runtime. This is
+head-only training, but it still uses DistilBERT forward passes, so GPU helps.
+
+If you already have one HP set, use it like this:
+
+1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
+   install packages, and log in to W&B.
+2. In the model-pick cell, set:
+
+```python
+METHOD_SCRIPT = "src/methods/frozen_distilbert/train.py"
+MANUAL_CONFIG_MODULE = "src.methods.frozen_distilbert.manual_config"
+MANUAL_CONFIG_FILE = "src/methods/frozen_distilbert/manual_config.py"
+```
+
+3. Open `src/methods/frozen_distilbert/manual_config.py`. Copy HPs into
+   `head_learning_rate`, `num_train_epochs`, `per_device_train_batch_size`,
+   `per_device_eval_batch_size`, `max_length`, `weight_decay`, and
+   `warmup_ratio`.
+4. Set one `seed`, one `run_name`, and one `output_dir`. Keep `run_test = True`
+   for final runs.
+5. Run the config preview cell, then the training cell. Do not pass HPs as
+   command-line flags.
+
+The answer is saved in `output_dir`. Open `metrics.json` for scores,
+`runtime.json` for time/GPU info, and `result_summary.json` for selected HPs,
+trainable params, model-selection details, and artifact paths. Use
+`test_predictions.json` for prediction analysis. In W&B, find the run by
+`run_name`; trainable params should make it clear this is the frozen-backbone
+method.
+
 ## HPO-Style Manual Reruns
 
-Historical HPO searched:
+Frozen DistilBERT HPO suggestions use this search space:
 
 ```text
 head_learning_rate in [0.0001, 0.0003, 0.001, 0.003]
@@ -100,7 +134,7 @@ trial cap = 4
 HPO seed = 42
 ```
 
-Print the historical order with:
+Print the deterministic trial list with:
 
 ```text
 python src/hpo_random_search.py
@@ -151,7 +185,7 @@ trainable_params
 total_params
 ```
 
-Manual old-column mapping:
+Manual aggregate mapping:
 
 ```text
 val_macro_f1  <- metrics.eval.eval_f1_macro
@@ -171,8 +205,7 @@ gpu_hours
 model_selection/best_metric
 ```
 
-No W&B groups, generated config hashes, failure summaries, or seed-batch names
-are needed now.
+One manual seed should create one readable W&B run.
 
 ## Walkthrough Check
 
@@ -180,5 +213,5 @@ are needed now.
 Can I explain what is frozen? Yes, the DistilBERT backbone.
 Can I explain what trains? Yes, the classification head.
 Can I run one seed without CLI flags? Yes, edit manual_config.py and run train.py.
-Can I manually reproduce old final rows? Yes, copy the JSON fields listed above.
+Can I manually reproduce aggregate rows? Yes, copy the JSON fields listed above.
 ```

@@ -1,12 +1,11 @@
 # DistilBERT Full Fine-Tuning Manual Steps
 
-This is the manual-version runbook for the Full FT model. It replaces the old
-launcher/HPO/aggregation flow with the current simple workflow: edit one config,
-run one script, keep the run files, and copy numbers by hand.
+This is the manual runbook for the Full FT model: edit one config, run one
+script, keep the run files, and copy numbers by hand.
 
-## Source Of Truth
+## Files To Use
 
-Use the current code, not the old launcher docs:
+Use the current manual files:
 
 ```text
 src/methods/distilbert_full/manual_config.py
@@ -16,13 +15,13 @@ src/methods/transformer_runner.py
 src/methods/transformer_outputs.py
 src/results.py
 src/hpo_random_search.py
-results/all/final_runs (1).csv
-results/all/hpo_runs.csv
 ```
 
-The old runbook described catalog entries, seed-run generation, and automatic
-aggregation. Those parts are gone on purpose. This file keeps the useful
-experiment logic and maps it to manual runs.
+Reference CSVs such as `results/all/final_runs (1).csv` and
+`results/all/hpo_runs.csv` are useful for checking column names and selected
+settings, but the run itself only reads `manual_config.py`.
+
+Use this file as the quick path for manual Full FT runs.
 
 ## What This Model Is
 
@@ -80,7 +79,7 @@ run_name
 output_dir
 ```
 
-Leave `data_fraction_seed = 42` for the historical full-data runs unless you
+Leave `data_fraction_seed = 42` for full-data runs unless you
 are intentionally doing a new subsampling experiment.
 
 ## Run One Final Seed
@@ -109,9 +108,42 @@ python src/methods/distilbert_full/train.py
 No command-line hyperparameters are needed. If a teammate asks "where do I set
 learning rate?", the answer is: in `manual_config.py`, not after the command.
 
+## Colab Notebook Walkthrough
+
+Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb`. For Full FT, choose a GPU
+runtime before running the setup cells.
+
+If you already have the selected HPs, run them like this:
+
+1. Run the notebook setup cells: mount Google Drive, clone or reuse this branch,
+   install packages, and log in to W&B.
+2. In the model-pick cell, set:
+
+```python
+METHOD_SCRIPT = "src/methods/distilbert_full/train.py"
+MANUAL_CONFIG_MODULE = "src.methods.distilbert_full.manual_config"
+MANUAL_CONFIG_FILE = "src/methods/distilbert_full/manual_config.py"
+```
+
+3. Open `src/methods/distilbert_full/manual_config.py` in the Colab file
+   browser. Copy the HP values into fields like `learning_rate`,
+   `num_train_epochs`, `per_device_train_batch_size`,
+   `per_device_eval_batch_size`, `max_length`, `weight_decay`, and
+   `warmup_ratio`.
+4. Set one `seed`, one `run_name`, and one `output_dir`. Keep `run_test = True`
+   for final runs.
+5. Run the config preview cell and check the printed config before training.
+   Then run the training cell. Do not add `--learning_rate` or other flags.
+
+The answer is saved under `output_dir`. Open `metrics.json` for eval/test
+scores, `runtime.json` for time/GPU info, and `result_summary.json` for the
+single file that has config, metrics, runtime, model-selection, and artifact
+paths together. Use `test_predictions.json` for later prediction analysis.
+The W&B run should have the same `run_name`.
+
 ## HPO-Style Manual Reruns
 
-The historical HPO space was just the Full FT learning rate:
+Full FT HPO suggestions use this search space:
 
 ```text
 learning_rate in [1e-5, 2e-5, 3e-5, 5e-5]
@@ -119,21 +151,14 @@ trial cap = 4
 HPO seed = 42
 ```
 
-To print the same trial order as `results/all/hpo_runs.csv`, edit
-`src/hpo_random_search.py` so `METHODS = ["full-ft"]`, then run:
+To print the deterministic trial list, edit `src/hpo_random_search.py` so
+`METHODS = ["full-ft"]`, then run:
 
 ```text
 python src/hpo_random_search.py
 ```
 
-Each trial prints:
-
-```text
-manual_config_updates
-historical_sampled_hparams_json
-```
-
-Copy the chosen `manual_config_updates` into
+Each trial prints `manual_config_updates`. Copy the chosen update into
 `src/methods/distilbert_full/manual_config.py`. For validation-only HPO runs,
 set `run_test = False` and use a unique `run_name` and `output_dir`. For final
 runs, set `run_test = True`.
@@ -185,7 +210,7 @@ trainable_params
 total_params
 ```
 
-For old-table compatibility:
+For manual aggregate rows:
 
 ```text
 val_macro_f1  <- metrics.eval.eval_f1_macro
@@ -229,6 +254,6 @@ Which file do I edit? manual_config.py.
 Which command do I run? python src/methods/distilbert_full/train.py.
 How do I run seeds 42/43/44? Change seed, run_name, output_dir one at a time.
 Where are metrics? metrics.json, runtime.json, result_summary.json.
-How do I manually rebuild old final_runs.csv rows? Flatten the JSON fields above.
-What old automation is gone? launcher, generated seed commands, aggregation.
+How do I manually rebuild aggregate rows? Flatten the JSON fields above.
+How do I compare seeds? Copy one row per run and calculate mean/std later.
 ```

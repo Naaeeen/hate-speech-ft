@@ -146,11 +146,13 @@ src/methods/bilstm/manual_config.py editable one-run settings
 src/methods/bilstm/config.py    resolved config, runtime, and model selection
 src/methods/bilstm/data.py      shared HateXplain preprocessing/split handling
 src/methods/bilstm/model.py     torch BiLSTM classifier
-src/methods/bilstm/tokenizer.py DistilBERT tokenizer wrapper used by Bi-LSTM
+src/methods/bilstm/tokenizer.py train-split word tokenizer used by Bi-LSTM
 src/methods/bilstm/training.py  torch training loop, metrics, checkpoints
 src/methods/bilstm/train.py     executable direct entry point
 ```
 
-Bi-LSTM is not a Hugging Face Trainer method, so it does not use
-the Transformer utilities. It still uses the same W&B, optional test evaluation,
-and result JSON names as the other ready methods.
+Bi-LSTM is not a Hugging Face Trainer method, so it does not use the
+Transformer utilities. It builds a lowercase word vocabulary from the training
+split for each run, then uses that tokenizer for validation/test encoding. It
+still uses the same W&B, optional test evaluation, and result JSON names as the
+other ready methods.

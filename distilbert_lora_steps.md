@@ -1,10 +1,9 @@
 # DistilBERT LoRA Manual Steps
 
-This is the manual-version runbook for the LoRA method. It keeps the old
-experiment meaning but removes the old launcher, generated commands, and
-automatic aggregation.
+This is the manual runbook for the LoRA method. It keeps the research setup
+clear: edit one config, run one seed, and copy the run metrics from JSON.
 
-## Source Of Truth
+## Files To Use
 
 ```text
 src/methods/distilbert_lora/manual_config.py
@@ -15,9 +14,11 @@ src/methods/peft_utils.py
 src/methods/transformer_runner.py
 src/results.py
 src/hpo_random_search.py
-results/all/final_runs (1).csv
-results/all/hpo_runs.csv
 ```
+
+Reference CSVs such as `results/all/final_runs (1).csv` and
+`results/all/hpo_runs.csv` are useful for checking column names and selected
+settings, but the run itself only reads `manual_config.py`.
 
 ## What This Model Is
 
@@ -63,7 +64,7 @@ run_name
 output_dir
 ```
 
-Keep `lora_alpha` equal to `lora_r` for the historical configs.
+Keep `lora_alpha` equal to `lora_r` for these configs.
 
 ## Run One Final Seed
 
@@ -88,9 +89,41 @@ Run:
 python src/methods/distilbert_lora/train.py
 ```
 
+## Colab Notebook Walkthrough
+
+Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` and pick a GPU runtime.
+
+If you have one LoRA HP set from HPO or a results table, use it like this:
+
+1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
+   install packages, and log in to W&B if online logging is needed.
+2. In the model-pick cell, set:
+
+```python
+METHOD_SCRIPT = "src/methods/distilbert_lora/train.py"
+MANUAL_CONFIG_MODULE = "src.methods.distilbert_lora.manual_config"
+MANUAL_CONFIG_FILE = "src/methods/distilbert_lora/manual_config.py"
+```
+
+3. Open `src/methods/distilbert_lora/manual_config.py`. Copy HP values into
+   `learning_rate`, `num_train_epochs`, `per_device_train_batch_size`,
+   `per_device_eval_batch_size`, `target_modules`, `lora_r`, `lora_alpha`,
+   `lora_dropout`, `max_length`, and related training fields.
+4. Set one `seed`, one `run_name`, and one `output_dir`. Keep
+   `modules_to_save = ["pre_classifier", "classifier"]` for the final setup
+   unless you are intentionally changing the method.
+5. Run the config preview cell, then the training cell. Keep the command as
+   `python src/methods/distilbert_lora/train.py`.
+
+After training, open the folder from `output_dir`. `result_summary.json` is the
+best single answer file because it records the selected HPs, trainable/total
+params, metrics, and artifact paths. `metrics.json` is the quick score file,
+and `test_predictions.json` supports manual prediction analysis. In W&B, use
+the same `run_name` and check final `eval/*`, `test/*`, and train-loss curves.
+
 ## HPO-Style Manual Reruns
 
-Historical LoRA HPO searched:
+LoRA HPO suggestions use this search space:
 
 ```text
 target_modules in [["q_lin", "v_lin"], ["q_lin", "k_lin", "v_lin", "out_lin"]]

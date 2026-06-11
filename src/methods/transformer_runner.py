@@ -60,7 +60,7 @@ def run_single_stage_transformer(
 
     Method packages keep their own identity and hyperparameter config, but this
     helper owns the shared mechanics. That keeps Full FT, Frozen, and LoRA
-    comparable without bringing back the old experiment launcher.
+    comparable while each method still has its own direct entrypoint.
     """
 
     setup = start_hf_run(args)

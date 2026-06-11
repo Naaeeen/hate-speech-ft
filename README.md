@@ -3,7 +3,7 @@
 This repo compares hate-speech classification methods on HateXplain with a
 manual, one-run-at-a-time workflow.
 
-The active workflow is intentionally small:
+The workflow is intentionally small:
 
 1. Pick one method.
 2. Choose one seed and one hyperparameter set.
@@ -14,9 +14,8 @@ The active workflow is intentionally small:
 6. Copy the per-run values you need into your own CSV or notes.
 7. Calculate means, standard deviations, comparisons, and tables manually later.
 
-The repo no longer contains HPO orchestration, seed-batch runners, generated
-experiment commands, automatic aggregation, Pareto table generation, or final
-report builders.
+Everything is organized around direct method scripts, local per-run JSON files,
+and manual comparison later.
 
 ## Run In Colab
 
@@ -65,8 +64,8 @@ instead of editing a command.
 
 ## HPO Suggestions
 
-There is no HPO launcher. To print random-search hyperparameter suggestions,
-edit the constants at the top of:
+To print random-search hyperparameter suggestions, edit the constants at the
+top of:
 
 ```text
 src/hpo_random_search.py
@@ -78,10 +77,8 @@ Then run:
 python src/hpo_random_search.py
 ```
 
-It prints each trial's `manual_config_updates` plus a
-`historical_sampled_hparams_json` payload in the same random-search order and
-shape used by the historical `results/all/hpo_runs.csv` rows. Copy the update
-values you want into the relevant method's existing `manual_config.py`.
+It prints each trial's `manual_config_updates`. Copy the update values you want
+into the relevant method's existing `manual_config.py`.
 
 ## Output Contract
 
@@ -105,29 +102,20 @@ Those files are the source of truth for manual aggregation and for verifying the
 research conclusions. W&B is useful for tracking and comparison, but the local
 JSON files should be kept with each run.
 
-## Historical Results
+## Reference Results
 
-The local `results/` folder and shared Google Drive folder still contain
-historical outputs from the old automated workflow, including `hpo`, `confirm`,
-`final`, `pareto_*`, `prediction_analysis_*`, `*_e2e_summary.json`,
-`final_runs.csv`, `hpo_runs.csv`, and `method_summary.csv` artifacts. In the
-checked-in local folder, the exact aggregate filenames are
-`results/all/final_runs (1).csv`, `results/all/hpo_runs.csv`, and
-`results/all/method_summary (1).csv`. Treat those files as evidence for
-previous results, not as files the current code is supposed to regenerate
-automatically.
-
-To reproduce the old numeric conclusions with the simplified code, rerun the
-same selected hyperparameters and seeds one at a time, keep each run's local
-JSON files, and manually copy/aggregate the rows later. Set `run_test = True`
-in `manual_config.py` for any run that needs test metrics, AUROC, confusion
-matrices, or error examples.
+Use the local `results/` folder and the shared Google Drive folder as reference
+evidence for column names, selected settings, and reported numbers. For a fresh
+check, rerun the same selected hyperparameters and seeds one at a time, keep
+each run's local JSON files, and copy/aggregate the rows manually later. Set
+`run_test = True` in `manual_config.py` when the run needs test metrics, AUROC,
+confusion matrices, or error examples.
 
 ## Important Policy
 
 - Use `run_test = True` only when you want to evaluate and save the test split
   for this manual run.
-- Use a new `output_dir` for each manual run. If you want to reuse an old
+- Use a new `output_dir` for each manual run. If you want to reuse an existing
   directory, set `overwrite_output_dir = True` only when you intentionally want
   to replace prior run artifacts.
 - Run one seed at a time. To run seeds 42, 43, and 44, change `seed`,

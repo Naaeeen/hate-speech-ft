@@ -3,8 +3,8 @@
 All methods should leave behind the same small set of evidence files:
 `resolved_config.json`, `metrics.json`, `runtime.json`, `result_summary.json`,
 and prediction files when test evaluation is enabled. This file also protects
-old outputs from being accidentally overwritten, which matters a lot when we
-run one seed at a time in Colab.
+existing outputs from being accidentally overwritten, which matters a lot when
+we run one seed at a time in Colab.
 """
 
 from __future__ import annotations

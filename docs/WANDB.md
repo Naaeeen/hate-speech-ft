@@ -38,15 +38,13 @@ Each W&B run should have enough config to identify:
 
 Each run should log:
 
-- validation metrics. Transformer methods use slash-normalized names such as
-  `eval/f1_macro`, `eval/accuracy`, `eval/precision_macro`, and
-  `eval/recall_macro`; TF-IDF and BiLSTM use local names such as
-  `eval_f1_macro` and `eval_accuracy`.
-- test metrics for runs launched with `run_test = True`. Transformer methods use
-  slash-normalized names such as `test/f1_macro` and `test/accuracy`; TF-IDF
-  and BiLSTM use local names such as `test_f1_macro` and `test_accuracy`.
+- validation metrics with slash-normalized names such as `eval/f1_macro`,
+  `eval/accuracy`, `eval/precision_macro`, and `eval/recall_macro`
+- test metrics for runs launched with `run_test = True`, using names such as
+  `test/f1_macro` and `test/accuracy`
 - runtime metrics such as `training_time_sec`, `training_time_hours`,
-  `gpu_hours`, `gpu_type`, and memory fields when available
+  `gpu_hours`, `gpu_type`, and memory fields when available; runs also log
+  scalar aliases such as `runtime/training_time_sec` for W&B panels
 - model-selection metadata when the method uses checkpoints. Runs log the
   nested `model_selection` object and scalar keys such as
   `model_selection/best_epoch` and `model_selection/best_metric` for easier
@@ -55,12 +53,18 @@ Each run should log:
 Single-stage Transformer methods let Hugging Face Trainer report to W&B, so
 those runs can show normal Trainer train/loss and eval curves.
 
+BiLSTM uses a custom PyTorch loop, so it logs its own epoch history:
+`train/loss`, `train/global_step`, `train/epoch`, and `eval/*`.
+
+TF-IDF has no epoch loop or gradient training, so it only logs terminal
+`eval/*`, optional `test/*`, runtime, and model-selection fields.
+
 Two-stage methods are different on purpose. Their internal stage-1 and stage-2
 Trainer objects have W&B reporting disabled, so one manual experiment stays as
-one parent W&B run. The parent run logs final validation/test metrics, runtime,
-model-selection metadata, plus one final stage-1 validation summary payload with
-`stage1/<metric>` keys. Do not expect full stage-local Trainer curves for LP-FT
-or Efficient-Head in the current manual workflow.
+one parent W&B run. The parent run relays stage histories with keys such as
+`stage1/train/loss`, `stage1/eval/f1_macro`, `stage2/train/loss`, and
+`stage2/eval/f1_macro`, then logs final validation/test metrics, runtime, and
+model-selection metadata.
 
 Local JSON files preserve final metrics and model-selection metadata, not full
 Trainer history.
@@ -81,19 +85,11 @@ test_predictions.json       # when run_test is true
 When manually building comparison CSVs, copy rows from `result_summary.json` and
 keep the W&B URL/name as a convenience reference.
 
-The current simplified code does not upload `result_summary.json`,
-`metrics.json`, `runtime.json`, prediction JSON files, or model weights as W&B
-artifacts. Historical W&B runs may show W&B-native files such as
-`config.yaml`, `output.log`, `wandb-summary.json`, `wandb-metadata.json`, and
-history/event artifacts. That is expected: Drive/local run folders carry the
-authoritative files, while W&B carries the tracking view.
+For this workflow, W&B carries the tracking view. Drive/local run folders carry
+the authoritative files. Manual runs should follow the key patterns above.
 
-Some historical public W&B runs were produced before the simplification and may
-use legacy metric names such as `val_macro_f1` or `test_macro_f1`. New manual
-runs should follow the current key patterns described above.
+## Keep It Small
 
-## What Not To Reintroduce
-
-Do not add W&B-specific HPO groups, generated config hashes, seed-batch naming,
-or automatic aggregation logic. If a comparison needs means or standard
-deviations, calculate them manually from the per-run files.
+One W&B run should map to one method, one seed, and one manually chosen
+hyperparameter set. If a comparison needs means or standard deviations,
+calculate them manually from the per-run files.

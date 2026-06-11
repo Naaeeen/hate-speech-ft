@@ -10,7 +10,10 @@ Use:
 notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb
 ```
 
-The notebook should stay thin:
+The notebook should stay thin and readable. Each code cell now has a short text
+cell before it explaining what the cell does and why we need it.
+
+Quick flow:
 
 1. Mount Google Drive.
 2. Clone the repo, or reuse the existing checkout if you already edited a
@@ -22,11 +25,70 @@ The notebook should stay thin:
    run name, and one hyperparameter set.
 7. Run the method script with no extra flags.
 8. Inspect `result_summary.json` and manually copy the run metrics into your
-    CSV, notes, or paper table.
+   CSV, notes, or paper table.
 
-The notebook no longer owns HPO orchestration, confirmation/final seed batches,
-automatic aggregation, Pareto CSVs, final report generation, or prediction
-diagnostic exports. Historical result files can still be inspected manually.
+The notebook is only for setup, one manual run, and checking that run's output
+folder. Reference result files can still be inspected manually.
+
+## Cell Map
+
+The notebook has short text cells before each code cell. The code cells are:
+
+1. Mount Google Drive so outputs survive the Colab session.
+2. Create the Drive project folder, output folder, and HF cache.
+3. Clone or reuse the repo without overwriting `manual_config.py` edits.
+4. Optional recovery cell to return to the repo root.
+5. Install `requirements-colab.txt`.
+6. Check package versions and GPU availability.
+7. Log in to W&B, usually through the `WANDB_API_KEY` Colab Secret.
+8. Print the method config files.
+9. Optionally print HPO suggestions.
+10. Choose one method by setting the script, config module, and config file.
+11. Reload and preview the config that will actually run.
+12. Run the selected method once.
+13. Define helpers for reading one finished run folder.
+14. Optional post-run checks for the summary and saved predictions.
+
+## If You Already Have Hyperparameters
+
+Use the notebook setup cells, then edit the method config directly:
+
+```text
+src/methods/<method>/manual_config.py
+```
+
+Set `seed`, `run_name`, `output_dir`, `run_test`, W&B settings, and the model
+hyperparameters there. Then choose the matching `METHOD_SCRIPT` in the notebook,
+preview the config cell, and run the training cell once.
+
+If you are copying values from saved CSV/JSON notes, check the field names
+before pasting. Transformer configs use `per_device_train_batch_size` and
+`per_device_eval_batch_size`; Full FT and LoRA use `num_train_epochs`; two-stage
+methods use `stage1_epochs` and `stage2_epochs`. BiLSTM keeps `batch_size`,
+`eval_batch_size`, `epochs`, `tokenizer_min_freq`, and `max_vocab_size`.
+
+Keep `output_dir` under Drive when you want the results to survive Colab:
+
+```text
+/content/drive/MyDrive/hate_speech_ft/outputs/<run_name>
+```
+
+## Getting HPO Suggestions
+
+The helper is only a printer:
+
+```text
+src/hpo_random_search.py
+```
+
+Edit `METHODS`, `HPO_SEED`, or `TRIAL_CAPS` if needed, then run:
+
+```python
+!python src/hpo_random_search.py
+```
+
+Copy one trial's `manual_config_updates` into that method's `manual_config.py`.
+After that, use the normal one-run notebook flow.
 
 ## Method Code
 

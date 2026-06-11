@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import csv
 import importlib
-import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -33,43 +31,14 @@ from src.methods.transformer_setup import validate_checkpoint_policy
 from src.methods.transformer_trainer import resolve_precision_policy
 
 
-COMMON_RUN_KWARGS = {
-    "train_split": "train",
-    "eval_split": "validation",
-    "train_size": 1,
-    "eval_size": 1,
-    "full_train_size": 1,
-    "full_eval_size": 1,
-    "raw_train_size": 1,
-    "raw_eval_size": 1,
-    "dropped_no_majority_train": 0,
-    "dropped_no_majority_eval": 0,
-    "test_size": 1,
-    "full_test_size": 1,
-    "raw_test_size": 1,
-    "dropped_no_majority_test": 0,
-    "gpu_type": "T4",
-    "class_weights": None,
-}
-
-METHOD_CONFIG_MODULES = {
-    "bilstm": (BILSTM_CONFIG, bilstm_config),
-    "efficient-head-ft": (EFFICIENT_HEAD_CONFIG, efficient_head_config),
-    "frozen-backbone": (FROZEN_CONFIG, frozen_config),
-    "full-ft": (FULL_CONFIG, full_config),
-    "lora": (LORA_CONFIG, lora_config),
-    "lp-ft": (LP_FT_CONFIG, lp_ft_config),
-    "tfidf-logreg": (TFIDF_CONFIG, tfidf_config),
-}
-
-RUN_NAME_PREFIXES = {
-    "bilstm": "bilstm",
-    "efficient-head-ft": "distilbert_efficient_head",
-    "frozen-backbone": "frozen_distilbert",
-    "full-ft": "distilbert_full",
-    "lora": "distilbert_lora",
-    "lp-ft": "distilbert_lp_ft",
-    "tfidf-logreg": "tfidf_logreg",
+MANUAL_CONFIG_FILES = {
+    "tfidf-logreg": "src/methods/tfidf_logreg/manual_config.py",
+    "bilstm": "src/methods/bilstm/manual_config.py",
+    "full-ft": "src/methods/distilbert_full/manual_config.py",
+    "frozen-backbone": "src/methods/frozen_distilbert/manual_config.py",
+    "lora": "src/methods/distilbert_lora/manual_config.py",
+    "lp-ft": "src/methods/distilbert_lp_ft/manual_config.py",
+    "efficient-head-ft": "src/methods/distilbert_efficient_head/manual_config.py",
 }
 
 
@@ -80,45 +49,6 @@ def _precision_policy(args):
         "fp16": mixed_precision == "fp16",
         "bf16": mixed_precision == "bf16",
     }
-
-
-def _normalized(value):
-    if isinstance(value, tuple):
-        return [_normalized(item) for item in value]
-    if isinstance(value, list):
-        return [_normalized(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _normalized(item) for key, item in value.items()}
-    return value
-
-
-def _manual_config_for_seed(method: str, seed: int) -> dict:
-    base_config, _module = METHOD_CONFIG_MODULES[method]
-    run_prefix = RUN_NAME_PREFIXES[method]
-    config = dict(base_config)
-    config["seed"] = seed
-    config["run_name"] = f"{run_prefix}_final_seed{seed}"
-    config["output_dir"] = f"outputs/{run_prefix}_final_seed{seed}"
-    return config
-
-
-def _current_hyperparameters(method: str, args, module) -> dict:
-    if method == "bilstm":
-        return module.build_experiment_config(args)["hyperparameters"]
-    if method == "tfidf-logreg":
-        return module.build_experiment_config(
-            args,
-            ngram_range=tuple(args.ngram_range),
-        )["hyperparameters"]
-    if hasattr(module, "build_hyperparameters"):
-        return module.build_hyperparameters(args, _precision_policy(args))
-    return module.build_experiment_config(
-        args,
-        **COMMON_RUN_KWARGS,
-        trainable_params=1,
-        total_params=1,
-        precision_policy=_precision_policy(args),
-    )["hyperparameters"]
 
 
 class MethodManualConfigParseTests(unittest.TestCase):
@@ -164,6 +94,41 @@ class MethodManualConfigParseTests(unittest.TestCase):
                 self.assertEqual(args.per_device_train_batch_size, 16)
                 self.assertEqual(args.per_device_eval_batch_size, 32)
 
+    def test_manual_config_files_explain_confusing_fields(self):
+        common_phrases = (
+            "Human-readable run label",
+            "Folder where this run writes metrics.json",
+            "True means also evaluate the test split",
+            "W&B project/entity choose the dashboard",
+            "Debug caps",
+        )
+
+        for method, filename in MANUAL_CONFIG_FILES.items():
+            with self.subTest(method=method):
+                text = Path(filename).read_text(encoding="utf-8")
+                for phrase in common_phrases:
+                    self.assertIn(phrase, text)
+
+        for method in (
+            "full-ft",
+            "frozen-backbone",
+            "lora",
+            "lp-ft",
+            "efficient-head-ft",
+        ):
+            with self.subTest(method=method):
+                text = Path(MANUAL_CONFIG_FILES[method]).read_text(encoding="utf-8")
+                self.assertIn("Hugging Face checkpoint", text)
+                self.assertIn("Batch size is per device/GPU", text)
+
+        bilstm_text = Path(MANUAL_CONFIG_FILES["bilstm"]).read_text(encoding="utf-8")
+        self.assertIn("Build the word vocab from train split only", bilstm_text)
+
+        tfidf_text = Path(MANUAL_CONFIG_FILES["tfidf-logreg"]).read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Logistic Regression regularization strength", tfidf_text)
+
     def test_bilstm_manual_config_matches_new_final_reference(self):
         expected = {
             "batch_size": 64,
@@ -173,14 +138,10 @@ class MethodManualConfigParseTests(unittest.TestCase):
             "embedding_size": 100,
             "epochs": 10,
             "eval_batch_size": 128,
-            "eval_steps": None,
-            "eval_strategy": "epoch",
             "gradient_checkpointing": False,
             "hidden_size": 256,
             "learning_rate": 0.001,
             "load_best_model_at_end": True,
-            "logging_steps": 20,
-            "logging_strategy": "steps",
             "lr_scheduler_type": "linear",
             "max_grad_norm": 1.0,
             "max_length": 128,
@@ -190,7 +151,6 @@ class MethodManualConfigParseTests(unittest.TestCase):
             "num_layers": 1,
             "optim": "adamw_torch",
             "save_final_model": True,
-            "save_steps": 500,
             "save_strategy": "epoch",
             "save_total_limit": 1,
             "tokenizer_min_freq": 2,
@@ -269,29 +229,6 @@ class MethodManualConfigParseTests(unittest.TestCase):
                     if isinstance(expected, str) and hasattr(module, expected):
                         expected = getattr(module, expected)
                     self.assertEqual(actual, expected)
-
-    def test_manual_final_seed_configs_match_historical_selected_hparams(self):
-        result_path = Path("results/all/final_runs (1).csv")
-        if not result_path.exists():
-            self.skipTest("historical final-runs CSV is not checked out")
-        with result_path.open(newline="", encoding="utf-8-sig") as handle:
-            rows = list(csv.DictReader(handle))
-
-        for row in rows:
-            method = row["method"]
-            seed = int(row["seed"])
-            with self.subTest(method=method, seed=seed):
-                _base_config, module = METHOD_CONFIG_MODULES[method]
-                args = SimpleNamespace(**_manual_config_for_seed(method, seed))
-                actual = _current_hyperparameters(method, args, module)
-                expected = json.loads(row["selected_hyperparams_json"])
-                mismatches = [
-                    key
-                    for key, value in expected.items()
-                    if _normalized(actual.get(key, "<missing>")) != _normalized(value)
-                ]
-                self.assertEqual(mismatches, [])
-
 
 if __name__ == "__main__":
     unittest.main()

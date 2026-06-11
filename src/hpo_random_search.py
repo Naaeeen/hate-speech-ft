@@ -1,17 +1,14 @@
 """Print-only HPO suggestion helper for manual experiments.
 
-This is not an experiment launcher. It never trains models, never creates
-output directories, and never aggregates results. It only reproduces the
-historical random-search order so we can manually copy a trial into the right
-`manual_config.py`. The full `historical_sampled_hparams_json` field is printed
-so old `results/all/hpo_runs.csv` rows can still be checked exactly.
+This file only prints random-search suggestions. It never trains models, never
+creates output directories, and never aggregates results. Copy one printed
+trial into the right `manual_config.py` when you want to try it.
 """
 
 from __future__ import annotations
 
 import json
 import random
-from copy import deepcopy
 from itertools import product
 from typing import Any
 
@@ -72,113 +69,6 @@ SEARCH_SPACES = {
 }
 
 
-TRANSFORMER_HPO_DEFAULTS = {
-    "batch_size": 16,
-    "eval_batch_size": 32,
-    "max_train_samples": None,
-    "max_eval_samples": None,
-    "max_test_samples": None,
-    "data_fraction": 1.0,
-    "max_length": 128,
-    "weight_decay": 0.01,
-    "warmup_ratio": 0.06,
-    "max_grad_norm": 1.0,
-    "optim": "adamw_torch",
-    "lr_scheduler_type": "linear",
-    "eval_strategy": "epoch",
-    "save_strategy": "epoch",
-    "logging_strategy": "steps",
-    "logging_steps": 20,
-    "eval_steps": None,
-    "save_steps": 500,
-    "save_total_limit": 1,
-    "overwrite_output_dir": False,
-    "load_best_model_at_end": True,
-    "metric_for_best_model": "eval_f1_macro",
-    "greater_is_better": True,
-    "save_final_model": True,
-    "mixed_precision": "none",
-    "fp16": False,
-    "bf16": False,
-    "gradient_checkpointing": False,
-    "class_weighting": "none",
-    "early_stopping_patience": 2,
-    "early_stopping_threshold": 0.001,
-}
-
-HISTORICAL_HPO_DEFAULTS = {
-    "tfidf-logreg": {
-        "seed": 42,
-        "data_fraction": 1.0,
-        "max_train_samples": None,
-        "max_eval_samples": None,
-        "max_test_samples": None,
-        "class_weighting": "none",
-    },
-    "bilstm": {
-        "max_length": 128,
-        "weight_decay": 0.01,
-        "warmup_ratio": 0.06,
-        "max_grad_norm": 1.0,
-        "optim": "adamw_torch",
-        "lr_scheduler_type": "linear",
-        "class_weighting": "none",
-        "eval_strategy": "epoch",
-        "save_strategy": "epoch",
-        "logging_strategy": "steps",
-        "logging_steps": 20,
-        "eval_steps": None,
-        "save_steps": 500,
-        "save_total_limit": 1,
-        "load_best_model_at_end": True,
-        "metric_for_best_model": "eval_f1_macro",
-        "save_final_model": True,
-        "mixed_precision": "none",
-        "gradient_checkpointing": False,
-        "tokenizer_min_freq": 2,
-        "max_vocab_size": 30000,
-        "num_layers": 1,
-        "batch_size": 64,
-        "eval_batch_size": 128,
-        "epochs": 10,
-        "device": "auto",
-    },
-    "frozen-backbone": {
-        **TRANSFORMER_HPO_DEFAULTS,
-        "num_train_epochs": 8.0,
-    },
-    "full-ft": {
-        **TRANSFORMER_HPO_DEFAULTS,
-        "epochs": 4.0,
-    },
-    "lora": {
-        **TRANSFORMER_HPO_DEFAULTS,
-        "epochs": 4.0,
-        "peft_type": "lora",
-        "modules_to_save": ["pre_classifier", "classifier"],
-        "lora_dropout": 0.0,
-    },
-    "lp-ft": {
-        **TRANSFORMER_HPO_DEFAULTS,
-        "stage1_epochs": 5.0,
-        "stage2_epochs": 3.0,
-        "total_epochs": 8.0,
-    },
-    "efficient-head-ft": {
-        **TRANSFORMER_HPO_DEFAULTS,
-        "stage1_epochs": 5.0,
-        "stage1_lora": {
-            "peft_type": "lora",
-            "target_modules": ["q_lin", "v_lin"],
-            "modules_to_save": ["pre_classifier", "classifier"],
-            "lora_dropout": 0.0,
-        },
-        "stage2_epochs": 3.0,
-        "total_epochs": 8.0,
-    },
-}
-
-
 def sample_hpo_trials(
     *,
     methods: list[str] | None = None,
@@ -208,10 +98,6 @@ def build_hpo_trial_report(
             {
                 "trial_number": index,
                 "manual_config_updates": sampled,
-                "historical_sampled_hparams_json": _historical_hpo_payload(
-                    method,
-                    sampled,
-                ),
             }
             for index, sampled in enumerate(sampled_trials, start=1)
         ]
@@ -227,21 +113,6 @@ def print_hpo_trials() -> None:
     """Print the copyable HPO suggestions and stop."""
 
     print(json.dumps(build_hpo_trial_report(), indent=2, sort_keys=True))
-
-
-def _historical_hpo_payload(method: str, sampled: dict[str, Any]) -> dict[str, Any]:
-    """Expand copyable updates into the old sampled_hparams_json shape."""
-
-    payload = deepcopy(HISTORICAL_HPO_DEFAULTS[method])
-    if method == "efficient-head-ft":
-        payload["stage1_learning_rate"] = sampled["stage1_learning_rate"]
-        payload["stage2_learning_rate"] = sampled["stage2_learning_rate"]
-        payload["stage1_lora"]["lora_r"] = sampled["stage1_lora_r"]
-        payload["stage1_lora"]["lora_alpha"] = sampled["stage1_lora_alpha"]
-        return payload
-
-    payload.update(sampled)
-    return payload
 
 
 def _sample_method_trials(
@@ -261,7 +132,7 @@ def _sample_method_trials(
 
 
 def _all_method_candidates(method: str) -> list[dict[str, Any]]:
-    """Enumerate the search grid before the historical seeded shuffle."""
+    """Enumerate the search grid before the seeded shuffle."""
 
     space = SEARCH_SPACES[method]
     keys = list(space)

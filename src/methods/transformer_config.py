@@ -25,12 +25,11 @@ def common_transformer_hyperparameters(
     args: Any,
     precision_policy: dict[str, Any],
 ) -> dict[str, Any]:
-    """Collect the Transformer knobs that should appear in old-style tables.
+    """Collect the Transformer knobs that should appear in aggregate tables.
 
     The manual config uses modern HF names like `per_device_train_batch_size`,
-    but the historical CSVs used shorter names like `batch_size`. This function
-    keeps that compatibility in the saved JSON without bringing back the old
-    launcher.
+    while the saved result JSON keeps shorter table names like `batch_size`.
+    This keeps manual table rebuilding simple.
     """
 
     return {

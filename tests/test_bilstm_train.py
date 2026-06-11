@@ -12,6 +12,22 @@ from src.methods.bilstm import train as bilstm_train
 from src.methods.bilstm.manual_config import CONFIG as BILSTM_CONFIG
 
 
+class FakeWandbRun:
+    def __init__(self):
+        self.defined_metrics = []
+        self.logs = []
+        self.finished = False
+
+    def define_metric(self, name, **kwargs):
+        self.defined_metrics.append((name, kwargs))
+
+    def log(self, payload):
+        self.logs.append(payload)
+
+    def finish(self):
+        self.finished = True
+
+
 class BiLSTMTrainEntryTests(unittest.TestCase):
     def test_runtime_metrics_count_gpu_hours_only_when_training_on_cuda(self):
         cpu_runtime = bilstm_config.build_runtime_metrics(
@@ -86,6 +102,15 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 "model": object(),
                 "eval_metrics": {"eval_f1_macro": 0.5, "eval_accuracy": 0.5},
                 "test_metrics": {"test_f1_macro": 0.4, "test_accuracy": 0.4},
+                "history": [
+                    {
+                        "epoch": 1,
+                        "global_step": 1,
+                        "train_loss": 0.9,
+                        "eval_f1_macro": 0.5,
+                        "eval_accuracy": 0.5,
+                    }
+                ],
                 "eval_predictions": [{"id": "eval-1", "predicted_label": 1}],
                 "test_predictions": [{"id": "test-1", "predicted_label": 2}],
                 "runtime": {
@@ -123,14 +148,14 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 preprocessed_size=1,
                 dropped_no_majority_count=0,
             )
-            fake_wandb_run = object()
+            fake_wandb_run = FakeWandbRun()
             run_config = {
                 **BILSTM_CONFIG,
                 "run_name": "bilstm_final_fake",
                 "output_dir": str(output_dir),
                 "run_test": True,
                 "use_wandb": True,
-                "wandb_mode": "disabled",
+                "wandb_mode": "offline",
             }
 
             with (
@@ -164,8 +189,6 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                     "init_wandb_run",
                     return_value=fake_wandb_run,
                 ) as init_wandb_run,
-                patch.object(bilstm_train, "log_wandb") as log_wandb,
-                patch.object(bilstm_train, "finish_wandb_run") as finish_wandb_run,
             ):
                 bilstm_train.main()
 
@@ -217,28 +240,33 @@ class BiLSTMTrainEntryTests(unittest.TestCase):
                 wandb_config["hyperparameters"]["max_vocab_size"],
                 30000,
             )
-            log_wandb.assert_called_once()
-            self.assertIs(log_wandb.call_args.args[0], fake_wandb_run)
-            payloads = log_wandb.call_args.args[1:]
-            self.assertIn({"eval_f1_macro": 0.5, "eval_accuracy": 0.5}, payloads)
-            self.assertIn({"test_f1_macro": 0.4, "test_accuracy": 0.4}, payloads)
-            runtime_payload = payloads[2]
-            self.assertEqual(runtime_payload["training_time_sec"], 1.25)
-            self.assertEqual(runtime_payload["device"], "cpu")
-            model_selection_payload = payloads[3]
-            self.assertEqual(
-                model_selection_payload["model_selection"]["best_metric"],
-                0.5,
+            self.assertIn(("train/global_step", {}), fake_wandb_run.defined_metrics)
+            self.assertIn(
+                ("train/loss", {"step_metric": "train/global_step"}),
+                fake_wandb_run.defined_metrics,
             )
-            self.assertEqual(
-                model_selection_payload["model_selection/best_metric"],
-                0.5,
+            self.assertTrue(
+                any(payload.get("train/loss") == 0.9 for payload in fake_wandb_run.logs)
             )
-            self.assertEqual(
-                model_selection_payload["model_selection/best_epoch"],
-                1,
+            self.assertTrue(
+                any(payload.get("eval/f1_macro") == 0.5 for payload in fake_wandb_run.logs)
             )
-            finish_wandb_run.assert_called_once_with(fake_wandb_run)
+            self.assertTrue(
+                any(payload.get("test/f1_macro") == 0.4 for payload in fake_wandb_run.logs)
+            )
+            self.assertTrue(
+                any(
+                    payload.get("runtime/training_time_sec") == 1.25
+                    for payload in fake_wandb_run.logs
+                )
+            )
+            self.assertTrue(
+                any(
+                    payload.get("model_selection/best_metric") == 0.5
+                    for payload in fake_wandb_run.logs
+                )
+            )
+            self.assertTrue(fake_wandb_run.finished)
 
 if __name__ == "__main__":
     unittest.main()

@@ -62,8 +62,6 @@ def validate_bilstm_config(args: Any) -> None:
         raise ValueError("max_vocab_size must be >= 2 for pad and unk tokens.")
     if args.data_fraction is not None and not 0 < args.data_fraction <= 1:
         raise ValueError("data_fraction must be in the interval (0, 1].")
-    if args.eval_strategy != "epoch":
-        raise ValueError("Bi-LSTM currently supports only eval_strategy='epoch'.")
     if args.save_strategy not in {"no", "epoch"}:
         raise ValueError("Bi-LSTM supports save_strategy='no' or 'epoch'.")
     if args.load_best_model_at_end and args.save_strategy == "no":
@@ -153,12 +151,7 @@ def build_experiment_config(
             "optim": "adamw_torch",
             "lr_scheduler_type": "linear",
             "class_weighting": args.class_weighting,
-            "eval_strategy": args.eval_strategy,
             "save_strategy": args.save_strategy,
-            "logging_strategy": args.logging_strategy,
-            "logging_steps": args.logging_steps,
-            "eval_steps": args.eval_steps,
-            "save_steps": args.save_steps,
             "save_total_limit": args.save_total_limit,
             "load_best_model_at_end": args.load_best_model_at_end,
             "metric_for_best_model": args.metric_for_best_model,

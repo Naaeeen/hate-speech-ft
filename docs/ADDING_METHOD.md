@@ -2,15 +2,13 @@
 
 Methods live under `src/methods/<method_name>/`.
 
-The repo does not use a central command generator anymore. A method is ready
-when its `train.py` can run directly with one seed, one manual hyperparameter
-set, W&B logging, and the standard local result files.
+A method is ready when its `train.py` can run directly with one seed, one manual
+hyperparameter set, W&B logging, and the standard local result files.
 
 ## Minimum Checklist
 
 1. Keep method-specific model logic inside the method package.
-2. Keep the method's primary run settings in `manual_config.py`, not in a
-   generated command.
+2. Keep the method's primary run settings in `manual_config.py`.
 3. Add `src/methods/<method_name>/manual_config.py` with editable defaults for
    one run.
 4. Reuse shared helpers only for small cross-method contracts:
@@ -44,15 +42,14 @@ python src/methods/<method_name>/train.py
 ```
 
 Add method-specific hyperparameters to `manual_config.py`. Do not add
-command-argument settings, old aliases, or command-generation support.
+command-argument settings, compatibility aliases, or command-generation support.
 
-## Guardrails
+## Keep It Manual
 
 - Keep the standalone random-search HPO suggestion printer separate from
   training. It should only print sampled hyperparameters.
-- Do not add seed-batch runners.
-- Do not add central config files for command generation.
-- Do not add automatic aggregation or report builders.
+- Keep one seed per run.
+- Keep comparison tables as a manual step from per-run JSON files.
 - Do not put another method's model code into a shared helper.
 - Keep shared files small and only for behavior that multiple active methods
   genuinely need.

@@ -19,8 +19,9 @@ Compact Transformer helpers cover HateXplain preprocessing, strict-majority
 labels, optional test evaluation, W&B arguments, output safety, and standard
 result artifacts.
 
-Stage Trainer W&B auto-reporting is disabled so stage-local Trainer steps do
-not collide. The W&B run records the completed run's final validation/test
-metrics, runtime, model-selection fields, and one final `stage1/<metric>`
-payload. Stage-1 validation metrics also stay in the local JSON files for
-manual inspection and manual copying.
+Stage Trainer W&B auto-reporting is disabled so both stages stay inside one
+parent run. After each stage finishes, the parent run logs the Trainer history
+with clear prefixes such as `stage1/train/loss`, `stage1/eval/f1_macro`,
+`stage2/train/loss`, and `stage2/eval/f1_macro`. The same run also records the
+final validation/test metrics, runtime, and model-selection fields. Local JSON
+files are still the source of truth for manual copying.

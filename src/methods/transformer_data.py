@@ -2,8 +2,7 @@
 
 These helpers keep the HateXplain split policy consistent across Full FT,
 Frozen, LoRA, LP-FT, and Efficient-Head. The size fields are intentionally
-verbose because they let us manually compare a new run with the old aggregate
-CSVs later.
+verbose because they let us manually rebuild aggregate CSV rows later.
 """
 
 from __future__ import annotations

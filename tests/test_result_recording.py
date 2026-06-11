@@ -69,7 +69,7 @@ class ResultRecordingTests(unittest.TestCase):
     def test_output_dir_rejects_existing_run_artifacts_by_default(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            (output_dir / "result_summary.json").write_text("old", encoding="utf-8")
+            (output_dir / "result_summary.json").write_text("existing", encoding="utf-8")
 
             with self.assertRaisesRegex(ValueError, "already contains run artifacts"):
                 prepare_output_dir_for_run(output_dir, overwrite=False)
@@ -79,7 +79,7 @@ class ResultRecordingTests(unittest.TestCase):
     def test_output_dir_overwrite_clears_existing_run_artifacts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
-            (output_dir / "result_summary.json").write_text("old", encoding="utf-8")
+            (output_dir / "result_summary.json").write_text("existing", encoding="utf-8")
             (output_dir / "checkpoint-1").mkdir()
             (output_dir / "notes.txt").write_text("keep", encoding="utf-8")
 

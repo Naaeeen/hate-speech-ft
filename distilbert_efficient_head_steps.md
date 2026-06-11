@@ -1,10 +1,9 @@
 # DistilBERT Efficient-Head FT Manual Steps
 
-This is the manual-version runbook for Efficient-Head FT. It keeps the old
-research idea but removes the launcher, generated commands, and automatic
-aggregation.
+This is the manual runbook for Efficient-Head FT. It keeps the research setup
+clear: edit one config, run one seed, and copy the run metrics from JSON.
 
-## Source Of Truth
+## Files To Use
 
 ```text
 src/methods/distilbert_efficient_head/manual_config.py
@@ -15,9 +14,11 @@ src/methods/peft_utils.py
 src/methods/transformer_two_stage_runner.py
 src/results.py
 src/hpo_random_search.py
-results/all/final_runs (1).csv
-results/all/hpo_runs.csv
 ```
+
+Reference CSVs such as `results/all/final_runs (1).csv` and
+`results/all/hpo_runs.csv` are useful for checking column names and selected
+settings, but the run itself only reads `manual_config.py`.
 
 ## What This Model Is
 
@@ -94,9 +95,45 @@ python src/methods/distilbert_efficient_head/train.py
 
 The method runs both stages itself. Do not manually run separate stage scripts.
 
+## Colab Notebook Walkthrough
+
+Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` with a GPU runtime.
+Efficient-Head FT has two stages, but Colab should still launch one script
+only.
+
+If you already have one HP set, run it like this:
+
+1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
+   install packages, and log in to W&B if this run should sync online.
+2. In the model-pick cell, set:
+
+```python
+METHOD_SCRIPT = "src/methods/distilbert_efficient_head/train.py"
+MANUAL_CONFIG_MODULE = "src.methods.distilbert_efficient_head.manual_config"
+MANUAL_CONFIG_FILE = "src/methods/distilbert_efficient_head/manual_config.py"
+```
+
+3. Open `src/methods/distilbert_efficient_head/manual_config.py`. Copy HPs into
+   `stage1_learning_rate`, `stage1_epochs`, `stage1_lora_r`,
+   `stage1_lora_alpha`, `stage1_lora_dropout`, `stage1_target_modules`,
+   `stage2_learning_rate`, `stage2_epochs`, batch sizes, and other training
+   fields.
+4. Set one `seed`, one `run_name`, and one unique `output_dir`. Keep
+   `stage1_modules_to_save = ["pre_classifier", "classifier"]` for the final
+   setup unless you are deliberately changing the method.
+5. Run the config preview cell, then the training cell. Do not run stage 1 and
+   stage 2 as separate notebook commands.
+
+When it finishes, check `output_dir`. `metrics.json` gives final metrics plus
+stage-1 metrics, `runtime.json` gives total/stage runtime, and
+`result_summary.json` is the easiest file for manual aggregation. Use
+`test_predictions.json` for AUROC/confusion/error-example work. In W&B, one
+run with the same `run_name` should contain `stage1/*`, `stage2/*`, and final
+`eval/*`/`test/*` keys.
+
 ## HPO-Style Manual Reruns
 
-Historical Efficient-Head HPO searched:
+Efficient-Head HPO suggestions use this search space:
 
 ```text
 stage1_lora_r in [4, 8]
@@ -114,9 +151,7 @@ python src/hpo_random_search.py
 ```
 
 Set `METHODS = ["efficient-head-ft"]` first if you only want this method. Copy
-`manual_config_updates` into `manual_config.py`. The printed
-`historical_sampled_hparams_json` keeps the nested `stage1_lora` shape from the
-old CSV, but the manual config uses flat keys like `stage1_lora_r`.
+`manual_config_updates` into `manual_config.py`.
 
 ## Expected Output Files
 
@@ -158,7 +193,7 @@ trainable_params
 total_params
 ```
 
-For old table mapping:
+For manual aggregate rows:
 
 ```text
 selected_hyperparams_json <- result_summary.config.hyperparameters
@@ -168,12 +203,17 @@ test_macro_f1 <- metrics.test.test_f1_macro
 
 ## W&B Check
 
-One W&B run should contain both the final metrics and stage-1 metrics:
+One W&B run should contain final metrics plus stage-1/stage-2 training curves:
 
 ```text
 eval/f1_macro
 test/f1_macro
+stage1/train/loss
+stage1/global_step
 stage1/eval/f1_macro
+stage2/train/loss
+stage2/global_step
+stage2/eval/f1_macro
 model_selection/stage1_best_metric
 model_selection/stage2_best_metric
 ```
@@ -183,5 +223,5 @@ model_selection/stage2_best_metric
 ```text
 Can I explain what transfers from stage 1 to stage 2? Only the classification head.
 Can I explain why final cost is not LoRA-only? Stage 2 full-fine-tunes all parameters.
-Can I reproduce the old sampled_hparams_json shape? Yes, hpo_random_search.py prints it.
+Can I copy HPO suggestions manually? Yes, use `manual_config_updates`.
 ```

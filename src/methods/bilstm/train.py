@@ -40,9 +40,12 @@ from src.utils.run_metadata import (  # noqa: E402
 )
 from src.utils.wandb_config import (  # noqa: E402
     build_wandb_settings_from_args,
+    define_training_wandb_metrics,
     finish_wandb_run,
     init_wandb_run,
     log_wandb,
+    log_wandb_history,
+    namespaced_wandb_metrics,
     prefixed_wandb_scalars,
 )
 
@@ -242,11 +245,13 @@ def main() -> None:
         artifact_paths=model_artifact_paths,
     )
     wandb_run = init_wandb_run(build_wandb_settings_from_args(args), config=config)
+    define_training_wandb_metrics(wandb_run)
+    log_wandb_history(wandb_run, result.get("history", []))
     log_wandb(
         wandb_run,
-        result["eval_metrics"],
-        result["test_metrics"],
-        runtime_metrics,
+        namespaced_wandb_metrics(result["eval_metrics"]),
+        namespaced_wandb_metrics(result["test_metrics"]),
+        prefixed_wandb_scalars("runtime", runtime_metrics),
         {
             "model_selection": model_selection,
             **prefixed_wandb_scalars("model_selection", model_selection),

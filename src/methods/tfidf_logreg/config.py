@@ -33,9 +33,9 @@ def build_experiment_config(
 ) -> dict[str, Any]:
     """Build the saved config for one TF-IDF + Logistic Regression run.
 
-    The shape mirrors the old result files closely enough for manual table
-    rebuilding: split sizes, strict-majority drop counts, seed, model stats,
-    and selected hyperparameters all land in one JSON object.
+    The shape is meant for manual table rebuilding: split sizes,
+    strict-majority drop counts, seed, model stats, and selected hyperparameters
+    all land in one JSON object.
     """
 
     train_size = len(train_data.records) if train_data is not None else None
@@ -141,7 +141,11 @@ def build_runtime_metrics(
     return runtime
 
 
-def build_model_selection(eval_metrics: dict[str, Any]) -> dict[str, Any]:
+def build_model_selection(
+    eval_metrics: dict[str, Any],
+    *,
+    best_model_checkpoint: str | None,
+) -> dict[str, Any]:
     """Describe model selection for a method that has no epochs/checkpoints."""
 
     return {
@@ -151,5 +155,5 @@ def build_model_selection(eval_metrics: dict[str, Any]) -> dict[str, Any]:
         "greater_is_better": True,
         "best_epoch": None,
         "best_step": None,
-        "best_model_checkpoint": "model.joblib",
+        "best_model_checkpoint": best_model_checkpoint,
     }

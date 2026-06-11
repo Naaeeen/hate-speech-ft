@@ -1,7 +1,7 @@
 """Config metadata for Efficient-Head FT.
 
-The main special case is the nested `stage1_lora` hyperparameter block, which
-keeps the old result CSV shape while the manual config stays easy to edit with
+The main special case is the nested `stage1_lora` hyperparameter block. Saved
+results keep that nested shape, while the manual config stays easy to edit with
 flat fields like `stage1_lora_r`.
 """
 
@@ -23,7 +23,7 @@ STAGE2_DIR_NAME = "stage2_full_ft"
 
 
 def build_stage1_lora_policy(args: Any) -> dict[str, Any]:
-    """Build the nested stage-1 LoRA policy used in old result tables."""
+    """Build the nested stage-1 LoRA policy used in saved result tables."""
 
     return {
         "peft_type": "lora",

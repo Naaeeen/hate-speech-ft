@@ -23,7 +23,11 @@ from src.utils.run_metadata import (
     get_peak_memory_mb,
     get_peak_memory_reserved_mb,
 )
-from src.utils.wandb_config import log_wandb, prefixed_wandb_scalars
+from src.utils.wandb_config import (
+    log_wandb,
+    namespaced_wandb_metrics,
+    prefixed_wandb_scalars,
+)
 
 
 def write_config_snapshot(output_dir: str | Path, config: dict[str, Any]):
@@ -139,6 +143,7 @@ def write_success_outputs(
     wandb_run,
     model_artifact_paths: dict[str, Path] | None = None,
     extra_metrics: dict[str, Any] | None = None,
+    log_extra_metrics_to_wandb: bool = True,
 ) -> dict[str, Path]:
     """Write local result files and log the same final facts to W&B."""
 
@@ -157,8 +162,9 @@ def write_success_outputs(
         wandb_run,
         _wandb_metric_payload(eval_metrics),
         _wandb_metric_payload(test_metrics),
-        _wandb_extra_metric_payload(extra_metrics),
+        _wandb_extra_metric_payload(extra_metrics) if log_extra_metrics_to_wandb else {},
         runtime_metrics,
+        prefixed_wandb_scalars("runtime", runtime_metrics),
         {
             "model_selection": model_selection,
             **prefixed_wandb_scalars("model_selection", model_selection),
@@ -170,15 +176,7 @@ def write_success_outputs(
 def _wandb_metric_payload(metrics: dict[str, Any] | None) -> dict[str, Any]:
     if not metrics:
         return {}
-    return {_wandb_metric_key(key): value for key, value in metrics.items()}
-
-
-def _wandb_metric_key(key: str) -> str:
-    if key.startswith("eval_"):
-        return f"eval/{key.removeprefix('eval_')}"
-    if key.startswith("test_"):
-        return f"test/{key.removeprefix('test_')}"
-    return key
+    return namespaced_wandb_metrics(metrics)
 
 
 def _wandb_extra_metric_payload(extra_metrics: dict[str, Any] | None) -> dict[str, Any]:
@@ -189,13 +187,7 @@ def _wandb_extra_metric_payload(extra_metrics: dict[str, Any] | None) -> dict[st
     payload = {}
     for group, metrics in extra_metrics.items():
         if isinstance(metrics, dict):
-            prefix = f"{group}_"
-            payload.update(
-                {
-                    f"{group}/{_wandb_metric_key(key.removeprefix(prefix))}": value
-                    for key, value in metrics.items()
-                }
-            )
+            payload.update(namespaced_wandb_metrics(metrics, namespace=group))
         else:
             payload[group] = metrics
     return payload

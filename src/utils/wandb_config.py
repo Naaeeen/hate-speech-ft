@@ -1,16 +1,15 @@
 """Small W&B helper layer for the manual workflow.
 
-W&B is useful for tracking runs, but it is not the experiment orchestrator
-anymore. The manual config decides whether one run logs online/offline/disabled;
-this file normalizes that choice, starts one run, logs our final/manual summary
-payloads, and finishes it.
+W&B is useful for tracking runs, but it is only a per-run logger here. The
+manual config decides whether one run logs online/offline/disabled; this file
+normalizes that choice, starts one run, logs our final/manual summary payloads,
+and finishes it.
 
 For single-stage Transformer methods, Hugging Face Trainer also receives
 `report_to="wandb"`, so W&B can show normal trainer step/eval logs in addition
 to the final payloads we log ourselves. Two-stage methods disable stage-local
-Trainer W&B and log only parent-run final metrics plus the one-shot stage-1
-summary payload. If online W&B fails, we let the run fail instead of writing a
-special failure-summary file.
+Trainer W&B and relay stage histories into the parent run. Online W&B errors are
+left visible so the login or config can be fixed and rerun.
 """
 
 from __future__ import annotations
@@ -53,7 +52,10 @@ class WandbSettings:
     def __post_init__(self) -> None:
         object.__setattr__(self, "project", _clean_optional_text(self.project))
         object.__setattr__(self, "entity", _clean_optional_text(self.entity))
-        object.__setattr__(self, "mode", normalize_wandb_mode(self.mode))
+        mode = normalize_wandb_mode(self.mode)
+        object.__setattr__(self, "mode", mode)
+        if mode == "disabled":
+            object.__setattr__(self, "enabled", False)
         object.__setattr__(self, "run_name", _clean_optional_text(self.run_name))
 
     @property
@@ -66,11 +68,12 @@ class WandbSettings:
 def build_wandb_settings_from_args(args: Any) -> WandbSettings:
     """Build clean W&B settings from a method's `manual_config.py` namespace."""
 
+    mode = normalize_wandb_mode(args.wandb_mode)
     return WandbSettings(
-        enabled=args.use_wandb,
+        enabled=bool(args.use_wandb) and mode != "disabled",
         project=args.wandb_project,
         entity=args.wandb_entity,
-        mode=args.wandb_mode,
+        mode=mode,
         run_name=args.run_name,
     )
 
@@ -133,6 +136,134 @@ def log_wandb(run, *payloads: dict[str, Any]) -> None:
     for payload in payloads:
         if not payload:
             continue
+        run.log(payload)
+
+
+def _is_wandb_scalar(value: Any) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _namespaced_key(key: str, namespace: str | None) -> str:
+    base = f"{namespace}/" if namespace else ""
+    stage_prefix = f"{namespace}_" if namespace else ""
+    if namespace and key.startswith(stage_prefix):
+        key = key.removeprefix(stage_prefix)
+    if key in {"step", "global_step"}:
+        return f"{base}global_step" if namespace else "train/global_step"
+    if key == "epoch":
+        return f"{base}epoch" if namespace else "train/epoch"
+    if key in {"loss", "train_loss"}:
+        return f"{base}train/loss"
+    if key == "learning_rate":
+        return f"{base}train/learning_rate"
+    if key == "grad_norm":
+        return f"{base}train/grad_norm"
+    if key.startswith("train_"):
+        return f"{base}train/{key.removeprefix('train_')}"
+    if key.startswith("eval_"):
+        return f"{base}eval/{key.removeprefix('eval_')}"
+    if key.startswith("test_"):
+        return f"{base}test/{key.removeprefix('test_')}"
+    return f"{base}{key}" if namespace else key
+
+
+def namespaced_wandb_metrics(
+    values: dict[str, Any] | None,
+    *,
+    namespace: str | None = None,
+    scalar_only: bool = False,
+) -> dict[str, Any]:
+    """Copy common flat metric names into W&B-friendly slash namespaces."""
+
+    if not values:
+        return {}
+    payload = {}
+    for key, value in values.items():
+        if scalar_only and not _is_wandb_scalar(value):
+            continue
+        payload[_namespaced_key(str(key), namespace)] = value
+    return payload
+
+
+def log_wandb_history(
+    run,
+    rows: list[dict[str, Any]],
+    *,
+    namespace: str | None = None,
+) -> None:
+    """Log ordered training-history rows to an existing W&B run."""
+
+    if run is None:
+        return
+    for row in rows:
+        payload = namespaced_wandb_metrics(row, namespace=namespace, scalar_only=True)
+        if payload:
+            run.log(payload)
+
+
+def define_wandb_metric(
+    run,
+    name: str,
+    *,
+    step_metric: str | None = None,
+) -> None:
+    """Define a W&B metric axis when a run is active."""
+
+    if run is None:
+        return
+    kwargs = {"step_metric": step_metric} if step_metric else {}
+    run.define_metric(name, **kwargs)
+
+
+def define_training_wandb_metrics(run) -> None:
+    """Define the common single-run train/eval W&B chart axes."""
+
+    define_wandb_metric(run, "train/global_step")
+    define_wandb_metric(run, "train/loss", step_metric="train/global_step")
+    define_wandb_metric(run, "train/epoch", step_metric="train/global_step")
+    define_wandb_metric(run, "eval/*", step_metric="train/global_step")
+    define_wandb_metric(run, "test/*", step_metric="train/global_step")
+
+
+def define_stage_wandb_metrics(run, stage: str) -> None:
+    """Define stage-specific chart axes for two-stage methods."""
+
+    step_metric = f"{stage}/global_step"
+    define_wandb_metric(run, step_metric)
+    define_wandb_metric(run, f"{stage}/epoch", step_metric=step_metric)
+    define_wandb_metric(run, f"{stage}/train/*", step_metric=step_metric)
+    define_wandb_metric(run, f"{stage}/eval/*", step_metric=step_metric)
+
+
+def log_wandb_trainer_history(
+    run,
+    trainer,
+    *,
+    stage: str,
+    extra_metrics: dict[str, Any] | None = None,
+) -> None:
+    """Relay one HF Trainer's history into the parent W&B run."""
+
+    if run is None:
+        return
+    state = getattr(trainer, "state", None)
+    rows = list(getattr(state, "log_history", []) or [])
+    log_wandb_history(run, rows, namespace=stage)
+
+    if not extra_metrics:
+        return
+    payload = namespaced_wandb_metrics(
+        extra_metrics,
+        namespace=stage,
+        scalar_only=True,
+    )
+    global_step = getattr(state, "global_step", None)
+    epoch = getattr(state, "epoch", None)
+    if global_step is not None:
+        payload[f"{stage}/global_step"] = global_step
+    if epoch is not None:
+        payload[f"{stage}/epoch"] = epoch
+    if payload:
         run.log(payload)
 
 

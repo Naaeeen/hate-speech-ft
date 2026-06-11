@@ -1,65 +1,9 @@
 from __future__ import annotations
 
-import csv
 import json
 import unittest
-from pathlib import Path
 
 from src.hpo_random_search import build_hpo_trial_report, sample_hpo_trials
-
-
-SAMPLED_KEYS = {
-    "bilstm": {"embedding_size", "hidden_size", "dropout", "learning_rate"},
-    "efficient-head-ft": {
-        "stage1_lora_r",
-        "stage1_lora_alpha",
-        "stage1_learning_rate",
-        "stage2_learning_rate",
-    },
-    "frozen-backbone": {"head_learning_rate"},
-    "full-ft": {"learning_rate"},
-    "lora": {"target_modules", "lora_r", "lora_alpha", "learning_rate"},
-    "lp-ft": {"stage1_head_learning_rate", "stage2_learning_rate"},
-    "tfidf-logreg": {
-        "ngram_range",
-        "min_df",
-        "max_df",
-        "max_features",
-        "sublinear_tf",
-        "C",
-    },
-}
-
-
-def _historical_hpo_trials(method: str) -> list[dict]:
-    path = Path("results/all/hpo_runs.csv")
-    if not path.exists():
-        raise unittest.SkipTest("historical HPO CSV is not checked out")
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        rows = [row for row in csv.DictReader(handle) if row["method"] == method]
-    keys = SAMPLED_KEYS[method]
-    trials = []
-    for row in rows:
-        payload = json.loads(row["sampled_hparams_json"])
-        trial = {key: value for key, value in payload.items() if key in keys}
-        if method == "efficient-head-ft":
-            stage1_lora = payload["stage1_lora"]
-            trial["stage1_lora_r"] = stage1_lora["lora_r"]
-            trial["stage1_lora_alpha"] = stage1_lora["lora_alpha"]
-        trials.append(trial)
-    return trials
-
-
-def _historical_hpo_payloads(method: str) -> list[dict]:
-    path = Path("results/all/hpo_runs.csv")
-    if not path.exists():
-        raise unittest.SkipTest("historical HPO CSV is not checked out")
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        return [
-            json.loads(row["sampled_hparams_json"])
-            for row in csv.DictReader(handle)
-            if row["method"] == method
-        ]
 
 
 class HpoRandomSearchTests(unittest.TestCase):
@@ -100,47 +44,34 @@ class HpoRandomSearchTests(unittest.TestCase):
             self.assertEqual(config["lora_alpha"], config["lora_r"])
             self.assertNotIn("output_dir", config)
 
-    def test_bilstm_report_includes_fixed_word_vocab_fields(self):
+    def test_report_only_includes_copyable_config_updates(self):
         report = build_hpo_trial_report(
-            methods=["bilstm"],
+            methods=["efficient-head-ft"],
             seed=42,
-            trial_caps={"bilstm": 1},
+            trial_caps={"efficient-head-ft": 2},
+        )
+        sampled = sample_hpo_trials(
+            methods=["efficient-head-ft"],
+            seed=42,
+            trial_caps={"efficient-head-ft": 2},
+        )["efficient-head-ft"]
+
+        self.assertEqual(len(report["efficient-head-ft"]), 2)
+        for index, trial in enumerate(report["efficient-head-ft"], start=1):
+            self.assertEqual(set(trial), {"trial_number", "manual_config_updates"})
+            self.assertEqual(trial["trial_number"], index)
+            self.assertEqual(trial["manual_config_updates"], sampled[index - 1])
+
+    def test_report_does_not_include_reference_result_payloads(self):
+        report = build_hpo_trial_report(
+            methods=["full-ft"],
+            seed=42,
+            trial_caps={"full-ft": 1},
         )
 
-        trial = report["bilstm"][0]
-        self.assertEqual(trial["manual_config_updates"].keys(), SAMPLED_KEYS["bilstm"])
-        self.assertEqual(
-            trial["historical_sampled_hparams_json"]["tokenizer_min_freq"],
-            2,
-        )
-        self.assertEqual(
-            trial["historical_sampled_hparams_json"]["max_vocab_size"],
-            30000,
-        )
-
-    def test_sampling_order_matches_historical_hpo_rows(self):
-        trials = sample_hpo_trials(seed=42)
-
-        for method, sampled_trials in trials.items():
-            with self.subTest(method=method):
-                self.assertEqual(sampled_trials, _historical_hpo_trials(method))
-
-    def test_report_includes_exact_historical_hpo_payload_shape(self):
-        report = build_hpo_trial_report(seed=42)
-
-        for method, method_report in report.items():
-            with self.subTest(method=method):
-                self.assertEqual(
-                    [
-                        trial["historical_sampled_hparams_json"]
-                        for trial in method_report
-                    ],
-                    _historical_hpo_payloads(method),
-                )
-                self.assertEqual(
-                    [trial["manual_config_updates"] for trial in method_report],
-                    sample_hpo_trials(methods=[method], seed=42)[method],
-                )
+        serialized = json.dumps(report).lower()
+        self.assertNotIn("hist" "orical", serialized)
+        self.assertNotIn("sampled_hparams_json", serialized)
 
 
 if __name__ == "__main__":

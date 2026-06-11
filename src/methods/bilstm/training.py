@@ -166,7 +166,7 @@ def build_scheduler(
     total_steps: int,
     warmup_ratio: float,
 ) -> torch.optim.lr_scheduler.LambdaLR:
-    """Build the simple linear warmup/decay scheduler used in old runs."""
+    """Build the simple linear warmup/decay scheduler used for BiLSTM runs."""
 
     warmup_steps = int(total_steps * warmup_ratio)
 
@@ -478,6 +478,7 @@ def run_training(
     best_checkpoint: Path | None = None
     epochs_without_improvement = 0
     global_step = 0
+    history: list[dict[str, Any]] = []
 
     reset_peak_memory_stats(device)
     if device.type == "cuda":
@@ -507,6 +508,14 @@ def run_training(
         print(
             f"epoch={epoch} train_loss={train_loss:.4f} "
             f"eval_f1_macro={eval_metrics['eval_f1_macro']:.4f}"
+        )
+        history.append(
+            {
+                "epoch": epoch,
+                "global_step": global_step,
+                "train_loss": train_loss,
+                **eval_metrics,
+            }
         )
 
         checkpoint_dir: Path | None = None
@@ -602,6 +611,7 @@ def run_training(
             "peak_memory_reserved_mb": get_peak_memory_reserved_mb(device),
             "final_model_source": final_model_source,
         },
+        "history": history,
         "model_selection": {
             "best_metric": best_metric if best_metric != -math.inf else None,
             "best_epoch": best_epoch,

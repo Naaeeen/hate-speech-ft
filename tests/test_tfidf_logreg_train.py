@@ -229,6 +229,7 @@ class TfidfLogregTrainTests(unittest.TestCase):
         run_name="tfidf_manual",
         run_test=False,
         use_wandb=False,
+        no_save_final_model=False,
     ):
         dataset = FakeDataset()
 
@@ -249,8 +250,9 @@ class TfidfLogregTrainTests(unittest.TestCase):
             "ngram_range": [1, 2],
             "min_df": 1,
             "run_test": run_test,
+            "no_save_final_model": no_save_final_model,
             "use_wandb": use_wandb,
-            "wandb_mode": "disabled" if use_wandb else "online",
+            "wandb_mode": "offline" if use_wandb else "online",
         }
 
         with (
@@ -296,6 +298,22 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 (output_dir / "test_predictions.json").as_posix(),
             )
 
+    def test_no_save_final_model_does_not_claim_model_checkpoint(self):
+        with TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            self.run_fake_main(
+                output_dir,
+                run_name="tfidf_no_model",
+                no_save_final_model=True,
+            )
+
+            self.assertFalse((output_dir / "model.joblib").exists())
+            summary = json.loads(
+                (output_dir / "result_summary.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(summary["artifacts"]["model"], {})
+            self.assertIsNone(summary["model_selection"]["best_model_checkpoint"])
+
     def test_success_run_writes_outputs_and_logs_final_metrics_to_wandb(self):
         with TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
@@ -317,7 +335,7 @@ class TfidfLogregTrainTests(unittest.TestCase):
                 "run_name": "tfidf_wandb_success",
                 "output_dir": str(output_dir),
                 "use_wandb": True,
-                "wandb_mode": "disabled",
+                "wandb_mode": "offline",
                 "run_test": False,
             }
 
@@ -332,7 +350,13 @@ class TfidfLogregTrainTests(unittest.TestCase):
             self.assertTrue((output_dir / "result_summary.json").is_file())
             self.assertTrue((output_dir / "model.joblib").is_file())
             self.assertTrue(
-                any(payload.get("eval_f1_macro") == 1.0 for payload in fake_run.logs)
+                any(payload.get("eval/f1_macro") == 1.0 for payload in fake_run.logs)
+            )
+            self.assertTrue(
+                any(
+                    payload.get("runtime/training_time_sec") is not None
+                    for payload in fake_run.logs
+                )
             )
             self.assertTrue(
                 any(

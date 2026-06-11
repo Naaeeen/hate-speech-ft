@@ -1,10 +1,10 @@
 # TF-IDF Logistic Regression Manual Steps
 
-This is the manual-version runbook for the TF-IDF + Logistic Regression
-baseline. It is intentionally simple: edit one config file, run one Python
-file, then copy the metrics from JSON.
+This runbook is for the TF-IDF + Logistic Regression baseline. It is
+intentionally simple: edit one config file, run one Python file, then copy the
+metrics from JSON.
 
-## Source Of Truth
+## Files To Use
 
 ```text
 src/methods/tfidf_logreg/manual_config.py
@@ -14,9 +14,11 @@ src/methods/tfidf_logreg/config.py
 src/methods/tfidf_logreg/data.py
 src/results.py
 src/hpo_random_search.py
-results/all/final_runs (1).csv
-results/all/hpo_runs.csv
 ```
+
+Reference CSVs such as `results/all/final_runs (1).csv` and
+`results/all/hpo_runs.csv` are useful for checking column names and selected
+settings, but the run itself only reads `manual_config.py`.
 
 ## What This Model Is
 
@@ -46,8 +48,8 @@ class_weighting = none
 no_save_final_model = False
 ```
 
-For TF-IDF final rows, the historical selected hyperparameters include the seed.
-So for seeds 42, 43, and 44, change:
+For TF-IDF final rows, the selected hyperparameters include the seed. So for
+seeds 42, 43, and 44, change:
 
 ```text
 seed
@@ -82,9 +84,40 @@ python src/methods/tfidf_logreg/train.py
 
 There are no CLI hyperparameter flags. Put changes in `manual_config.py`.
 
+## Colab Notebook Walkthrough
+
+Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` for this method too. TF-IDF
+does not need a GPU, but it is okay if the Colab runtime has one.
+
+If you already have one set of hyperparameters, do this:
+
+1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
+   install packages, and log in to W&B if you want online tracking.
+2. In the model-pick cell, set:
+
+```python
+METHOD_SCRIPT = "src/methods/tfidf_logreg/train.py"
+MANUAL_CONFIG_MODULE = "src.methods.tfidf_logreg.manual_config"
+MANUAL_CONFIG_FILE = "src/methods/tfidf_logreg/manual_config.py"
+```
+
+3. Open `src/methods/tfidf_logreg/manual_config.py` in the Colab file browser.
+   Copy your HP values into fields like `ngram_range`, `min_df`, `max_df`,
+   `max_features`, `sublinear_tf`, and `C`.
+4. Set one seed, one readable `run_name`, and one unique `output_dir`. Keep
+   `run_test = True` if this is a final run or if you need prediction files.
+5. Run the config preview cell, then run the training cell. Do not add
+   hyperparameters after the `python` command.
+
+After it finishes, the answer is in the folder printed by the notebook and in
+`CONFIG["output_dir"]`. The main files to open are `metrics.json`,
+`runtime.json`, and `result_summary.json`. Use `test_predictions.json` for
+manual AUROC, confusion matrix, or error examples. The matching W&B run uses
+the same `run_name`.
+
 ## HPO-Style Manual Reruns
 
-Historical TF-IDF HPO searched:
+TF-IDF HPO suggestions use this search space:
 
 ```text
 ngram_range in [[1,1], [1,2], [1,3]]
@@ -97,7 +130,7 @@ trial cap = 24
 HPO seed = 42
 ```
 
-Print the same historical random-search order:
+Print the deterministic trial list:
 
 ```text
 python src/hpo_random_search.py
@@ -143,7 +176,7 @@ trainable_params
 total_params
 ```
 
-For old final rows:
+For manual aggregate rows:
 
 ```text
 selected_hyperparams_json <- result_summary.config.hyperparameters
@@ -163,19 +196,19 @@ gradient_checkpointing = False
 
 ## W&B Check
 
-TF-IDF logs underscore-style keys:
+TF-IDF has no epoch loop, so it logs final slash-style metrics:
 
 ```text
-eval_f1_macro
-eval_accuracy
-test_f1_macro
-test_accuracy
+eval/f1_macro
+eval/accuracy
+test/f1_macro
+test/accuracy
 training_time_sec
+runtime/training_time_sec
 model_selection/best_metric
 ```
 
-That is okay. Transformer methods use slash-style keys, but TF-IDF and BiLSTM
-use the direct metric names that their local training code produces.
+That is okay. Do not expect train/loss graphs for this CPU/sklearn baseline.
 
 ## Walkthrough Check
 
@@ -183,5 +216,5 @@ use the direct metric names that their local training code produces.
 Can I say this is CPU/sklearn? Yes.
 Can I find the saved model? model.joblib.
 Can I rerun a single seed? Edit manual_config.py and run train.py.
-Can I manually rebuild old final rows? Yes, flatten result_summary and metrics.
+Can I manually rebuild aggregate rows? Yes, flatten result_summary and metrics.
 ```

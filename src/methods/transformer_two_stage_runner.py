@@ -31,7 +31,13 @@ from src.methods.transformer_trainer import (
     build_model_selection_summary,
 )
 from src.utils.run_metadata import reset_peak_memory_stats, synchronize_cuda
-from src.utils.wandb_config import WandbSettings, finish_wandb_run, init_wandb_run
+from src.utils.wandb_config import (
+    WandbSettings,
+    define_stage_wandb_metrics,
+    finish_wandb_run,
+    init_wandb_run,
+    log_wandb_trainer_history,
+)
 
 
 @dataclass(frozen=True)
@@ -116,6 +122,8 @@ def run_two_stage_transformer(
     wandb_run = init_wandb_run(setup.wandb_settings, config=experiment_config)
     try:
         write_config_snapshot(args.output_dir, experiment_config)
+        define_stage_wandb_metrics(wandb_run, "stage1")
+        define_stage_wandb_metrics(wandb_run, "stage2")
         # The parent manual run owns W&B. The two internal Trainer objects should
         # not create their own runs, otherwise one seed becomes three runs.
         stage_wandb_settings = WandbSettings(enabled=False)
@@ -157,6 +165,12 @@ def run_two_stage_transformer(
             metric_for_best_model=args.metric_for_best_model,
             greater_is_better=not args.lower_is_better,
         )
+        log_wandb_trainer_history(
+            wandb_run,
+            stage1_trainer,
+            stage="stage1",
+            extra_metrics=stage1_eval_metrics,
+        )
 
         print(f"\nStage 2: {stage2_message}...")
         # This is the key method-specific handoff. LP-FT keeps training the same
@@ -177,6 +191,12 @@ def run_two_stage_transformer(
         eval_metrics, test_metrics = evaluate_validation_and_optional_test(
             stage2_trainer,
             stage2_context,
+        )
+        log_wandb_trainer_history(
+            wandb_run,
+            stage2_trainer,
+            stage="stage2",
+            extra_metrics=eval_metrics,
         )
         model_selection = merge_stage_model_selection(
             stage1_model_selection,
@@ -219,6 +239,7 @@ def run_two_stage_transformer(
             model_artifact_paths=model_artifact_paths,
             wandb_run=wandb_run,
             extra_metrics={"stage1": stage1_eval_metrics},
+            log_extra_metrics_to_wandb=False,
         )
 
         print_run_report(

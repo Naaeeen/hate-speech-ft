@@ -3,7 +3,7 @@
 This is the classical path: load the same HateXplain splits, fit one sklearn
 pipeline on CPU, evaluate validation/test, save `model.joblib`, write the shared
 JSON files, and log one W&B run if enabled. No epochs, no GPU training, no
-launcher.
+extra run wrapper.
 """
 
 from __future__ import annotations
@@ -57,6 +57,7 @@ from src.utils.wandb_config import (  # noqa: E402
     finish_wandb_run,
     init_wandb_run,
     log_wandb,
+    namespaced_wandb_metrics,
     prefixed_wandb_scalars,
 )
 
@@ -153,12 +154,14 @@ def main() -> None:
     write_resolved_config(output_dir, config)
 
     model_artifact_paths = {}
+    best_model_checkpoint = None
     if args.no_save_final_model:
         print("\nSkipping final model save because no_save_final_model=True.")
     else:
         model_path = output_dir / "model.joblib"
         dump(pipeline, model_path)
         model_artifact_paths["model.joblib"] = model_path
+        best_model_checkpoint = "model.joblib"
         print(f"\nSaved final TF-IDF pipeline: {model_path}")
 
     prediction_paths = write_final_prediction_files(
@@ -174,7 +177,10 @@ def main() -> None:
         training_time_sec=training_time_sec,
         gpu_type=gpu_type,
     )
-    model_selection = build_model_selection(eval_metrics)
+    model_selection = build_model_selection(
+        eval_metrics,
+        best_model_checkpoint=best_model_checkpoint,
+    )
     result_paths = write_result_files(
         output_dir=output_dir,
         config=config,
@@ -188,9 +194,10 @@ def main() -> None:
     wandb_run = init_wandb_run(build_wandb_settings_from_args(args), config=config)
     log_wandb(
         wandb_run,
-        eval_metrics,
-        *([test_metrics] if test_metrics is not None else []),
+        namespaced_wandb_metrics(eval_metrics),
+        *([namespaced_wandb_metrics(test_metrics)] if test_metrics is not None else []),
         runtime_metrics,
+        prefixed_wandb_scalars("runtime", runtime_metrics),
         {
             "model_selection": model_selection,
             **prefixed_wandb_scalars("model_selection", model_selection),
