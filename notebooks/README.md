@@ -40,11 +40,12 @@ Cell order:
 6. Check package versions and GPU availability.
 7. Log in to W&B, usually through the `WANDB_API_KEY` Colab Secret.
 8. Print the method config files.
-9. Choose one method by setting the script, config module, and config file.
-10. Reload and preview the config that will run.
-11. Run the selected method once.
-12. Define helpers for reading one finished run folder.
-13. Optional post-run checks for the summary and saved predictions.
+9. Optional: print HPO suggestions.
+10. Choose one method by setting the script, config module, and config file.
+11. Reload and preview the config that will run.
+12. Run the selected method once.
+13. Define helpers for reading one finished run folder.
+14. Optional post-run checks for the summary and saved predictions.
 
 ## If You Already Have Hyperparameters
 
@@ -69,6 +70,23 @@ Keep `output_dir` under Drive when you want the results to survive Colab:
 ```text
 /content/drive/MyDrive/hate_speech_ft/outputs/<run_name>
 ```
+
+## Getting HPO Suggestions
+
+The helper only prints suggestions:
+
+```text
+src/hpo_random_search.py
+```
+
+Edit `METHODS`, `HPO_SEED`, or `TRIAL_CAPS` if needed, then run:
+
+```python
+!python src/hpo_random_search.py
+```
+
+Each trial has `manual_config_updates`. Put one trial into that method's
+`manual_config.py`, preview the config, and run the selected method once.
 
 ## Method Code
 

@@ -78,6 +78,18 @@ output_dir
 Leave `data_fraction_seed = 42` for full-data runs unless this is a new
 subsampling experiment.
 
+## HPO Suggestions
+
+For Full FT search suggestions, set `METHODS = ["full-ft"]` in
+`src/hpo_random_search.py`, then run:
+
+```text
+python src/hpo_random_search.py
+```
+
+Each trial prints `manual_config_updates`. Put one trial into
+`src/methods/distilbert_full/manual_config.py`, preview it, and run one setup.
+
 ## Run One Final Seed
 
 In Colab, edit:

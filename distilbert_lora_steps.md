@@ -64,6 +64,18 @@ output_dir
 
 Keep `lora_alpha` equal to `lora_r` for these configs.
 
+## HPO Suggestions
+
+For LoRA search suggestions, set `METHODS = ["lora"]` in
+`src/hpo_random_search.py`, then run:
+
+```text
+python src/hpo_random_search.py
+```
+
+Each trial prints `manual_config_updates`. Put one trial into
+`src/methods/distilbert_lora/manual_config.py`, preview it, and run one setup.
+
 ## Run One Final Seed
 
 Edit:

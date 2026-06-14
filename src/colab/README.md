@@ -48,6 +48,31 @@ methods use `stage1_epochs` and `stage2_epochs`. BiLSTM keeps
 After editing, go back to the notebook, run the config-preview cell, then run
 the selected method once.
 
+## HPO Suggestions
+
+For random-search suggestions, edit the constants at the top of:
+
+```text
+src/hpo_random_search.py
+```
+
+Usually only these need changing:
+
+```text
+METHODS
+HPO_SEED
+TRIAL_CAPS
+```
+
+Then run the print-only helper:
+
+```python
+!python src/hpo_random_search.py
+```
+
+Each printed trial has `manual_config_updates`. Put one trial into the method's
+`manual_config.py`, preview the config, and run that single setup.
+
 ## Where Results Are
 
 Main files in `CONFIG["output_dir"]`:

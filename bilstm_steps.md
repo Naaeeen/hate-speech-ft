@@ -72,6 +72,18 @@ run_name
 output_dir
 ```
 
+## HPO Suggestions
+
+For BiLSTM search suggestions, set `METHODS = ["bilstm"]` in
+`src/hpo_random_search.py`, then run:
+
+```text
+python src/hpo_random_search.py
+```
+
+Each trial prints `manual_config_updates`. Put one trial into
+`src/methods/bilstm/manual_config.py`, preview it, and run one setup.
+
 ## Run One Final Seed
 
 Edit:

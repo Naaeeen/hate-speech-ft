@@ -55,6 +55,18 @@ output_dir
 
 Leave the other config values alone unless this run changes the baseline.
 
+## HPO Suggestions
+
+For TF-IDF search suggestions, set `METHODS = ["tfidf-logreg"]` in
+`src/hpo_random_search.py`, then run:
+
+```text
+python src/hpo_random_search.py
+```
+
+Each trial prints `manual_config_updates`. Put one trial into
+`src/methods/tfidf_logreg/manual_config.py`, preview it, and run one setup.
+
 ## Run One Final Seed
 
 Edit:

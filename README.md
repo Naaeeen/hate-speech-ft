@@ -62,6 +62,18 @@ src/methods/bilstm/train.py
 The train scripts read their own `manual_config.py` directly. Edit that file
 instead of editing a command.
 
+## HPO Suggestions
+
+`src/hpo_random_search.py` prints deterministic random-search suggestions. Edit
+`METHODS`, `HPO_SEED`, or `TRIAL_CAPS` at the top of that file, then run:
+
+```text
+python src/hpo_random_search.py
+```
+
+Each trial includes `manual_config_updates`. Put one trial into the matching
+method's `manual_config.py`, preview it in Colab, and run that setup once.
+
 ## Output Contract
 
 Completed runs write:
@@ -89,7 +101,7 @@ are the run record.
   prediction files.
 - Use a new `output_dir` for each manual run. If you want to reuse an existing
   directory, set `overwrite_output_dir = True` only when you mean to replace
-  to replace prior run artifacts.
+  prior run artifacts.
 - Run one seed at a time. To run seeds 42, 43, and 44, change `seed`,
   `run_name`, and `output_dir` manually for each run.
 
