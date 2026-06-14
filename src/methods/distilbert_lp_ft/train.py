@@ -48,7 +48,7 @@ def build_stage_plan(context, _args) -> TwoStagePlan:
         """Unfreeze the stage-1 model and continue with it for stage 2."""
 
         # Unlike Efficient-Head, LP-FT continues from the same stage-1 model.
-        # We just unfreeze everything before stage 2 starts.
+        # Unfreeze everything before stage 2 starts.
         set_full_finetune_trainability(context.model)
         return context
 

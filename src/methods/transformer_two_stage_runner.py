@@ -1,10 +1,10 @@
 """Shared runner for the two-stage Transformer methods.
 
 LP-FT and Efficient-Head FT both train in two stages, but they do not mean the
-same thing. So this file only owns the common shell: build stage training args,
+same thing. This runner owns the shared mechanics: build stage training args,
 run stage 1, build the stage-2 context, run stage 2, then save one final set of
-artifacts. Stage-local W&B is disabled on purpose, because the manual workflow
-wants one readable W&B run per experiment run.
+artifacts. Stage-local W&B is disabled so each experiment has one readable W&B
+run.
 """
 
 from __future__ import annotations
@@ -124,7 +124,7 @@ def run_two_stage_transformer(
         write_config_snapshot(args.output_dir, experiment_config)
         define_stage_wandb_metrics(wandb_run, "stage1")
         define_stage_wandb_metrics(wandb_run, "stage2")
-        # The parent manual run owns W&B. The two internal Trainer objects should
+        # The parent manual run owns W&B. The two internal Trainer objects do
         # not create their own runs, otherwise one seed becomes three runs.
         stage_wandb_settings = WandbSettings(enabled=False)
         stage1_args = build_hf_training_arguments_from_args(
@@ -173,9 +173,9 @@ def run_two_stage_transformer(
         )
 
         print(f"\nStage 2: {stage2_message}...")
-        # This is the key method-specific handoff. LP-FT keeps training the same
-        # model state; Efficient-Head rebuilds a fresh backbone and copies the
-        # trained head. The runner does not assume which version it is.
+        # Method-specific handoff: LP-FT keeps training the same model state,
+        # while Efficient-Head rebuilds a fresh backbone and copies the trained
+        # head. The runner does not assume which version it is.
         stage2_context = plan.build_stage2_context(stage1_trainer.model)
         stage2_trainer = build_hf_trainer(
             stage2_context,

@@ -1,8 +1,7 @@
 """Method-specific pieces for Efficient-Head FT.
 
-The important bit: stage 1 is just a way to train a better classification head.
-The final model is built in stage 2 from a fresh DistilBERT backbone, then the
-stage-1 head weights are copied over.
+Stage 1 trains the classification head. Stage 2 builds the final model from a
+fresh DistilBERT backbone, then copies over the stage-1 head weights.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ def build_stage2_context(stage1_model, context, args: Any):
     from transformers import AutoModelForSequenceClassification
 
     # Only the classification head moves forward. The stage-1 backbone and LoRA
-    # adapters are intentionally discarded so stage 2 tests "better head init",
+    # adapters are discarded so stage 2 tests "better head init",
     # not "continue training the adapter model".
     head_state = extract_classification_head_state_dict(stage1_model)
     stage2_model = AutoModelForSequenceClassification.from_pretrained(

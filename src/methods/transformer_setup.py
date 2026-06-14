@@ -1,9 +1,9 @@
 """Setup helpers shared by the Transformer methods.
 
-This file is the "get the run ready" part: validate the manual config, resolve
-precision and W&B settings, protect the output directory, load HateXplain,
-tokenize it, build the DistilBERT classifier, and optionally prepare class
-weights. Training itself happens in the runner files.
+Transformer setup validates the manual config, resolves precision and W&B
+settings, protects the output directory, loads HateXplain, tokenizes it, builds
+the DistilBERT classifier, and optionally prepares class weights. Training
+itself happens in the runner files.
 """
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ def prepare_hf_classification_run(
     test_data = None
     if args.run_test:
         # Test data is only loaded when the manual config asks for it. That keeps
-        # HPO/validation-only reruns from accidentally touching the test split.
+        # validation-only checks from touching the test split.
         test_data = build_tokenized_dataset_with_stats(
             dataset[test_split],
             tokenizer=tokenizer,

@@ -1,7 +1,7 @@
 # DistilBERT LoRA Manual Steps
 
-This is the manual runbook for the LoRA method. It keeps the research setup
-clear: edit one config, run one seed, and copy the run metrics from JSON.
+Use this for a single LoRA run: edit one config, run one seed, and inspect the
+run JSON files.
 
 ## Files To Use
 
@@ -13,12 +13,10 @@ src/methods/distilbert_lora/config.py
 src/methods/peft_utils.py
 src/methods/transformer_runner.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
@@ -56,7 +54,7 @@ gradient_checkpointing = False
 class_weighting = none
 ```
 
-For final seeds, change:
+For each run, change:
 
 ```text
 seed
@@ -93,7 +91,7 @@ python src/methods/distilbert_lora/train.py
 
 Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` and pick a GPU runtime.
 
-If you have one LoRA HP set from HPO or a results table, use it like this:
+If you have one LoRA HP set, use it like this:
 
 1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
    install packages, and log in to W&B if online logging is needed.
@@ -111,37 +109,15 @@ MANUAL_CONFIG_FILE = "src/methods/distilbert_lora/manual_config.py"
    `lora_dropout`, `max_length`, and related training fields.
 4. Set one `seed`, one `run_name`, and one `output_dir`. Keep
    `modules_to_save = ["pre_classifier", "classifier"]` for the final setup
-   unless you are intentionally changing the method.
+   unless this run changes the method.
 5. Run the config preview cell, then the training cell. Keep the command as
    `python src/methods/distilbert_lora/train.py`.
 
-After training, open the folder from `output_dir`. `result_summary.json` is the
-best single answer file because it records the selected HPs, trainable/total
-params, metrics, and artifact paths. `metrics.json` is the quick score file,
-and `test_predictions.json` supports manual prediction analysis. In W&B, use
-the same `run_name` and check final `eval/*`, `test/*`, and train-loss curves.
-
-## HPO-Style Manual Reruns
-
-LoRA HPO suggestions use this search space:
-
-```text
-target_modules in [["q_lin", "v_lin"], ["q_lin", "k_lin", "v_lin", "out_lin"]]
-lora_r in [4, 8, 16]
-learning_rate in [0.00005, 0.0001, 0.0002, 0.0003]
-lora_alpha = lora_r
-trial cap = 18
-HPO seed = 42
-```
-
-Use:
-
-```text
-python src/hpo_random_search.py
-```
-
-Set `METHODS = ["lora"]` first if you want only LoRA. Copy
-`manual_config_updates` into `manual_config.py`.
+After training, open the folder from `output_dir`. `result_summary.json`
+records the config, trainable/total params, metrics, and artifact paths.
+`metrics.json` is the quick score file, and `test_predictions.json` supports
+prediction analysis. In W&B, use the same `run_name` and check final `eval/*`,
+`test/*`, and train-loss curves.
 
 ## Expected Output Files
 
@@ -158,10 +134,9 @@ tokenizer files
 checkpoint-*
 ```
 
-`result_summary.json -> artifacts -> model` is the easiest way to see exactly
-what was saved.
+`result_summary.json -> artifacts -> model` lists the saved model artifacts.
 
-## Metrics To Copy
+## Metric Keys
 
 ```text
 eval_f1_macro
@@ -181,14 +156,6 @@ trainable_params
 total_params
 ```
 
-For manual aggregate rows:
-
-```text
-selected_hyperparams_json <- result_summary.config.hyperparameters
-val_macro_f1 <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
-```
-
 ## W&B Check
 
 LoRA uses the same slash-style W&B keys as the other Transformer methods:
@@ -205,22 +172,13 @@ model_selection/best_metric
 model_selection/best_epoch
 ```
 
-There should be one W&B run for one manual seed.
+One manual seed creates one W&B run.
 
 ## Sanity Checks
 
 ```text
-trainable_params should be much smaller than total_params
-modules_to_save should include pre_classifier and classifier
-W&B should have exactly one run for the one script you launched
-prediction files should exist when run_test=True
-```
-
-## Walkthrough Check
-
-If a teammate asks "what do I copy from HPO?", answer:
-
-```text
-Copy manual_config_updates into distilbert_lora/manual_config.py.
-Then set seed/run_name/output_dir manually and run train.py once.
+trainable_params is much smaller than total_params
+modules_to_save includes pre_classifier and classifier
+one script launch creates one W&B run
+prediction files exist when run_test=True
 ```

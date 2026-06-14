@@ -8,7 +8,7 @@ from src.methods.peft_utils import set_classification_head_trainability
 
 
 def _iter_backbone_modules(model) -> Iterable:
-    """Yield backbone modules that should stay in eval mode while the head trains."""
+    """Yield backbone modules that stay in eval mode while the head trains."""
 
     seen = set()
     for module in (

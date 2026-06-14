@@ -1,7 +1,7 @@
 # DistilBERT Efficient-Head FT Manual Steps
 
-This is the manual runbook for Efficient-Head FT. It keeps the research setup
-clear: edit one config, run one seed, and copy the run metrics from JSON.
+Use this for a single Efficient-Head FT run: edit one config, run one seed, and
+inspect the run JSON files.
 
 ## Files To Use
 
@@ -13,12 +13,10 @@ src/methods/distilbert_efficient_head/config.py
 src/methods/peft_utils.py
 src/methods/transformer_two_stage_runner.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
@@ -29,7 +27,7 @@ Stage 1: train LoRA adapters plus the classification head.
 Stage 2: load a fresh DistilBERT backbone, copy only the trained head, then full fine-tune.
 ```
 
-This is not normal LoRA, because the final model is not just the stage-1 LoRA
+It is not normal LoRA, because the final model is more than the stage-1 LoRA
 adapter. It is also not LP-FT, because stage 2 starts from a fresh pretrained
 backbone with the trained head copied in.
 
@@ -62,7 +60,7 @@ gradient_checkpointing = False
 class_weighting = none
 ```
 
-For final seeds, change:
+For each run, change:
 
 ```text
 seed
@@ -98,13 +96,12 @@ The method runs both stages itself. Do not manually run separate stage scripts.
 ## Colab Notebook Walkthrough
 
 Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` with a GPU runtime.
-Efficient-Head FT has two stages, but Colab should still launch one script
-only.
+Efficient-Head FT has two stages, but Colab launches one script only.
 
 If you already have one HP set, run it like this:
 
 1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
-   install packages, and log in to W&B if this run should sync online.
+   install packages, and log in to W&B if this run will sync online.
 2. In the model-pick cell, set:
 
 ```python
@@ -126,32 +123,10 @@ MANUAL_CONFIG_FILE = "src/methods/distilbert_efficient_head/manual_config.py"
 
 When it finishes, check `output_dir`. `metrics.json` gives final metrics plus
 stage-1 metrics, `runtime.json` gives total/stage runtime, and
-`result_summary.json` is the easiest file for manual aggregation. Use
+`result_summary.json` is the compact run summary. Use
 `test_predictions.json` for AUROC/confusion/error-example work. In W&B, one
-run with the same `run_name` should contain `stage1/*`, `stage2/*`, and final
+run with the same `run_name` contains `stage1/*`, `stage2/*`, and final
 `eval/*`/`test/*` keys.
-
-## HPO-Style Manual Reruns
-
-Efficient-Head HPO suggestions use this search space:
-
-```text
-stage1_lora_r in [4, 8]
-stage1_lora_alpha = stage1_lora_r
-stage1_learning_rate in [0.0001, 0.0002, 0.0003]
-stage2_learning_rate in [0.00001, 0.00002, 0.00003]
-trial cap = 10
-HPO seed = 42
-```
-
-Print the trial list:
-
-```text
-python src/hpo_random_search.py
-```
-
-Set `METHODS = ["efficient-head-ft"]` first if you only want this method. Copy
-`manual_config_updates` into `manual_config.py`.
 
 ## Expected Output Files
 
@@ -169,13 +144,13 @@ model.safetensors or pytorch_model.bin
 tokenizer files
 ```
 
-`metrics.json` should include stage-1 validation metrics. `result_summary.json`
+`metrics.json` includes stage-1 validation metrics. `result_summary.json`
 records stage 1 with `stage1_` model-selection keys, such as
 `stage1_best_metric` and `stage1_best_model_checkpoint`. The final stage uses
 the normal unprefixed keys, such as `best_metric`, `best_epoch`, and
 `best_model_checkpoint`.
 
-## Metrics To Copy
+## Metric Keys
 
 ```text
 eval_f1_macro
@@ -193,17 +168,9 @@ trainable_params
 total_params
 ```
 
-For manual aggregate rows:
-
-```text
-selected_hyperparams_json <- result_summary.config.hyperparameters
-val_macro_f1 <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
-```
-
 ## W&B Check
 
-One W&B run should contain final metrics plus stage-1/stage-2 training curves:
+One W&B run contains final metrics plus stage-1/stage-2 training curves:
 
 ```text
 eval/f1_macro
@@ -216,12 +183,4 @@ stage2/global_step
 stage2/eval/f1_macro
 model_selection/stage1_best_metric
 model_selection/stage2_best_metric
-```
-
-## Walkthrough Check
-
-```text
-Can I explain what transfers from stage 1 to stage 2? Only the classification head.
-Can I explain why final cost is not LoRA-only? Stage 2 full-fine-tunes all parameters.
-Can I copy HPO suggestions manually? Yes, use `manual_config_updates`.
 ```

@@ -24,4 +24,4 @@ parent run. After each stage finishes, the parent run logs the Trainer history
 with clear prefixes such as `stage1/train/loss`, `stage1/eval/f1_macro`,
 `stage2/train/loss`, and `stage2/eval/f1_macro`. The same run also records the
 final validation/test metrics, runtime, and model-selection fields. Local JSON
-files are still the source of truth for manual copying.
+files remain the durable run record.

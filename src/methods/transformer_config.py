@@ -25,11 +25,11 @@ def common_transformer_hyperparameters(
     args: Any,
     precision_policy: dict[str, Any],
 ) -> dict[str, Any]:
-    """Collect the Transformer knobs that should appear in aggregate tables.
+    """Collect the Transformer knobs saved in `result_summary.json`.
 
     The manual config uses modern HF names like `per_device_train_batch_size`,
-    while the saved result JSON keeps shorter table names like `batch_size`.
-    This keeps manual table rebuilding simple.
+    while the saved result JSON keeps shorter names like `batch_size` for
+    quick reading.
     """
 
     return {
@@ -81,8 +81,8 @@ def build_transformer_experiment_config(
 
     Method packages pass in their special fields, while this shared function
     adds the dataset policy, split accounting, seed, model/tokenizer names,
-    hyperparameters, and parameter/runtime context. It is intentionally just a
-    metadata builder, not an experiment registry.
+    hyperparameters, and parameter/runtime context. It builds metadata, not an
+    experiment registry.
     """
 
     train_size = run_info["train_size"]

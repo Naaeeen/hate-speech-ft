@@ -1,7 +1,7 @@
 """Shared HateXplain label construction policy.
 
 HateXplain has three annotator labels per post in the classification task.
-For the main 3-class experiments, we use strict majority vote and exclude
+The main 3-class experiments use strict majority vote and exclude
 samples where all three annotators disagree.
 """
 

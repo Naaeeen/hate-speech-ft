@@ -1,10 +1,9 @@
-"""Shared local result-file contract for every manual run.
+"""Shared local result-file contract for manual runs.
 
-All methods should leave behind the same small set of evidence files:
-`resolved_config.json`, `metrics.json`, `runtime.json`, `result_summary.json`,
-and prediction files when test evaluation is enabled. This file also protects
-existing outputs from being accidentally overwritten, which matters a lot when
-we run one seed at a time in Colab.
+Each method writes the same evidence files: `resolved_config.json`,
+`metrics.json`, `runtime.json`, `result_summary.json`, and prediction files
+when test evaluation is enabled. The output-directory checks prevent one Colab
+run from overwriting another.
 """
 
 from __future__ import annotations
@@ -60,7 +59,7 @@ def _json_safe(value: Any) -> Any:
     """Convert common ML objects into plain JSON-friendly values.
 
     Tensors, numpy arrays, dataclasses, and Paths are convenient while training,
-    but annoying in result files. This normalizes them before we write JSON.
+    but they need conversion before being written to JSON.
     """
 
     if isinstance(value, dict):
@@ -81,12 +80,7 @@ def _json_safe(value: Any) -> Any:
 
 
 def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
-    """Write one pretty JSON file and return its path.
-
-    A lot of the training code builds dictionaries with Paths, numpy scalars, or
-    tensors inside. This helper quietly normalizes those first, so teammates can
-    open the result files in Colab without seeing Python-only object reprs.
-    """
+    """Write an indented JSON file after normalizing common Python objects."""
 
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,10 +92,10 @@ def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
 
 
 def validate_sample_selection_args(args: Any) -> None:
-    """Check the manual sample-limit knobs before we touch the dataset.
+    """Validate manual sample-limit options before loading the dataset.
 
-    These options are mainly for tiny smoke runs. If they are invalid, it is
-    nicer to fail right away than after downloading/tokenizing the dataset.
+    These options are mainly for small smoke runs. Invalid values fail early,
+    before dataset download or tokenization work starts.
     """
 
     data_fraction = getattr(args, "data_fraction", None)
@@ -141,7 +135,7 @@ def clear_existing_run_artifacts(output_dir: str | Path) -> list[Path]:
 
 
 def prepare_output_dir_for_run(output_dir: str | Path, *, overwrite: bool = False) -> Path:
-    """Create or clean the output directory for exactly one manual run."""
+    """Create or clean the output directory for one manual run."""
 
     output_path = Path(output_dir)
     if output_path.exists() and not output_path.is_dir():
@@ -153,7 +147,7 @@ def prepare_output_dir_for_run(output_dir: str | Path, *, overwrite: bool = Fals
         raise ValueError(
             f"Output directory '{output_dir}' already contains run artifacts "
             f"({preview}). Use a unique output_dir for a new run, or set "
-            "overwrite_output_dir=True only when intentionally replacing artifacts."
+            "overwrite_output_dir=True only when replacing artifacts."
         )
     if overwrite:
         clear_existing_run_artifacts(output_path)
@@ -179,11 +173,10 @@ def write_result_files(
     artifact_paths: dict[str, str | Path] | None = None,
     extra_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
-    """Write the core result files used for manual aggregation later.
+    """Write the core result files for this run.
 
-    We only write success outputs here. There is intentionally no failure
-    summary machinery in the manual workflow: if a run fails, we fix/rerun it
-    rather than treating the failed directory as research evidence.
+    Only successful runs write summary files. Failed runs need to be fixed before
+    another run is started.
     """
 
     output_path = Path(output_dir)

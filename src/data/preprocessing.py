@@ -1,9 +1,8 @@
 """Shared dataset-level preprocessing for HateXplain experiments.
 
-This module is the common layer every experiment should run before entering a
-method-specific pipeline. It standardizes text construction, label construction,
-optional no-majority filtering, deterministic data fractions, and transformer
-tokenization wrappers.
+Run this layer before method-specific training code. It standardizes text
+construction, label construction, optional no-majority filtering, deterministic
+data fractions, and Transformer tokenization wrappers.
 """
 
 from collections.abc import Iterable, Mapping

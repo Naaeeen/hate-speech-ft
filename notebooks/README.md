@@ -10,8 +10,8 @@ Use:
 notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb
 ```
 
-The notebook should stay thin and readable. Each code cell now has a short text
-cell before it explaining what the cell does and why we need it.
+The notebook is a Colab run sheet: setup cells, one method choice, one training
+cell, and a few output checks.
 
 Quick flow:
 
@@ -24,15 +24,13 @@ Quick flow:
 6. Edit that method's `manual_config.py`: one seed, one output directory, one
    run name, and one hyperparameter set.
 7. Run the method script with no extra flags.
-8. Inspect `result_summary.json` and manually copy the run metrics into your
-   CSV, notes, or paper table.
+8. Inspect `result_summary.json` and record the metrics you need.
 
-The notebook is only for setup, one manual run, and checking that run's output
-folder. Reference result files can still be inspected manually.
+Keep the notebook limited to setup, one run, and output checks.
 
 ## Cell Map
 
-The notebook has short text cells before each code cell. The code cells are:
+Cell order:
 
 1. Mount Google Drive so outputs survive the Colab session.
 2. Create the Drive project folder, output folder, and HF cache.
@@ -42,12 +40,11 @@ The notebook has short text cells before each code cell. The code cells are:
 6. Check package versions and GPU availability.
 7. Log in to W&B, usually through the `WANDB_API_KEY` Colab Secret.
 8. Print the method config files.
-9. Optionally print HPO suggestions.
-10. Choose one method by setting the script, config module, and config file.
-11. Reload and preview the config that will actually run.
-12. Run the selected method once.
-13. Define helpers for reading one finished run folder.
-14. Optional post-run checks for the summary and saved predictions.
+9. Choose one method by setting the script, config module, and config file.
+10. Reload and preview the config that will run.
+11. Run the selected method once.
+12. Define helpers for reading one finished run folder.
+13. Optional post-run checks for the summary and saved predictions.
 
 ## If You Already Have Hyperparameters
 
@@ -61,8 +58,8 @@ Set `seed`, `run_name`, `output_dir`, `run_test`, W&B settings, and the model
 hyperparameters there. Then choose the matching `METHOD_SCRIPT` in the notebook,
 preview the config cell, and run the training cell once.
 
-If you are copying values from saved CSV/JSON notes, check the field names
-before pasting. Transformer configs use `per_device_train_batch_size` and
+If you are copying values from notes, check the field names before pasting.
+Transformer configs use `per_device_train_batch_size` and
 `per_device_eval_batch_size`; Full FT and LoRA use `num_train_epochs`; two-stage
 methods use `stage1_epochs` and `stage2_epochs`. BiLSTM keeps `batch_size`,
 `eval_batch_size`, `epochs`, `tokenizer_min_freq`, and `max_vocab_size`.
@@ -72,23 +69,6 @@ Keep `output_dir` under Drive when you want the results to survive Colab:
 ```text
 /content/drive/MyDrive/hate_speech_ft/outputs/<run_name>
 ```
-
-## Getting HPO Suggestions
-
-The helper is only a printer:
-
-```text
-src/hpo_random_search.py
-```
-
-Edit `METHODS`, `HPO_SEED`, or `TRIAL_CAPS` if needed, then run:
-
-```python
-!python src/hpo_random_search.py
-```
-
-Copy one trial's `manual_config_updates` into that method's `manual_config.py`.
-After that, use the normal one-run notebook flow.
 
 ## Method Code
 
@@ -109,12 +89,12 @@ Change only the method's `manual_config.py` for the single run you are
 launching.
 
 If you need a fresh copy of the code after editing `manual_config.py`, delete
-the Colab repo directory or start a fresh runtime first. The notebook should not
-run `git pull` over a dirty manual-config edit.
+the Colab repo directory or start a fresh runtime first. Avoid running `git
+pull` over a dirty manual-config edit.
 
 ## Single-Run Outputs
 
-Each run should have its own output directory. The important files are:
+Each run needs its own output directory. Main files:
 
 ```text
 resolved_config.json
@@ -125,10 +105,9 @@ eval_predictions.json    # only when run_test=True
 test_predictions.json    # only when run_test=True
 ```
 
-For manual aggregation, copy one row per run from `result_summary.json`. Keep at
-least method, run name, seed, selected hyperparameters, validation metrics, test
-metrics when present, runtime, GPU/memory fields, trainable/total parameter
-counts, and prediction-file paths.
+Use `result_summary.json` when you need one compact record of method, run name,
+seed, config values, validation metrics, test metrics when present, runtime,
+GPU/memory fields, parameter counts, and prediction-file paths.
 
 ## W&B Secret
 
@@ -138,8 +117,8 @@ For online W&B logging in Colab, add this Colab Secret:
 WANDB_API_KEY
 ```
 
-Do not paste the API key into notebook cells. If the secret is missing, uncheck
-W&B or choose `offline` / `disabled`; the local JSON files are still written.
+Do not paste the API key into notebook cells. If the secret is missing, use
+`offline` or `disabled`; local JSON files are still written.
 
 ## Keeping Notebooks Clean
 
@@ -148,4 +127,4 @@ Before committing:
 - clear cell outputs
 - do not commit API keys
 - do not commit downloaded model files
-- keep the notebook as a thin run sheet, not a second implementation
+- keep the notebook limited to setup, launch, and output checks

@@ -1,8 +1,7 @@
 # Frozen DistilBERT Manual Steps
 
-This runbook is for the frozen-backbone DistilBERT method. The workflow is
-simple: edit `manual_config.py`, run one seed, save the JSON files, and copy the
-metrics by hand.
+Use this for a single frozen-backbone DistilBERT run: edit `manual_config.py`,
+run one seed, and inspect the output JSON files.
 
 ## Files To Use
 
@@ -13,12 +12,10 @@ src/methods/frozen_distilbert/training.py
 src/methods/frozen_distilbert/config.py
 src/methods/transformer_runner.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
@@ -58,7 +55,7 @@ gradient_checkpointing = False
 class_weighting = none
 ```
 
-Important naming thing: use `head_learning_rate`, not `learning_rate`.
+Important config name: use `head_learning_rate`, not `learning_rate`.
 
 For final seeds, change only:
 
@@ -93,8 +90,8 @@ python src/methods/frozen_distilbert/train.py
 
 ## Colab Notebook Walkthrough
 
-Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` with a GPU runtime. This is
-head-only training, but it still uses DistilBERT forward passes, so GPU helps.
+Use `notebooks/hate_speech_ft_COLAB_EXAMPLE.ipynb` with a GPU runtime.
+Head-only training still uses DistilBERT forward passes, so a GPU helps.
 
 If you already have one HP set, use it like this:
 
@@ -117,32 +114,11 @@ MANUAL_CONFIG_FILE = "src/methods/frozen_distilbert/manual_config.py"
 5. Run the config preview cell, then the training cell. Do not pass HPs as
    command-line flags.
 
-The answer is saved in `output_dir`. Open `metrics.json` for scores,
+The run is saved in `output_dir`. Open `metrics.json` for scores,
 `runtime.json` for time/GPU info, and `result_summary.json` for selected HPs,
 trainable params, model-selection details, and artifact paths. Use
 `test_predictions.json` for prediction analysis. In W&B, find the run by
-`run_name`; trainable params should make it clear this is the frozen-backbone
-method.
-
-## HPO-Style Manual Reruns
-
-Frozen DistilBERT HPO suggestions use this search space:
-
-```text
-head_learning_rate in [0.0001, 0.0003, 0.001, 0.003]
-trial cap = 4
-HPO seed = 42
-```
-
-Print the deterministic trial list with:
-
-```text
-python src/hpo_random_search.py
-```
-
-Set `METHODS = ["frozen-backbone"]` first if you only want this method. Copy a
-trial's `manual_config_updates` into the frozen manual config. Use `run_test =
-False` for validation-only HPO and `run_test = True` for final test runs.
+`run_name`; trainable params identify it as the frozen-backbone method.
 
 ## Expected Output Files
 
@@ -159,13 +135,13 @@ tokenizer files
 checkpoint-*
 ```
 
-The run summary should show that `trainable_params` is much smaller than
+The run summary shows that `trainable_params` is much smaller than
 `total_params`, because only the classification head trains.
 `training_args.bin` may also appear depending on the installed Transformers
 version, but the reliable artifact list is
 `result_summary.json -> artifacts -> model`.
 
-## Metrics To Copy
+## Metric Keys
 
 ```text
 eval_f1_macro
@@ -185,17 +161,9 @@ trainable_params
 total_params
 ```
 
-Manual aggregate mapping:
-
-```text
-val_macro_f1  <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
-selected_hyperparams_json <- result_summary.config.hyperparameters
-```
-
 ## W&B Check
 
-One run should log to W&B when `use_wandb=True`. Transformer metric names use:
+One run logs to W&B when `use_wandb=True`. Transformer metric names use:
 
 ```text
 eval/f1_macro
@@ -205,13 +173,4 @@ gpu_hours
 model_selection/best_metric
 ```
 
-One manual seed should create one readable W&B run.
-
-## Walkthrough Check
-
-```text
-Can I explain what is frozen? Yes, the DistilBERT backbone.
-Can I explain what trains? Yes, the classification head.
-Can I run one seed without CLI flags? Yes, edit manual_config.py and run train.py.
-Can I manually reproduce aggregate rows? Yes, copy the JSON fields listed above.
-```
+One manual seed creates one readable W&B run.

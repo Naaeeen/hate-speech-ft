@@ -1,9 +1,8 @@
 """Manual entrypoint for Efficient-Head FT.
 
-This method is a little unusual, so here is the short version: stage 1 trains
-LoRA adapters plus the classification head; stage 2 throws away the adapters
-and freshens the DistilBERT backbone, but copies the trained head forward. The
-manual config is the only place teammates should edit research settings.
+Stage 1 trains LoRA adapters plus the classification head. Stage 2 drops the
+adapters, reloads a fresh DistilBERT backbone, and copies the trained head
+forward. Edit `manual_config.py`, not this file, for research settings.
 """
 
 from __future__ import annotations

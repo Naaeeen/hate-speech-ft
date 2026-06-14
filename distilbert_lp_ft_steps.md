@@ -1,7 +1,7 @@
 # DistilBERT LP-FT Manual Steps
 
-This runbook is for LP-FT, which means linear probing first and full fine-tuning
-second. Use it for the direct one-run-at-a-time workflow.
+Use this for a single LP-FT run. LP-FT means linear probing first and full
+fine-tuning second.
 
 ## Files To Use
 
@@ -12,12 +12,10 @@ src/methods/distilbert_lp_ft/training.py
 src/methods/distilbert_lp_ft/config.py
 src/methods/transformer_two_stage_runner.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
@@ -29,7 +27,7 @@ Stage 2: unfreeze everything and continue full fine-tuning from stage 1.
 ```
 
 So it is different from frozen DistilBERT, which stops after head training. For
-compute comparison, LP-FT should be treated as a two-stage method whose final
+compute comparison, treat LP-FT as a two-stage method whose final
 stage trains the full model.
 
 ## Current Final Config
@@ -58,7 +56,7 @@ class_weighting = none
 
 Use the stage-specific names. Do not use plain `learning_rate` for LP-FT.
 
-For final seeds, change:
+For each run, change:
 
 ```text
 seed
@@ -119,31 +117,11 @@ MANUAL_CONFIG_FILE = "src/methods/distilbert_lp_ft/manual_config.py"
 5. Run the config preview cell, then run the training cell once. It will run
    stage 1 and stage 2 inside the same W&B run.
 
-The answer is in `output_dir`. Use `metrics.json` for final eval/test metrics
+The run files are in `output_dir`. Use `metrics.json` for final eval/test metrics
 and the `stage1` block, `runtime.json` for total/stage runtime, and
-`result_summary.json` for the clean manual-aggregation row. Use
+`result_summary.json` for the compact run summary. Use
 `test_predictions.json` for prediction analysis. In W&B, look for the same
 `run_name` and check `stage1/*`, `stage2/*`, plus final `eval/*` and `test/*`.
-
-## HPO-Style Manual Reruns
-
-LP-FT HPO suggestions use this search space:
-
-```text
-stage1_head_learning_rate in [0.0001, 0.0003, 0.001]
-stage2_learning_rate in [0.00001, 0.00002, 0.00003]
-trial cap = 9
-HPO seed = 42
-```
-
-Print the trial list:
-
-```text
-python src/hpo_random_search.py
-```
-
-Set `METHODS = ["lp-ft"]` first if you only want LP-FT. Copy
-`manual_config_updates` into the LP-FT manual config.
 
 ## Expected Output Files
 
@@ -161,13 +139,13 @@ model.safetensors or pytorch_model.bin
 tokenizer files
 ```
 
-`metrics.json` should also include a `stage1` block with stage-1 validation
+`metrics.json` also includes a `stage1` block with stage-1 validation
 metrics. `result_summary.json -> model_selection` keeps stage-1 keys with the
 `stage1_` prefix, such as `stage1_best_metric` and
 `stage1_best_model_checkpoint`. The final stage uses the normal unprefixed keys,
 such as `best_metric`, `best_epoch`, and `best_model_checkpoint`.
 
-## Metrics To Copy
+## Metric Keys
 
 ```text
 eval_f1_macro
@@ -185,19 +163,10 @@ trainable_params
 total_params
 ```
 
-For manual aggregate rows:
-
-```text
-stage1_eval_f1_macro <- metrics.stage1.stage1_eval_f1_macro
-val_macro_f1 <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
-selected_hyperparams_json <- result_summary.config.hyperparameters
-```
-
 ## W&B Check
 
 The parent run logs final metrics plus stage-1/stage-2 training curves. The
-internal Trainer objects should not create separate W&B runs.
+internal Trainer objects do not create separate W&B runs.
 
 Useful keys:
 
@@ -212,13 +181,4 @@ stage2/global_step
 stage2/eval/f1_macro
 model_selection/stage1_best_metric
 model_selection/stage2_best_metric
-```
-
-## Walkthrough Check
-
-```text
-Can I identify both stages? Yes.
-Can I set both learning rates in manual_config.py? Yes.
-Can I rerun seed 42/43/44 one at a time? Yes.
-Can I manually rebuild stage columns? Yes, from metrics.json and model_selection.
 ```

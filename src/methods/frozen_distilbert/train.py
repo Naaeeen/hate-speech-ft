@@ -1,6 +1,6 @@
 """Manual entrypoint for one Frozen DistilBERT run.
 
-The shared runner handles the normal Transformer lifecycle. This file only adds
+The shared runner handles the normal Transformer lifecycle. This entrypoint adds
 the frozen-backbone preparation step, where DistilBERT parameters stop training
 and the classification head stays trainable.
 """

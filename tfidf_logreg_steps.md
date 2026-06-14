@@ -1,8 +1,7 @@
 # TF-IDF Logistic Regression Manual Steps
 
-This runbook is for the TF-IDF + Logistic Regression baseline. It is
-intentionally simple: edit one config file, run one Python file, then copy the
-metrics from JSON.
+Use this for a single TF-IDF + Logistic Regression run: edit the config, run
+the script, and inspect the JSON files it writes.
 
 ## Files To Use
 
@@ -13,16 +12,14 @@ src/methods/tfidf_logreg/training.py
 src/methods/tfidf_logreg/config.py
 src/methods/tfidf_logreg/data.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
-This is the classical sparse baseline:
+TF-IDF + Logistic Regression is the classical sparse baseline:
 
 ```text
 HateXplain text -> TF-IDF n-gram matrix -> LogisticRegression
@@ -48,8 +45,7 @@ class_weighting = none
 no_save_final_model = False
 ```
 
-For TF-IDF final rows, the selected hyperparameters include the seed. So for
-seeds 42, 43, and 44, change:
+For each TF-IDF run, change:
 
 ```text
 seed
@@ -57,7 +53,7 @@ run_name
 output_dir
 ```
 
-The other selected hyperparameters stay the same.
+Leave the other config values alone unless this run changes the baseline.
 
 ## Run One Final Seed
 
@@ -109,35 +105,11 @@ MANUAL_CONFIG_FILE = "src/methods/tfidf_logreg/manual_config.py"
 5. Run the config preview cell, then run the training cell. Do not add
    hyperparameters after the `python` command.
 
-After it finishes, the answer is in the folder printed by the notebook and in
-`CONFIG["output_dir"]`. The main files to open are `metrics.json`,
+After it finishes, open the folder printed by the notebook and stored in
+`CONFIG["output_dir"]`. The main files are `metrics.json`,
 `runtime.json`, and `result_summary.json`. Use `test_predictions.json` for
-manual AUROC, confusion matrix, or error examples. The matching W&B run uses
-the same `run_name`.
-
-## HPO-Style Manual Reruns
-
-TF-IDF HPO suggestions use this search space:
-
-```text
-ngram_range in [[1,1], [1,2], [1,3]]
-min_df in [1, 2, 5]
-max_df in [0.9, 1.0]
-max_features in [20000, 50000, 100000]
-sublinear_tf in [False, True]
-C in [0.01, 0.1, 1.0, 10.0, 100.0]
-trial cap = 24
-HPO seed = 42
-```
-
-Print the deterministic trial list:
-
-```text
-python src/hpo_random_search.py
-```
-
-Set `METHODS = ["tfidf-logreg"]` first if you only want TF-IDF. Copy
-`manual_config_updates` into the TF-IDF manual config.
+AUROC, confusion matrix, or error examples. The matching W&B run uses the same
+`run_name`.
 
 ## Expected Output Files
 
@@ -151,10 +123,10 @@ test_predictions.json        # when run_test=True
 model.joblib
 ```
 
-Prediction rows include probabilities, which are enough for later manual AUROC
-or confusion-matrix analysis.
+Prediction rows include probabilities, which are enough for AUROC or
+confusion-matrix analysis.
 
-## Metrics To Copy
+## Metric Keys
 
 ```text
 eval_f1_macro
@@ -174,14 +146,6 @@ best_model_checkpoint
 vocab_size
 trainable_params
 total_params
-```
-
-For manual aggregate rows:
-
-```text
-selected_hyperparams_json <- result_summary.config.hyperparameters
-val_macro_f1 <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
 ```
 
 Expected TF-IDF model-selection values:
@@ -209,12 +173,3 @@ model_selection/best_metric
 ```
 
 That is okay. Do not expect train/loss graphs for this CPU/sklearn baseline.
-
-## Walkthrough Check
-
-```text
-Can I say this is CPU/sklearn? Yes.
-Can I find the saved model? model.joblib.
-Can I rerun a single seed? Edit manual_config.py and run train.py.
-Can I manually rebuild aggregate rows? Yes, flatten result_summary and metrics.
-```

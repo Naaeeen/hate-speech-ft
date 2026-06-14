@@ -1,8 +1,8 @@
 """Dataset/tokenization helpers for Hugging Face Transformer methods.
 
 These helpers keep the HateXplain split policy consistent across Full FT,
-Frozen, LoRA, LP-FT, and Efficient-Head. The size fields are intentionally
-verbose because they let us manually rebuild aggregate CSV rows later.
+Frozen, LoRA, LP-FT, and Efficient-Head. The size fields are verbose so each run
+summary is self-contained.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from src.data.preprocessing import (
 
 @dataclass(frozen=True)
 class TokenizedSplit:
-    """Tokenized split plus the accounting numbers we save in result JSON."""
+    """Tokenized split plus the accounting numbers saved in result JSON."""
 
     dataset: list[dict[str, Any]]
     records: list[dict[str, Any]]
@@ -84,7 +84,7 @@ def build_tokenized_dataset_with_stats(
 
     `raw_size` is what the Hugging Face split exposed. `preprocessed_size` is
     after strict-majority filtering. `dataset` is the final selected/tokenized
-    list that training actually sees.
+    list used by training.
     """
 
     raw_size = len(examples) if hasattr(examples, "__len__") else None

@@ -23,7 +23,7 @@ def parse_ngram_range(value: Sequence[int]) -> tuple[int, int]:
     parsed = list(value)
     if len(parsed) != 2:
         raise ValueError(
-            "ngram_range must contain exactly two integers, e.g. [1, 2]."
+            "ngram_range must contain two integers, e.g. [1, 2]."
         )
     try:
         lower, upper = (int(parsed[0]), int(parsed[1]))

@@ -56,7 +56,7 @@ def print_result_report(
     result_paths: dict[str, Path],
     prediction_paths: dict[str, Path],
 ) -> None:
-    """Print the end-of-run facts a teammate should copy/check manually."""
+    """Print the end-of-run facts used for the run record."""
 
     print("\nFinal validation metrics:")
     for key, value in eval_metrics.items():

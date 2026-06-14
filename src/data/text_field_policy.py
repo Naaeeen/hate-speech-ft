@@ -1,10 +1,9 @@
 """Shared HateXplain text-field construction policy.
 
 Every method starts from the same text: join HateXplain `post_tokens` with one
-space. We deliberately avoid dataset-level cleaning here, because extra
-cleaning would make methods less comparable and could break alignment with the
-original HateXplain rationale tokens. Tokenization/vectorization happens later,
-inside each method.
+space. Dataset-level cleaning stays out of this layer because it would make
+methods less comparable and could break alignment with the original HateXplain
+rationale tokens. Tokenization/vectorization happens later, inside each method.
 """
 
 from collections.abc import Mapping, Sequence
@@ -16,17 +15,17 @@ TEXT_FIELD_POLICY = (
     "Construct text with: text = ' '.join(example['post_tokens']). "
     "No extra dataset-level cleaning, stemming, lemmatization, stopword "
     "removal, punctuation removal, emoji removal, profanity masking, or "
-    "metadata concatenation should be applied before each method's own "
+    "metadata concatenation before each method's own "
     "tokenizer or vectorizer."
 )
 
 TEXT_FIELD_USAGE = """
-Use `build_text_from_post_tokens(example)` when a method needs raw text. This is
+Use `build_text_from_post_tokens(example)` when a method needs raw text. It is
 equivalent to `" ".join(example["post_tokens"])`.
 
-Transformer methods should call `tokenize_hatexplain_text(...)`, which builds
-that shared text and then calls the model tokenizer with truncation/max length.
-TF-IDF and BiLSTM should call `build_text_from_post_tokens(...)` and pass the
+Transformer methods call `tokenize_hatexplain_text(...)`, which builds that
+shared text and then calls the model tokenizer with truncation/max length.
+TF-IDF and BiLSTM call `build_text_from_post_tokens(...)` and pass the
 same string into their own vectorizer/tokenizer.
 
 Do not add punctuation removal, stopword removal, stemming, profanity masking,
@@ -52,8 +51,8 @@ def build_text_from_post_tokens(example: Mapping[str, Any]) -> str:
     Returns:
         A string built by joining `example["post_tokens"]` with single spaces.
 
-    The dataset provides `post_tokens` as the annotated token sequence. We only
-    join those tokens with single spaces. Do not remove punctuation, emojis,
+    The dataset provides `post_tokens` as the annotated token sequence. This
+    function joins those tokens with single spaces. Do not remove punctuation, emojis,
     hashtags, stopwords, or other tokens here; those choices would change the
     shared input and may break rationale alignment.
     """
@@ -87,8 +86,8 @@ def tokenize_hatexplain_text(
         The tokenizer output, typically a mapping containing `input_ids` and
         `attention_mask`.
 
-    Transformer methods should use this path for sequence classification.
-    Classical baselines should call `build_text_from_post_tokens` and pass the
+    Transformer methods use this path for sequence classification.
+    Classical baselines call `build_text_from_post_tokens` and pass the
     returned string into their vectorizer instead.
     """
 

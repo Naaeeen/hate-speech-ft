@@ -3,7 +3,7 @@
 The runners call this file after training. It handles the final validation/test
 passes, prediction JSONs, local model artifacts, runtime metrics, W&B metric
 payloads, and the small console report. Keeping this here makes every
-Transformer method produce the same per-run evidence for manual aggregation.
+Transformer method produce the same per-run files.
 """
 
 from __future__ import annotations

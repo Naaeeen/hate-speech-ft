@@ -55,24 +55,17 @@ Do not put new methods inside `distilbert_full/`.
 
 ## Adding A Method
 
-Read the full checklist in:
-
-```text
-docs/ADDING_METHOD.md
-```
-
-The minimum flow is to create `src/methods/<method_name>/`, write its
-`manual_config.py`, `config.py`, `training.py` when needed, and an executable
-`train.py`.
-Then run one smoke-sized config and one final config with `run_test = True`.
+Create `src/methods/<method_name>/`, write its `manual_config.py`, `config.py`,
+`training.py` when needed, and an executable `train.py`. Keep the method
+runnable as one direct manual command.
 
 ## Shared Boundaries
 
 Each method package owns its manual config schema, trainability policy, stage
 layout, method-specific hyperparameters, and executable `train.py`.
 
-Project-level helpers should stay small and boring. They are only for behavior
-multiple active methods genuinely need:
+Project-level helpers stay limited to behavior shared by multiple active
+methods:
 
 - result JSON writing in `src/results.py`
 - W&B settings and direct logging in `src/utils/wandb_config.py`
@@ -81,14 +74,12 @@ multiple active methods genuinely need:
   `src/methods/transformer_*.py` files
 - PEFT adapter/head-transfer helpers in `src/methods/peft_utils.py`
 
-Every completed method run should write `resolved_config.json`, `metrics.json`,
+Each completed method run writes `resolved_config.json`, `metrics.json`,
 `runtime.json`, and `result_summary.json`. Runs with `run_test = True` that can
-produce per-sample outputs should write `eval_predictions.json` and
-`test_predictions.json`, and store those paths in
-`result_summary.json`.
-Those prediction files are enough for manual post-hoc diagnostics such as
-confusion matrices, optional AUROC summaries, and error examples without
-rerunning the method.
+produce per-sample outputs also write `eval_predictions.json` and
+`test_predictions.json`, with those paths stored in `result_summary.json`.
+Those prediction files are enough for post-run diagnostics such as confusion
+matrices, optional AUROC summaries, and error examples.
 When a method saves a local final model, pass those paths to
 `write_result_files()` so `result_summary.json.artifacts.model` identifies the
 model artifact behind the recorded metrics.

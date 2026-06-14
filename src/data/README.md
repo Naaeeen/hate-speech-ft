@@ -1,6 +1,9 @@
 # `src/data` User Guide
 
-This folder defines the shared dataset-level preprocessing layer for all HateXplain experiments in this repository. Every teammate should use this layer before running their own method, so that full fine-tuning, LoRA, frozen-backbone training, TF-IDF, Bi-LSTM, and other baselines are compared on the same data representation.
+`src/data` defines the shared dataset-level preprocessing layer for the
+HateXplain experiments in this repository. Full fine-tuning, LoRA,
+frozen-backbone training, TF-IDF, Bi-LSTM, and other baselines use this layer so
+their results start from the same data representation.
 
 The main idea is:
 
@@ -17,7 +20,7 @@ record = {id, text, label, label_name, annotator labels, token_count}
 method-specific tokenizer/vectorizer/training code
 ```
 
-The shared layer does not train models. It standardizes the dataset before model-specific code starts.
+The shared layer standardizes the dataset before model-specific code starts.
 
 ## Files
 
@@ -145,8 +148,8 @@ For main classification experiments, no-majority samples are excluded by default
 
 Reason: a sample with three different labels does not have a stable gold label. Keeping it as a normal training example would add label noise and make method comparisons less clear.
 
-Experiment runners should record raw split sizes, post-policy split sizes, and
-the number of no-majority examples dropped from each split when those counts are
+Experiment runners record raw split sizes, post-policy split sizes, and the
+number of no-majority examples dropped from each split when those counts are
 available. In the current Hugging Face HateXplain loader, some undecided posts
 may already be absent from the exposed splits, so recorded drop counts are
 post-loader accounting rather than a complete statement about the original
@@ -154,8 +157,8 @@ corpus.
 
 #### How To Use `label_policy.py` Directly
 
-Most experiment scripts should use `preprocess_hatexplain_split(...)`, which
-calls `label_policy.py` internally. Use `label_policy.py` directly when you are
+Most experiment scripts use `preprocess_hatexplain_split(...)`, which calls
+`label_policy.py` internally. Use `label_policy.py` directly when you are
 debugging labels, writing a new data pipeline, or checking no-majority examples.
 
 Import the helpers:
@@ -426,7 +429,9 @@ vectorizer = TfidfVectorizer()
 features = vectorizer.fit_transform(texts)
 ```
 
-Any lowercasing or n-gram behavior inside `TfidfVectorizer` should be documented as part of the baseline configuration. It is not a change to the shared dataset-level text policy.
+Document any lowercasing or n-gram behavior inside `TfidfVectorizer` as part of
+the baseline configuration. It is not a change to the shared dataset-level text
+policy.
 
 ### Step 5C: Bi-LSTM
 
@@ -471,7 +476,8 @@ print(first_tokenized.keys())
 
 ## Keeping Undecided Samples For Audit
 
-Main experiments should drop no-majority samples. If you need to inspect them, keep them explicitly:
+Main experiments drop no-majority samples. If you need to inspect them, keep
+them explicitly:
 
 ```python
 from src.data.preprocessing import preprocess_hatexplain_split
@@ -496,15 +502,7 @@ record["label_name"] == "undecided"
 
 Do not train the main 3-class classifier on label `-1`.
 
-## Checks
-
-Run the focused data tests after changing anything in this folder:
-
-```bash
-python -m unittest tests.test_text_field_policy tests.test_label_policy tests.test_preprocessing -v
-```
-
-Compile check:
+## Compile Check
 
 ```bash
 python -m py_compile src/data/text_field_policy.py src/data/label_policy.py src/data/preprocessing.py
@@ -522,7 +520,7 @@ python -m py_compile src/data/text_field_policy.py src/data/label_policy.py src/
 
 ## What To Report In Experiment Logs
 
-Every experiment should log these preprocessing fields to W&B or the run config:
+Log these preprocessing fields to W&B or the run config:
 
 ```text
 dataset = Hate-speech-CNERG/hatexplain

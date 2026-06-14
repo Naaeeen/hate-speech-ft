@@ -54,5 +54,5 @@ The runner records raw split sizes, post-policy split sizes, strict-majority
 drop counts, model-selection details, runtime, GPU type, and memory metrics in
 local JSON files and W&B when enabled.
 
-Do not add other methods to this package. New methods should use their own
+Do not add other methods to this package. New methods use their own
 package under `src/methods/<method_name>/train.py`.

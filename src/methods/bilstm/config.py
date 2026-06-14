@@ -1,8 +1,8 @@
 """Config metadata helpers for the BiLSTM baseline.
 
-This file turns the editable `manual_config.py` values plus split/model stats
-into `resolved_config.json`. The shape is intentionally close to the other
-methods so manual final tables can be rebuilt later.
+This builds `resolved_config.json` from the editable `manual_config.py` values
+plus split/model stats. The shape matches the other methods so final tables can
+be rebuilt later.
 """
 
 from __future__ import annotations

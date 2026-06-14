@@ -1,8 +1,8 @@
 """Tiny runtime-metadata helpers.
 
-This file deliberately stays lightweight. If CUDA, torch, or git is unavailable
-we return `None`, `cpu`, or `unknown` instead of adding extra setup machinery.
-That makes local tests and Colab runs use the same functions.
+These helpers stay lightweight. If CUDA, torch, or git is unavailable, they
+return `None`, `cpu`, or `unknown` instead of adding setup machinery. That keeps
+Colab runs and local commands on the same metadata path.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def build_compute_cost_fields(
     *,
     gpu_type: str | None,
 ) -> dict[str, float | None]:
-    """Return time in hours and GPU-hours when the run actually used a GPU."""
+    """Return time in hours and GPU-hours for GPU-backed runs."""
 
     training_time_hours = (
         training_time_sec / 3600 if training_time_sec is not None else None

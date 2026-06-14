@@ -1,9 +1,8 @@
 """Flat classification metrics shared by non-Trainer methods.
 
 TF-IDF and BiLSTM do not use Hugging Face's metric callback, so this file
-creates the same kind of flat keys by hand: accuracy, per-class precision/
-recall/F1/support, and macro averages. The flat shape is boring but handy for
-manual CSV reconstruction and W&B logging.
+creates the same flat keys: accuracy, per-class precision/recall/F1/support,
+and macro averages. The flat shape works for local JSON and W&B logging.
 """
 
 from __future__ import annotations

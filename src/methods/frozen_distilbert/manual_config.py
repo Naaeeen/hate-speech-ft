@@ -2,17 +2,17 @@
 
 Usually change `seed`, `run_name`, and `output_dir`. The method-specific knob is
 `head_learning_rate`, because only the classification head trains. Leave the
-shared dataset/checkpoint/W&B fields alone for reference-result reruns.
+shared dataset/checkpoint/W&B fields alone for the current setup.
 """
 
 CONFIG = {
     # Fixed method id written to result_summary.json and W&B.
     "method": "frozen-backbone",
-    # Human-readable run label. This is the name you search for in W&B.
+    # Human-readable run label used in W&B.
     "run_name": "frozen_distilbert_final_seed42",
     # Hugging Face checkpoint to load, then freeze.
     "model_name": "distilbert-base-uncased",
-    # Hugging Face dataset id. Keep this the same for comparable reruns.
+    # Hugging Face dataset id. Keep this the same for comparable runs.
     "dataset_name": "Hate-speech-CNERG/hatexplain",
     # Random seed for this one run. Change only one seed at a time.
     "seed": 42,
@@ -39,7 +39,7 @@ CONFIG = {
     # Batch size is per device/GPU, not total across all possible devices.
     "per_device_train_batch_size": 16,
     "per_device_eval_batch_size": 32,
-    # Shared optimizer/scheduler settings from the reference setup.
+    # Shared optimizer/scheduler settings from the chosen setup.
     "weight_decay": 0.01,
     "warmup_ratio": 0.06,
     "max_grad_norm": 1.0,
@@ -63,7 +63,7 @@ CONFIG = {
     "mixed_precision": "none",
     # Off for these small DistilBERT runs; enabling it changes memory/speed tradeoffs.
     "gradient_checkpointing": False,
-    # "none" matches the reference setup; change only for a new class-weight study.
+    # "none" matches the chosen setup; change only for a new class-weight study.
     "class_weighting": "none",
     # Stop if validation F1 stops improving enough across epochs.
     "early_stopping_patience": 2,

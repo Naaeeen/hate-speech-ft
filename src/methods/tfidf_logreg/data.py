@@ -1,7 +1,7 @@
 """Data loading helpers for the TF-IDF baseline.
 
 This keeps TF-IDF on the same HateXplain strict-majority policy as the neural
-methods, just without tokenization into model ids.
+methods, without tokenization into model ids.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from src.methods.transformer_data import (
 
 @dataclass(frozen=True)
 class ClassicalSplit:
-    """One sklearn-ready split plus the split accounting we save later."""
+    """One sklearn-ready split plus the split accounting saved later."""
 
     records: list[dict[str, Any]]
     raw_size: int | None
@@ -39,7 +39,7 @@ def build_classical_split(
 ) -> ClassicalSplit:
     """Turn one HateXplain split into records for sklearn.
 
-    We apply the shared strict-majority label policy, then optional manual
+    Applies the shared strict-majority label policy, then optional manual
     sampling for smoke runs. No extra text cleaning happens before TF-IDF.
     """
 

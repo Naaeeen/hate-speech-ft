@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def build_hyperparameters(args, precision_policy: dict[str, Any]) -> dict[str, Any]:
-    """Return the full-FT hyperparameter block saved for manual aggregation."""
+    """Return the full-FT hyperparameter block saved for this run."""
 
     return {
         **common_transformer_hyperparameters(args, precision_policy),

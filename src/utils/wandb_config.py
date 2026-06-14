@@ -2,14 +2,14 @@
 
 W&B is useful for tracking runs, but it is only a per-run logger here. The
 manual config decides whether one run logs online/offline/disabled; this file
-normalizes that choice, starts one run, logs our final/manual summary payloads,
-and finishes it.
+normalizes that choice, starts one run, logs final summary payloads, and
+finishes it.
 
 For single-stage Transformer methods, Hugging Face Trainer also receives
 `report_to="wandb"`, so W&B can show normal trainer step/eval logs in addition
-to the final payloads we log ourselves. Two-stage methods disable stage-local
+to the final payloads. Two-stage methods disable stage-local
 Trainer W&B and relay stage histories into the parent run. Online W&B errors are
-left visible so the login or config can be fixed and rerun.
+left visible so the login or config can be fixed before another run.
 """
 
 from __future__ import annotations

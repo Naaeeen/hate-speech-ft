@@ -1,8 +1,8 @@
 """Small PEFT/LoRA helpers shared by LoRA and Efficient-Head.
 
-The helpers keep the adapter setup boring and consistent: parse module lists,
-check that the classification head is saved, apply LoRA, and copy classifier
-head weights when Efficient-Head moves from stage 1 to stage 2.
+The helpers keep adapter setup consistent: parse module lists, check that the
+classification head is saved, apply LoRA, and copy classifier-head weights when
+Efficient-Head moves from stage 1 to stage 2.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ CLASSIFICATION_HEAD_PARTS = {"pre_classifier", "classifier", "score"}
 def parse_module_names(value: list[str] | tuple[str, ...] | None) -> list[str]:
     """Normalize LoRA module lists from `manual_config.py`.
 
-    We keep this strict on purpose: if someone writes a comma-separated string,
-    it should fail loudly instead of silently training the wrong modules.
+    This stays strict: a comma-separated string fails instead of silently
+    training the wrong modules.
     """
 
     if not isinstance(value, (list, tuple)):
@@ -146,7 +146,7 @@ def clone_state_value(value: Any) -> Any:
 def extract_classification_head_state_dict(model: Any) -> dict[str, Any]:
     """Extract only classification-head weights from a trained model.
 
-    If the model is a PEFT wrapper, we merge/unload first when possible so the
+    If the model is a PEFT wrapper, merge/unload first when possible so the
     copied state is normal model weights, not adapter wrapper internals.
     """
 

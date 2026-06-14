@@ -2,11 +2,10 @@
 
 This package owns the classical TF-IDF + Logistic Regression baseline.
 
-It is intentionally separate from the Transformer runners. The sklearn
-vectorizer and classifier stay here. Its `manual_config.py` holds the editable
-settings for one run; small project utilities provide the output-dir guard, W&B
-settings, and result-file
-contract.
+It is separate from the Transformer runners. The sklearn vectorizer and
+classifier stay here. Its `manual_config.py` holds the editable settings for one
+run; small project utilities provide the output-dir guard, W&B settings, and
+result-file contract.
 
 ## Package Layout
 
@@ -16,10 +15,10 @@ config.py     resolved config, W&B settings, runtime/model-selection summaries
 data.py       HateXplain split preprocessing for the classical sklearn path
 reporting.py  final prediction artifact writing and console result report
 training.py   n-gram parsing, sklearn pipeline, metrics, prediction writer
-train.py      thin executable entry point that wires the pieces together
+train.py      executable entry point that wires the pieces together
 ```
 
-Most future TF-IDF changes should be local:
+Keep TF-IDF changes local:
 
 - change run settings in `manual_config.py`
 - change recorded metadata in `config.py`
@@ -40,8 +39,8 @@ python src/methods/tfidf_logreg/train.py
 For a quick validation-only check, change `run_name`, point `output_dir` at a
 scratch folder, and set `run_test = False`.
 
-In Colab, edit this method's `manual_config.py` by hand. Change the method,
-seed, output, W&B, and parameter fields yourself for each run.
+In Colab, edit this method's `manual_config.py`. Change the method, seed,
+output, W&B, and parameter fields for each run.
 
 ## Outputs
 
@@ -62,7 +61,7 @@ eval_predictions.json
 test_predictions.json   # when run_test is true
 ```
 
-Metrics use the same manual comparison keys as Transformer methods:
+Metrics use the same comparison keys as Transformer methods:
 
 ```text
 eval_f1_macro

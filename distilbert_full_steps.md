@@ -1,7 +1,7 @@
 # DistilBERT Full Fine-Tuning Manual Steps
 
-This is the manual runbook for the Full FT model: edit one config, run one
-script, keep the run files, and copy numbers by hand.
+Use this for a single Full FT run: edit one config, run one script, and inspect
+the run files.
 
 ## Files To Use
 
@@ -14,14 +14,10 @@ src/methods/distilbert_full/config.py
 src/methods/transformer_runner.py
 src/methods/transformer_outputs.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
-
-Use this file as the quick path for manual Full FT runs.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
@@ -45,7 +41,7 @@ full fine-tuning baseline.
 
 ## Current Final Config
 
-The checked manual config is the selected final seed-42 setup:
+The current manual config is the selected final seed-42 setup:
 
 ```text
 method = full-ft
@@ -79,8 +75,8 @@ run_name
 output_dir
 ```
 
-Leave `data_fraction_seed = 42` for full-data runs unless you
-are intentionally doing a new subsampling experiment.
+Leave `data_fraction_seed = 42` for full-data runs unless this is a new
+subsampling experiment.
 
 ## Run One Final Seed
 
@@ -99,14 +95,14 @@ Example seed-43 edit:
 "run_test": True,
 ```
 
-Then run exactly one script:
+Run one script:
 
 ```text
 python src/methods/distilbert_full/train.py
 ```
 
-No command-line hyperparameters are needed. If a teammate asks "where do I set
-learning rate?", the answer is: in `manual_config.py`, not after the command.
+No command-line hyperparameters are needed. Set learning rate and other run
+settings in `manual_config.py`.
 
 ## Colab Notebook Walkthrough
 
@@ -135,37 +131,15 @@ MANUAL_CONFIG_FILE = "src/methods/distilbert_full/manual_config.py"
 5. Run the config preview cell and check the printed config before training.
    Then run the training cell. Do not add `--learning_rate` or other flags.
 
-The answer is saved under `output_dir`. Open `metrics.json` for eval/test
+The run is saved under `output_dir`. Open `metrics.json` for eval/test
 scores, `runtime.json` for time/GPU info, and `result_summary.json` for the
 single file that has config, metrics, runtime, model-selection, and artifact
 paths together. Use `test_predictions.json` for later prediction analysis.
-The W&B run should have the same `run_name`.
-
-## HPO-Style Manual Reruns
-
-Full FT HPO suggestions use this search space:
-
-```text
-learning_rate in [1e-5, 2e-5, 3e-5, 5e-5]
-trial cap = 4
-HPO seed = 42
-```
-
-To print the deterministic trial list, edit `src/hpo_random_search.py` so
-`METHODS = ["full-ft"]`, then run:
-
-```text
-python src/hpo_random_search.py
-```
-
-Each trial prints `manual_config_updates`. Copy the chosen update into
-`src/methods/distilbert_full/manual_config.py`. For validation-only HPO runs,
-set `run_test = False` and use a unique `run_name` and `output_dir`. For final
-runs, set `run_test = True`.
+The W&B run uses the same `run_name`.
 
 ## Expected Output Files
 
-After a successful run, the output directory should contain:
+After a successful run, the output directory contains:
 
 ```text
 resolved_config.json
@@ -186,7 +160,7 @@ The exact model artifact name can vary by Transformers version, so use
 `training_args.bin` may also appear depending on the installed Transformers
 version, but do not treat it as required evidence.
 
-## Metrics To Copy Manually
+## Metric Keys
 
 Copy these from `metrics.json`, `runtime.json`, and `result_summary.json`:
 
@@ -210,17 +184,9 @@ trainable_params
 total_params
 ```
 
-For manual aggregate rows:
-
-```text
-val_macro_f1  <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
-selected_hyperparams_json <- result_summary.config.hyperparameters
-```
-
 ## W&B Check
 
-With `use_wandb = True`, one run should appear in:
+With `use_wandb = True`, one run appears in:
 
 ```text
 project = hate-speech-ft
@@ -241,19 +207,5 @@ model_selection/best_metric
 model_selection/best_epoch
 ```
 
-If W&B login fails in online mode, let it fail and fix the login. We do not need
-special failure files or quiet fallback logging.
-
-## Walkthrough Check
-
-Before giving this to another teammate, make sure these questions are answerable
-from this file:
-
-```text
-Which file do I edit? manual_config.py.
-Which command do I run? python src/methods/distilbert_full/train.py.
-How do I run seeds 42/43/44? Change seed, run_name, output_dir one at a time.
-Where are metrics? metrics.json, runtime.json, result_summary.json.
-How do I manually rebuild aggregate rows? Flatten the JSON fields above.
-How do I compare seeds? Copy one row per run and calculate mean/std later.
-```
+If W&B login fails in online mode, let it fail and fix the login. There is no
+separate failure-summary file for that case.

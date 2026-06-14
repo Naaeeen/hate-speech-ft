@@ -1,15 +1,15 @@
 """Manual config for one BiLSTM run.
 
 Usually change `seed`, `run_name`, and `output_dir`. The settings below match
-the new BiLSTM final reference config `c01881878157`.
+the current BiLSTM config.
 """
 
 CONFIG = {
     # Fixed method id written to result_summary.json and W&B.
     "method": "bilstm",
-    # Human-readable run label. This is the name you search for in W&B.
+    # Human-readable run label used in W&B.
     "run_name": "bilstm_final_seed42",
-    # Hugging Face dataset id. Keep this the same for comparable reruns.
+    # Hugging Face dataset id. Keep this the same for comparable runs.
     "dataset_name": "Hate-speech-CNERG/hatexplain",
     # Random seed for this one run. Change only one seed at a time.
     "seed": 42,
@@ -36,7 +36,7 @@ CONFIG = {
     "weight_decay": 0.01,
     "warmup_ratio": 0.06,
     "max_grad_norm": 1.0,
-    # Save/evaluate by epoch so best checkpoint selection matches the reference setup.
+    # Save/evaluate by epoch so best checkpoint selection matches the chosen setup.
     "save_strategy": "epoch",
     "save_total_limit": 1,
     "load_best_model_at_end": True,
@@ -44,7 +44,7 @@ CONFIG = {
     "metric_for_best_model": "eval_f1_macro",
     # Keep False for final runs so model.pt and tokenizer files are saved.
     "no_save_final_model": False,
-    # "none" matches the reference setup; change only for a new class-weight study.
+    # "none" matches the chosen setup; change only for a new class-weight study.
     "class_weighting": "none",
     # Stop if validation F1 stops improving enough across epochs.
     "early_stopping_patience": 2,

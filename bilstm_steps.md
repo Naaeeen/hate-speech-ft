@@ -1,7 +1,7 @@
 # BiLSTM Manual Steps
 
-This is the manual runbook for the BiLSTM baseline: edit the BiLSTM config, run
-one seed, save the outputs, and copy the metrics manually.
+Use this for a single BiLSTM run: edit the BiLSTM config, run one seed, and
+inspect the output folder.
 
 ## Files To Use
 
@@ -13,12 +13,10 @@ src/methods/bilstm/model.py
 src/methods/bilstm/tokenizer.py
 src/methods/bilstm/config.py
 src/results.py
-src/hpo_random_search.py
 ```
 
-Reference CSVs such as `results/all/final_runs (1).csv` and
-`results/all/hpo_runs.csv` are useful for checking column names and selected
-settings, but the run itself only reads `manual_config.py`.
+The run itself only reads `manual_config.py`. Keep comparison notes outside the
+run command.
 
 ## What This Model Is
 
@@ -66,7 +64,7 @@ class_weighting = none
 no_save_final_model = False
 ```
 
-For final seeds, change:
+For each run, change:
 
 ```text
 seed
@@ -109,7 +107,7 @@ pick a GPU runtime if possible, then let `device = "auto"` choose CUDA.
 If someone gives you one HP set, use it like this:
 
 1. Run the notebook setup cells: mount Google Drive, clone or reuse the repo,
-   install packages, and log in to W&B if the run should be online.
+   install packages, and log in to W&B if the run will be online.
 2. In the model-pick cell, set:
 
 ```python
@@ -128,38 +126,12 @@ MANUAL_CONFIG_FILE = "src/methods/bilstm/manual_config.py"
 5. Run the config preview cell, then the training cell. The command stays
    plain: `python src/methods/bilstm/train.py`.
 
-When the run is done, check the output folder printed by Colab. The quick
-answers are in `metrics.json`, `runtime.json`, and `result_summary.json`.
+When the run is done, check the output folder printed by Colab. The main files
+are `metrics.json`, `runtime.json`, and `result_summary.json`.
 `tokenizer/vocab.json` is also important evidence because this model uses a
 train-split word vocabulary. For prediction analysis, open
 `test_predictions.json`. In W&B, search for the same `run_name` and check the
 `train/loss`, `eval/f1_macro`, and final `test/f1_macro` keys.
-
-## HPO-Style Manual Reruns
-
-BiLSTM HPO suggestions use this search space:
-
-```text
-embedding_size in [100, 200]
-hidden_size in [128, 256]
-dropout in [0.1, 0.3, 0.5]
-learning_rate in [0.0003, 0.001, 0.003]
-tokenizer_min_freq = 2
-max_vocab_size = 30000
-trial cap = 20
-HPO seed = 42
-```
-
-Print the deterministic trial list:
-
-```text
-python src/hpo_random_search.py
-```
-
-Set `METHODS = ["bilstm"]` first if you only want BiLSTM. Copy
-`manual_config_updates` into the BiLSTM manual config. Keep fixed values like
-`batch_size`, `epochs`, `max_length`, and checkpoint settings the same unless
-you are intentionally starting a new experiment.
 
 ## Expected Output Files
 
@@ -176,10 +148,10 @@ tokenizer/tokenizer_config.json
 checkpoint-epoch*
 ```
 
-Prediction rows include probabilities, so they can support later manual AUROC
-or confusion-matrix work.
+Prediction rows include probabilities, so they can support AUROC or
+confusion-matrix work.
 
-## Metrics To Copy
+## Metric Keys
 
 ```text
 eval_f1_macro
@@ -203,14 +175,6 @@ total_params
 vocab_size
 ```
 
-For manual aggregate rows:
-
-```text
-selected_hyperparams_json <- result_summary.config.hyperparameters
-val_macro_f1 <- metrics.eval.eval_f1_macro
-test_macro_f1 <- metrics.test.test_f1_macro
-```
-
 ## W&B Check
 
 BiLSTM logs final metrics plus epoch-level training curves:
@@ -227,13 +191,4 @@ runtime/training_time_sec
 model_selection/best_metric
 ```
 
-This is expected for the custom PyTorch runner.
-
-## Walkthrough Check
-
-```text
-Can I explain the tokenizer? Lowercase word vocab built from train split only.
-Can I explain the model? Embedding -> BiLSTM -> classifier.
-Can I run one seed directly? Yes.
-Can I rebuild aggregate metrics manually? Yes, from metrics/runtime/summary JSON.
-```
+That is expected for the custom PyTorch runner.

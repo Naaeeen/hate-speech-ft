@@ -1,9 +1,9 @@
 """Manual entrypoint for the TF-IDF + Logistic Regression baseline.
 
-This is the classical path: load the same HateXplain splits, fit one sklearn
-pipeline on CPU, evaluate validation/test, save `model.joblib`, write the shared
-JSON files, and log one W&B run if enabled. No epochs, no GPU training, no
-extra run wrapper.
+The classical path loads the same HateXplain splits, fits one sklearn pipeline
+on CPU, evaluates validation/test, saves `model.joblib`, writes the shared JSON
+files, and logs one W&B run if enabled. No epochs, no GPU training, no extra run
+wrapper.
 """
 
 from __future__ import annotations

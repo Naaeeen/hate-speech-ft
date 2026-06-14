@@ -33,9 +33,8 @@ def build_experiment_config(
 ) -> dict[str, Any]:
     """Build the saved config for one TF-IDF + Logistic Regression run.
 
-    The shape is meant for manual table rebuilding: split sizes,
-    strict-majority drop counts, seed, model stats, and selected hyperparameters
-    all land in one JSON object.
+    The shape keeps split sizes, strict-majority drop counts, seed, model stats,
+    and hyperparameters in one JSON object.
     """
 
     train_size = len(train_data.records) if train_data is not None else None

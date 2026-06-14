@@ -1,9 +1,8 @@
 """Manual entrypoint for one DistilBERT Full FT run.
 
-This is intentionally thin: the method owns its config and metadata builder,
-while `run_single_stage_transformer` owns the shared training/evaluation/output
-routine. Teammates should edit `manual_config.py`, not this file, for research
-settings.
+The method owns its config and metadata builder. `run_single_stage_transformer`
+owns the shared training/evaluation/output routine. Edit `manual_config.py`,
+not this file, for research settings.
 """
 
 import sys

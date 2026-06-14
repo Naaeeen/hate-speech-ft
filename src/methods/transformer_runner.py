@@ -1,11 +1,10 @@
 """Shared runner for the one-stage Transformer methods.
 
-This is the "boring but important" path used by Full FT, Frozen DistilBERT,
-and LoRA. A method file gives this runner its manual config, tells it which
-learning-rate field to read, and optionally tweaks the model context before
-training. The runner then does the same lifecycle for everybody: setup,
-training, validation/test evaluation, local JSON outputs, model saving, and one
-W&B run.
+Full FT, Frozen DistilBERT, and LoRA use this shared path. A method file gives
+the runner its manual config, tells it which learning-rate field to read, and
+optionally tweaks the model context before training. The runner then handles
+setup, training, validation/test evaluation, local JSON outputs, model saving,
+and one W&B run.
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ python src/methods/distilbert_lp_ft/train.py
 
 For a quick validation-only check, change `run_name`, point `output_dir` at a
 scratch folder, and set `run_test = False`. In Colab, edit
-`manual_config.py` by hand and run the script directly.
+`manual_config.py` and run the script directly.
 
 ## Shared Contract
 
@@ -74,7 +74,7 @@ parent run. After each stage finishes, the parent run logs the Trainer history
 with clear prefixes such as `stage1/train/loss`, `stage1/eval/f1_macro`,
 `stage2/train/loss`, and `stage2/eval/f1_macro`. The same run also records the
 final validation/test metrics, runtime, and model-selection fields. Local JSON
-files are still the source of truth for manual copying.
+files remain the durable run record.
 
 W&B setup, Hugging Face `TrainingArguments`, tokenization, prediction files, and
 the local JSON writers live in the shared `transformer_*` helpers. LP+FT's own
@@ -82,7 +82,7 @@ files only keep the method-specific stage behavior.
 
 ## Manual Run Structure
 
-`train.py` intentionally stays focused on this method's two-stage run. Small
+`train.py` stays focused on this method's two-stage run. Small
 Transformer helper files handle W&B setup, HateXplain loading/tokenization,
 model and Trainer construction, validation/test evaluation, prediction files,
 runtime metrics, and result JSON files.

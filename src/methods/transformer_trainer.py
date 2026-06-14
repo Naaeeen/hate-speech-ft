@@ -1,9 +1,9 @@
 """Trainer-building helpers for DistilBERT-style methods.
 
 The simplified repo still uses Hugging Face Trainer for Transformer methods.
-This file keeps the slightly fiddly parts in one place: precision flags,
-optional class weights, Trainer arguments, early stopping, and the best-metric
-summary that we save into `result_summary.json`.
+Trainer setup stays in one place: precision flags, optional class
+weights, Trainer arguments, early stopping, and the best-metric summary saved
+into `result_summary.json`.
 """
 
 from __future__ import annotations

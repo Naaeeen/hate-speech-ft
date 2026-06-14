@@ -1,8 +1,8 @@
 """Prediction-file writer for Transformer methods.
 
 The saved rows keep text, gold label, predicted label, and logits. That is
-enough for later manual confusion matrices, AUROC-style analysis, and error
-examples without rerunning the model.
+enough for confusion matrices, AUROC-style analysis, and error examples after
+the run.
 """
 
 from __future__ import annotations

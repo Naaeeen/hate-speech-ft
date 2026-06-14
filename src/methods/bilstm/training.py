@@ -5,7 +5,7 @@ seed/device setup, DataLoaders, AdamW, linear warmup/decay, epoch validation,
 checkpoint selection by macro-F1, early stopping, optional prediction rows, and
 runtime metadata. Prediction rows are useful for final/test runs, but the
 entrypoint only writes prediction files when `run_test=True`. It mirrors the
-Transformer output contract so the manual aggregation step stays the same.
+Transformer output contract so the saved run files stay consistent.
 """
 
 from __future__ import annotations
@@ -531,8 +531,8 @@ def run_training(
             )
 
         current_metric = _metric_value(eval_metrics, args.metric_for_best_model)
-        # Checkpoint selection is intentionally simple: validation macro-F1 must
-        # improve by more than the threshold, otherwise patience starts ticking.
+        # Checkpoint selection is simple: validation macro-F1 must improve by
+        # more than the threshold, otherwise patience starts ticking.
         improved = current_metric > best_metric + args.early_stopping_threshold
         if improved:
             best_metric = current_metric
@@ -574,8 +574,8 @@ def run_training(
         eval_loader,
         device=device,
         split_name="eval",
-        # We only attach source text/ids to eval predictions when the run is in
-        # final/test mode. Validation-only HPO reruns can stay lighter.
+        # Attach source text/ids to eval predictions only in final/test mode.
+        # Validation-only config checks can stay lighter.
         source_records=eval_data.records if args.run_test else None,
     )
 
