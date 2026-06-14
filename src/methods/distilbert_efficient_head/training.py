@@ -34,7 +34,7 @@ def build_stage2_context(stage1_model, context, args: Any):
     from transformers import AutoModelForSequenceClassification
 
     # Only the classification head moves forward. The stage-1 backbone and LoRA
-    # adapters are discarded so stage 2 tests "better head init",
+    # adapters are discarded so stage 2 measures "better head init",
     # not "continue training the adapter model".
     head_state = extract_classification_head_state_dict(stage1_model)
     stage2_model = AutoModelForSequenceClassification.from_pretrained(
